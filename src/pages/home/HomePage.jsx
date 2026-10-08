@@ -1,14 +1,14 @@
-import React, { useState, useEffect } from "react";
+import React, { useState } from "react";
 import {
   Row,
   Col,
-  Card,
   Button,
   Typography,
-  Tag,
   Space,
   Divider,
-  Spin,
+  Dropdown,
+  Avatar,
+  Tag,
   message,
 } from "antd";
 import {
@@ -19,43 +19,60 @@ import {
   ArrowRightOutlined,
   BulbOutlined,
   CrownOutlined,
+  AppstoreOutlined,
+  UserOutlined,
+  LogoutOutlined,
 } from "@ant-design/icons";
 import { useNavigate, Link } from "react-router-dom";
 import { useAuth } from "../../context/AuthContext";
 import { ROLES } from "../../utils/constants";
-import { courtService } from "../../services/courtService"; // 🔥 Gọi service lấy data thật
 import bgHero from "../../assets/BG-HomePage.png";
 import badmintionLogo from "../../assets/BadmintionLogo.png";
 
 const { Title, Paragraph, Text } = Typography;
 
-// Bộ Style màu sắc, Icon, Badge và Mô tả cho các thẻ sân
-const COURT_CARD_STYLES = [
+// Dữ liệu bảng giá & loại sân cố định giới thiệu trên HomePage
+const courtTypes = [
   {
+    id: "standard",
+    name: "Sân Tiêu Chuẩn (Standard)",
     badge: "Phổ biến",
     badgeColor: "#3b82f6",
     badgeBg: "#2563eb",
     description: "Phù hợp cho nhu cầu chơi cầu lông hàng ngày, tập luyện, giao lưu cùng bạn bè.",
+    priceRegular: "80.000đ/h",
+    pricePeak: "130.000đ/h",
+    priceWeekend: "140.000đ/h",
     icon: "🏸",
     iconBg: "linear-gradient(135deg, #2563eb, #1d4ed8)",
     courtBg: "linear-gradient(180deg, rgba(37, 99, 235, 0.15) 0%, rgba(15, 23, 42, 0.8) 100%)",
     highlighted: false,
   },
   {
+    id: "vip",
+    name: "Sân VIP (VIP Court)",
     badge: "Được yêu thích nhất ⭐",
     badgeColor: "#854d0e",
     badgeBg: "#fef08a",
     description: "Trải nghiệm không gian rộng rãi, thoáng mát, trang thiết bị cao cấp và ánh sáng tối ưu.",
+    priceRegular: "100.000đ/h",
+    pricePeak: "150.000đ/h",
+    priceWeekend: "170.000đ/h",
     icon: "👑",
     iconBg: "linear-gradient(135deg, #eab308, #ca8a04)",
     courtBg: "linear-gradient(180deg, rgba(234, 179, 8, 0.2) 0%, rgba(15, 23, 42, 0.8) 100%)",
     highlighted: true,
   },
   {
+    id: "premium",
+    name: "Sân Thi Đấu (Premium)",
     badge: "Chuyên nghiệp",
     badgeColor: "#ffffff",
     badgeBg: "#9333ea",
     description: "Dành cho các giải đấu, câu lạc bộ chuyên nghiệp với không gian đạt chuẩn thi đấu quốc tế.",
+    priceRegular: "130.000đ/h",
+    pricePeak: "190.000đ/h",
+    priceWeekend: "210.000đ/h",
     icon: "⭐",
     iconBg: "linear-gradient(135deg, #a855f7, #7e22ce)",
     courtBg: "linear-gradient(180deg, rgba(168, 85, 247, 0.15) 0%, rgba(15, 23, 42, 0.8) 100%)",
@@ -66,24 +83,6 @@ const COURT_CARD_STYLES = [
 export default function HomePage() {
   const { user, isAuthenticated, logout } = useAuth();
   const navigate = useNavigate();
-
-  // 🔥 State lưu danh sách sân thật lấy từ MongoDB
-  const [courts, setCourts] = useState([]);
-  const [loading, setLoading] = useState(true);
-
-  // 🔥 Gọi API Backend lấy danh sách sân khi mở HomePage
-  useEffect(() => {
-    courtService.getPublicCourts()
-      .then((res) => {
-        if (res.success && Array.isArray(res.data)) {
-          setCourts(res.data);
-        }
-      })
-      .catch((err) => {
-        console.error("Lỗi khi tải danh sách sân từ MongoDB:", err);
-      })
-      .finally(() => setLoading(false));
-  }, []);
 
   const handleBookNow = () => {
     if (isAuthenticated) {
@@ -188,6 +187,76 @@ export default function HomePage() {
               >
                 Đặt sân ngay
               </Button>
+
+              <Dropdown
+                menu={{
+                  items: [
+                    {
+                      key: "user-info",
+                      label: (
+                        <div style={{ padding: "4px 0" }}>
+                          <Text strong>{user?.name || "Người dùng"}</Text>
+                          <br />
+                          <Tag
+                            color={
+                              user?.role === ROLES.ADMIN
+                                ? "#EF4444"
+                                : user?.role === ROLES.STAFF
+                                  ? "#009B60"
+                                  : "#1890ff"
+                            }
+                            style={{ marginTop: 4 }}
+                          >
+                            {user?.role === ROLES.ADMIN
+                              ? "Quản trị viên"
+                              : user?.role === ROLES.STAFF
+                                ? "Nhân viên"
+                                : "Khách hàng"}
+                          </Tag>
+                        </div>
+                      ),
+                      disabled: true,
+                    },
+                    { type: "divider" },
+                    {
+                      key: "admin-panel",
+                      label:
+                        user?.role === ROLES.ADMIN || user?.role === ROLES.STAFF
+                          ? "Vào Trang Quản Trị"
+                          : "Trang Đặt Sân",
+                      icon: <AppstoreOutlined />,
+                      onClick: () =>
+                        navigate(
+                          user?.role === ROLES.ADMIN || user?.role === ROLES.STAFF
+                            ? "/admin/dashboard"
+                            : "/customer/book",
+                        ),
+                    },
+                    {
+                      key: "logout",
+                      label: "Đăng xuất",
+                      icon: <LogoutOutlined />,
+                      danger: true,
+                      onClick: async () => {
+                        await logout();
+                        message.success("Đã đăng xuất thành công");
+                        navigate("/");
+                      },
+                    },
+                  ],
+                }}
+                placement="bottomRight"
+                arrow
+              >
+                <Avatar
+                  style={{
+                    backgroundColor: "#009B60",
+                    cursor: "pointer",
+                    border: "2px solid rgba(255, 255, 255, 0.4)",
+                  }}
+                  icon={<UserOutlined />}
+                />
+              </Dropdown>
             </Space>
           ) : (
             <Space size="middle">
@@ -516,7 +585,7 @@ export default function HomePage() {
         </div>
       </section>
 
-      {/* 3. Pricing Section - DỮ LIỆU THẬT TỪ MONGODB */}
+      {/* 3. Pricing Section - DỮ LIỆU CỐ ĐỊNH */}
       <section
         id="pricing"
         style={{
@@ -550,112 +619,90 @@ export default function HomePage() {
           </h2>
 
           <p style={{ fontSize: 15, color: "#94a3b8", maxWidth: 700, margin: "0 auto 48px" }}>
-            Dữ liệu sân và giá dịch vụ được cập nhật trực tiếp theo thời gian thực từ cơ sở dữ liệu.
+            Chúng tôi cung cấp đa dạng phân khúc sân từ tiêu chuẩn tập luyện đến sân thi đấu cao cấp.
           </p>
 
-          {loading ? (
-            <div style={{ padding: 48 }}><Spin size="large" /></div>
-          ) : (
-            <Row gutter={[24, 24]} align="stretch">
-              {courts.map((court, index) => {
-                // Lấy style theo index
-                const style = COURT_CARD_STYLES[index % COURT_CARD_STYLES.length];
-                const priceTable = court.priceTableId || {};
-                
-                // 🔥 Lấy giá thật từ MongoDB
-                const priceRegular = (priceTable.standardRatePerHour || 80000).toLocaleString("vi-VN") + "đ/h";
-                const pricePeak = (priceTable.peakRatePerHour || 130000).toLocaleString("vi-VN") + "đ/h";
-                
-                // Tính giá cuối tuần (nếu có % phụ thu)
-                const surcharge = priceTable.weekendSurchargePercent || 10;
-                const weekendRate = (priceTable.standardRatePerHour || 80000) * (1 + surcharge / 100);
-                const priceWeekend = Math.round(weekendRate).toLocaleString("vi-VN") + "đ/h";
-
-                const peakHours = `${priceTable.peakHourStart || "17:00"} - ${priceTable.peakHourEnd || "21:00"}`;
-                const openHours = `${court.openTime || "06:00"} - ${priceTable.peakHourStart || "17:00"}`;
-
-                return (
-                  <Col xs={24} md={8} key={court._id}>
-                    <div
-                      style={{
-                        background: style.highlighted ? "rgba(22, 48, 35, 0.9)" : "rgba(15, 36, 28, 0.75)",
-                        border: style.highlighted ? "2px solid #bbf246" : "1px solid rgba(255, 255, 255, 0.12)",
-                        borderRadius: 20,
-                        padding: "24px",
-                        textAlign: "left",
-                        height: "100%",
-                        display: "flex",
-                        flexDirection: "column",
-                        justifyContent: "space-between",
-                        backdropFilter: "blur(12px)",
-                        boxShadow: style.highlighted ? "0 0 30px rgba(187, 242, 70, 0.25)" : "0 10px 25px rgba(0, 0, 0, 0.4)",
-                      }}
-                    >
-                      <div>
-                        {/* Header của thẻ */}
-                        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 14 }}>
-                          <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-                            <div style={{ width: 44, height: 44, borderRadius: 12, background: style.iconBg, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 20, color: "#fff" }}>
-                              {style.icon}
-                            </div>
-                            <div style={{ fontSize: 16, fontWeight: 800, color: "#ffffff" }}>{court.name}</div>
-                          </div>
-                          <span style={{ background: style.badgeBg, color: style.badgeColor, fontSize: 11, fontWeight: 700, padding: "3px 10px", borderRadius: 20 }}>
-                            {style.badge}
-                          </span>
+          <Row gutter={[24, 24]} align="stretch">
+            {courtTypes.map((court) => (
+              <Col xs={24} md={8} key={court.id}>
+                <div
+                  style={{
+                    background: court.highlighted ? "rgba(22, 48, 35, 0.9)" : "rgba(15, 36, 28, 0.75)",
+                    border: court.highlighted ? "2px solid #bbf246" : "1px solid rgba(255, 255, 255, 0.12)",
+                    borderRadius: 20,
+                    padding: "24px",
+                    textAlign: "left",
+                    height: "100%",
+                    display: "flex",
+                    flexDirection: "column",
+                    justifyContent: "space-between",
+                    backdropFilter: "blur(12px)",
+                    boxShadow: court.highlighted ? "0 0 30px rgba(187, 242, 70, 0.25)" : "0 10px 25px rgba(0, 0, 0, 0.4)",
+                  }}
+                >
+                  <div>
+                    {/* Header của thẻ */}
+                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 14 }}>
+                      <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+                        <div style={{ width: 44, height: 44, borderRadius: 12, background: court.iconBg, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 20, color: "#fff" }}>
+                          {court.icon}
                         </div>
-
-                        <p style={{ fontSize: 12.5, color: "#94a3b8", lineHeight: 1.5, marginBottom: 18 }}>{style.description}</p>
-
-                        <div style={{ height: 120, borderRadius: 12, background: style.courtBg, border: "1px solid rgba(255, 255, 255, 0.1)", display: "flex", flexDirection: "column", justifyContent: "center", alignItems: "center", marginBottom: 20 }}>
-                          <div style={{ fontSize: 32 }}>🏸</div>
-                          <div style={{ fontSize: 13, color: "#ffffff", fontWeight: 700, marginTop: 4 }}>
-                            {court.name}
-                          </div>
-                          <div style={{ fontSize: 11, color: "rgba(255, 255, 255, 0.6)" }}>
-                            Mặt thảm: {court.surfaceType} ({court.courtType})
-                          </div>
-                        </div>
-
-                        {/* 🔥 Bảng giá lấy trực tiếp từ MongoDB */}
-                        <div style={{ background: "rgba(0, 0, 0, 0.3)", borderRadius: 12, padding: "14px", marginBottom: 22, border: "1px solid rgba(255, 255, 255, 0.06)" }}>
-                          <div style={{ display: "flex", justifyContent: "space-between", padding: "4px 0", fontSize: 13, color: "#cbd5e1" }}>
-                            <span>Giờ thường ({openHours}):</span>
-                            <strong style={{ color: "#4ade80" }}>{priceRegular}</strong>
-                          </div>
-                          <div style={{ display: "flex", justifyContent: "space-between", padding: "4px 0", fontSize: 13, color: "#cbd5e1" }}>
-                            <span>Giờ vàng ({peakHours}):</span>
-                            <strong style={{ color: "#4ade80" }}>{pricePeak}</strong>
-                          </div>
-                          <div style={{ display: "flex", justifyContent: "space-between", padding: "4px 0", fontSize: 13, color: "#cbd5e1" }}>
-                            <span>Cuối tuần & Ngày lễ (+{surcharge}%):</span>
-                            <strong style={{ color: "#f87171" }}>{priceWeekend}</strong>
-                          </div>
-                        </div>
+                        <div style={{ fontSize: 16, fontWeight: 800, color: "#ffffff" }}>{court.name}</div>
                       </div>
-
-                      <Button
-                        type={style.highlighted ? "primary" : "default"}
-                        onClick={handleBookNow}
-                        style={{
-                          height: 42,
-                          width: "100%",
-                          borderRadius: 30,
-                          fontWeight: 800,
-                          fontSize: 14,
-                          background: style.highlighted ? "linear-gradient(135deg, #c0f135 0%, #48df7b 50%, #16a34a 100%)" : "rgba(255, 255, 255, 0.08)",
-                          borderColor: style.highlighted ? "transparent" : "rgba(255, 255, 255, 0.25)",
-                          color: style.highlighted ? "#052e16" : "#ffffff",
-                        }}
-                      >
-                        📅 Đặt sân ngay &gt;
-                      </Button>
+                      <span style={{ background: court.badgeBg, color: court.badgeColor, fontSize: 11, fontWeight: 700, padding: "3px 10px", borderRadius: 20 }}>
+                        {court.badge}
+                      </span>
                     </div>
-                  </Col>
-                );
-              })}
-            </Row>
-          )}
+
+                    <p style={{ fontSize: 12.5, color: "#94a3b8", lineHeight: 1.5, marginBottom: 18 }}>{court.description}</p>
+
+                    <div style={{ height: 120, borderRadius: 12, background: court.courtBg, border: "1px solid rgba(255, 255, 255, 0.1)", display: "flex", flexDirection: "column", justifyContent: "center", alignItems: "center", marginBottom: 20 }}>
+                      <div style={{ fontSize: 32 }}>🏸</div>
+                      <div style={{ fontSize: 13, color: "#ffffff", fontWeight: 700, marginTop: 4 }}>
+                        {court.name}
+                      </div>
+                      <div style={{ fontSize: 11, color: "rgba(255, 255, 255, 0.6)" }}>
+                        Tiêu chuẩn thảm chống trơn trượt BWF
+                      </div>
+                    </div>
+
+                    {/* Bảng giá niêm yết */}
+                    <div style={{ background: "rgba(0, 0, 0, 0.3)", borderRadius: 12, padding: "14px", marginBottom: 22, border: "1px solid rgba(255, 255, 255, 0.06)" }}>
+                      <div style={{ display: "flex", justifyContent: "space-between", padding: "4px 0", fontSize: 13, color: "#cbd5e1" }}>
+                        <span>Giờ thường (06:00 - 17:00):</span>
+                        <strong style={{ color: "#4ade80" }}>{court.priceRegular}</strong>
+                      </div>
+                      <div style={{ display: "flex", justifyContent: "space-between", padding: "4px 0", fontSize: 13, color: "#cbd5e1" }}>
+                        <span>Giờ vàng (17:00 - 22:00):</span>
+                        <strong style={{ color: "#4ade80" }}>{court.pricePeak}</strong>
+                      </div>
+                      <div style={{ display: "flex", justifyContent: "space-between", padding: "4px 0", fontSize: 13, color: "#cbd5e1" }}>
+                        <span>Cuối tuần & Ngày lễ:</span>
+                        <strong style={{ color: "#f87171" }}>{court.priceWeekend}</strong>
+                      </div>
+                    </div>
+                  </div>
+
+                  <Button
+                    type={court.highlighted ? "primary" : "default"}
+                    onClick={handleBookNow}
+                    style={{
+                      height: 42,
+                      width: "100%",
+                      borderRadius: 30,
+                      fontWeight: 800,
+                      fontSize: 14,
+                      background: court.highlighted ? "linear-gradient(135deg, #c0f135 0%, #48df7b 50%, #16a34a 100%)" : "rgba(255, 255, 255, 0.08)",
+                      borderColor: court.highlighted ? "transparent" : "rgba(255, 255, 255, 0.25)",
+                      color: court.highlighted ? "#052e16" : "#ffffff",
+                    }}
+                  >
+                    📅 Đặt sân ngay &gt;
+                  </Button>
+                </div>
+              </Col>
+            ))}
+          </Row>
         </div>
       </section>
 

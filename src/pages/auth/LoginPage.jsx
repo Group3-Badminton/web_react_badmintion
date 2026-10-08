@@ -32,12 +32,10 @@ export default function LoginPage() {
 
         if (fromPath) {
           navigate(fromPath);
-        } else if (role === "ADMIN") {
-          navigate("/");
-        } else if (role === "STAFF") {
-          navigate("/");
+        } else if (role === "ADMIN" || role === "STAFF") {
+          navigate("/admin/dashboard");
         } else {
-          navigate("/");
+          navigate("/customer/book");
         }
       }
     } catch (err) {
