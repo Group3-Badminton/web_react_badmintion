@@ -27,55 +27,66 @@ import { useNavigate, Link } from "react-router-dom";
 import { useAuth } from "../../context/AuthContext";
 import { ROLES } from "../../utils/constants";
 import bgHero from "../../assets/BG-HomePage.png";
-import badmintionLogo from "../../assets/BadmintionLogo.png";
-
+import badmintonLogo from "../../assets/BadmintionLogo.png";
+import san1 from "../../assets/sân1.png";
+import san2 from "../../assets/sân2.png";
+import san3 from "../../assets/sân3.png";
 const { Title, Paragraph, Text } = Typography;
 
 // Dữ liệu bảng giá & loại sân cố định giới thiệu trên HomePage
 const courtTypes = [
   {
     id: "standard",
-    name: "Sân Tiêu Chuẩn (Standard)",
+    name: "Sân Tiêu Chuẩn",
     badge: "Phổ biến",
-    badgeColor: "#3b82f6",
+    image: san1,
+    badgeColor: "#f9f9f9",
     badgeBg: "#2563eb",
-    description: "Phù hợp cho nhu cầu chơi cầu lông hàng ngày, tập luyện, giao lưu cùng bạn bè.",
+    description:
+      "Phù hợp cho nhu cầu chơi cầu lông hàng ngày, tập luyện, giao lưu cùng bạn bè.",
     priceRegular: "80.000đ/h",
     pricePeak: "130.000đ/h",
     priceWeekend: "140.000đ/h",
     icon: "🏸",
     iconBg: "linear-gradient(135deg, #2563eb, #1d4ed8)",
-    courtBg: "linear-gradient(180deg, rgba(37, 99, 235, 0.15) 0%, rgba(15, 23, 42, 0.8) 100%)",
+    courtBg:
+      "linear-gradient(180deg, rgba(37, 99, 235, 0.15) 0%, rgba(15, 23, 42, 0.8) 100%)",
     highlighted: false,
   },
   {
     id: "vip",
-    name: "Sân VIP (VIP Court)",
+    name: "Sân VIP",
     badge: "Được yêu thích nhất ⭐",
+    image: san2,
     badgeColor: "#854d0e",
     badgeBg: "#fef08a",
-    description: "Trải nghiệm không gian rộng rãi, thoáng mát, trang thiết bị cao cấp và ánh sáng tối ưu.",
+    description:
+      "Trải nghiệm không gian rộng rãi, thoáng mát, trang thiết bị cao cấp và ánh sáng tối ưu.",
     priceRegular: "100.000đ/h",
     pricePeak: "150.000đ/h",
     priceWeekend: "170.000đ/h",
     icon: "👑",
     iconBg: "linear-gradient(135deg, #eab308, #ca8a04)",
-    courtBg: "linear-gradient(180deg, rgba(234, 179, 8, 0.2) 0%, rgba(15, 23, 42, 0.8) 100%)",
+    courtBg:
+      "linear-gradient(180deg, rgba(234, 179, 8, 0.2) 0%, rgba(15, 23, 42, 0.8) 100%)",
     highlighted: true,
   },
   {
     id: "premium",
-    name: "Sân Thi Đấu (Premium)",
+    name: "Sân Thi Đấu",
     badge: "Chuyên nghiệp",
+    image: san3,
     badgeColor: "#ffffff",
     badgeBg: "#9333ea",
-    description: "Dành cho các giải đấu, câu lạc bộ chuyên nghiệp với không gian đạt chuẩn thi đấu quốc tế.",
+    description:
+      "Dành cho các giải đấu, câu lạc bộ chuyên nghiệp với không gian đạt chuẩn thi đấu quốc tế.",
     priceRegular: "130.000đ/h",
     pricePeak: "190.000đ/h",
     priceWeekend: "210.000đ/h",
     icon: "⭐",
     iconBg: "linear-gradient(135deg, #a855f7, #7e22ce)",
-    courtBg: "linear-gradient(180deg, rgba(168, 85, 247, 0.15) 0%, rgba(15, 23, 42, 0.8) 100%)",
+    courtBg:
+      "linear-gradient(180deg, rgba(168, 85, 247, 0.15) 0%, rgba(15, 23, 42, 0.8) 100%)",
     highlighted: false,
   },
 ];
@@ -139,7 +150,7 @@ export default function HomePage() {
           }}
         >
           <img
-            src={badmintionLogo}
+            src={badmintonLogo}
             alt="Logo"
             style={{ width: 80, height: 80, objectFit: "contain" }}
             onError={(e) => {
@@ -227,7 +238,8 @@ export default function HomePage() {
                       icon: <AppstoreOutlined />,
                       onClick: () =>
                         navigate(
-                          user?.role === ROLES.ADMIN || user?.role === ROLES.STAFF
+                          user?.role === ROLES.ADMIN ||
+                            user?.role === ROLES.STAFF
                             ? "/admin/dashboard"
                             : "/customer/book",
                         ),
@@ -485,11 +497,26 @@ export default function HomePage() {
                     <CrownOutlined />
                   </div>
                   <div style={{ flex: 1 }}>
-                    <h3 style={{ fontSize: 15.5, fontWeight: 800, color: "#0f172a", margin: "0 0 3px" }}>
+                    <h3
+                      style={{
+                        fontSize: 15.5,
+                        fontWeight: 800,
+                        color: "#0f172a",
+                        margin: "0 0 3px",
+                      }}
+                    >
                       Thảm Sân Đạt Chuẩn BWF
                     </h3>
-                    <p style={{ fontSize: 12.5, color: "#475569", lineHeight: 1.45, margin: 0 }}>
-                      Sử dụng 100% thảm PVC chuyên dụng thể thao, độ đàn hồi cao giúp giảm chấn thương hiệu quả.
+                    <p
+                      style={{
+                        fontSize: 12.5,
+                        color: "#475569",
+                        lineHeight: 1.45,
+                        margin: 0,
+                      }}
+                    >
+                      Sử dụng 100% thảm PVC chuyên dụng thể thao, độ đàn hồi cao
+                      giúp giảm chấn thương hiệu quả.
                     </p>
                   </div>
                 </div>
@@ -528,11 +555,26 @@ export default function HomePage() {
                     <BulbOutlined />
                   </div>
                   <div style={{ flex: 1 }}>
-                    <h3 style={{ fontSize: 15.5, fontWeight: 800, color: "#0f172a", margin: "0 0 3px" }}>
+                    <h3
+                      style={{
+                        fontSize: 15.5,
+                        fontWeight: 800,
+                        color: "#0f172a",
+                        margin: "0 0 3px",
+                      }}
+                    >
                       Ánh Sáng Chống Chói 360°
                     </h3>
-                    <p style={{ fontSize: 12.5, color: "#475569", lineHeight: 1.45, margin: 0 }}>
-                      Hệ thống đèn LED công nghệ mới, ánh sáng đạt chuẩn thi đấu, không gây chói mắt.
+                    <p
+                      style={{
+                        fontSize: 12.5,
+                        color: "#475569",
+                        lineHeight: 1.45,
+                        margin: 0,
+                      }}
+                    >
+                      Hệ thống đèn LED công nghệ mới, ánh sáng đạt chuẩn thi
+                      đấu, không gây chói mắt.
                     </p>
                   </div>
                 </div>
@@ -571,11 +613,26 @@ export default function HomePage() {
                     <ThunderboltOutlined />
                   </div>
                   <div style={{ flex: 1 }}>
-                    <h3 style={{ fontSize: 15.5, fontWeight: 800, color: "#0f172a", margin: "0 0 3px" }}>
+                    <h3
+                      style={{
+                        fontSize: 15.5,
+                        fontWeight: 800,
+                        color: "#0f172a",
+                        margin: "0 0 3px",
+                      }}
+                    >
                       Đặt Sân Nhanh & Tiện Lợi
                     </h3>
-                    <p style={{ fontSize: 12.5, color: "#475569", lineHeight: 1.45, margin: 0 }}>
-                      Trải nghiệm đặt sân trực tuyến trong vài giây, chọn khung giờ linh hoạt, dễ dàng.
+                    <p
+                      style={{
+                        fontSize: 12.5,
+                        color: "#475569",
+                        lineHeight: 1.45,
+                        margin: 0,
+                      }}
+                    >
+                      Trải nghiệm đặt sân trực tuyến trong vài giây, chọn khung
+                      giờ linh hoạt, dễ dàng.
                     </p>
                   </div>
                 </div>
@@ -614,12 +671,27 @@ export default function HomePage() {
             <span>BẢNG GIÁ NIÊM YẾT</span>
           </div>
 
-          <h2 style={{ fontSize: "clamp(24px, 3.5vw, 34px)", fontWeight: 900, color: "#ffffff", margin: "0 0 10px" }}>
+          <h2
+            style={{
+              fontSize: "clamp(24px, 3.5vw, 34px)",
+              fontWeight: 900,
+              color: "#ffffff",
+              margin: "0 0 10px",
+            }}
+          >
             Danh Mục Các Loại Sân & Đơn Giá Theo Giờ
           </h2>
 
-          <p style={{ fontSize: 15, color: "#94a3b8", maxWidth: 700, margin: "0 auto 48px" }}>
-            Chúng tôi cung cấp đa dạng phân khúc sân từ tiêu chuẩn tập luyện đến sân thi đấu cao cấp.
+          <p
+            style={{
+              fontSize: 15,
+              color: "#94a3b8",
+              maxWidth: 700,
+              margin: "0 auto 48px",
+            }}
+          >
+            Chúng tôi cung cấp đa dạng phân khúc sân từ tiêu chuẩn tập luyện đến
+            sân thi đấu cao cấp.
           </p>
 
           <Row gutter={[24, 24]} align="stretch">
@@ -627,8 +699,12 @@ export default function HomePage() {
               <Col xs={24} md={8} key={court.id}>
                 <div
                   style={{
-                    background: court.highlighted ? "rgba(22, 48, 35, 0.9)" : "rgba(15, 36, 28, 0.75)",
-                    border: court.highlighted ? "2px solid #bbf246" : "1px solid rgba(255, 255, 255, 0.12)",
+                    background: court.highlighted
+                      ? "rgba(22, 48, 35, 0.9)"
+                      : "rgba(15, 36, 28, 0.75)",
+                    border: court.highlighted
+                      ? "2px solid #bbf246"
+                      : "1px solid rgba(255, 255, 255, 0.12)",
                     borderRadius: 20,
                     padding: "24px",
                     textAlign: "left",
@@ -637,48 +713,151 @@ export default function HomePage() {
                     flexDirection: "column",
                     justifyContent: "space-between",
                     backdropFilter: "blur(12px)",
-                    boxShadow: court.highlighted ? "0 0 30px rgba(187, 242, 70, 0.25)" : "0 10px 25px rgba(0, 0, 0, 0.4)",
+                    boxShadow: court.highlighted
+                      ? "0 0 30px rgba(187, 242, 70, 0.25)"
+                      : "0 10px 25px rgba(0, 0, 0, 0.4)",
                   }}
                 >
                   <div>
                     {/* Header của thẻ */}
-                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 14 }}>
-                      <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-                        <div style={{ width: 44, height: 44, borderRadius: 12, background: court.iconBg, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 20, color: "#fff" }}>
+                    <div
+                      style={{
+                        display: "flex",
+                        justifyContent: "space-between",
+                        alignItems: "flex-start",
+                        marginBottom: 14,
+                      }}
+                    >
+                      <div
+                        style={{
+                          display: "flex",
+                          alignItems: "center",
+                          gap: 12,
+                        }}
+                      >
+                        <div
+                          style={{
+                            width: 44,
+                            height: 44,
+                            borderRadius: 12,
+                            background: court.iconBg,
+                            display: "flex",
+                            alignItems: "center",
+                            justifyContent: "center",
+                            fontSize: 20,
+                            color: "#fff",
+                          }}
+                        >
                           {court.icon}
                         </div>
-                        <div style={{ fontSize: 16, fontWeight: 800, color: "#ffffff" }}>{court.name}</div>
+                        <div
+                          style={{
+                            fontSize: 16,
+                            fontWeight: 800,
+                            color: "#ffffff",
+                          }}
+                        >
+                          {court.name}
+                        </div>
                       </div>
-                      <span style={{ background: court.badgeBg, color: court.badgeColor, fontSize: 11, fontWeight: 700, padding: "3px 10px", borderRadius: 20 }}>
+                      <span
+                        style={{
+                          background: court.badgeBg,
+                          color: court.badgeColor,
+                          fontSize: 11,
+                          fontWeight: 700,
+                          padding: "3px 10px",
+                          borderRadius: 20,
+                        }}
+                      >
                         {court.badge}
                       </span>
                     </div>
 
-                    <p style={{ fontSize: 12.5, color: "#94a3b8", lineHeight: 1.5, marginBottom: 18 }}>{court.description}</p>
-
-                    <div style={{ height: 120, borderRadius: 12, background: court.courtBg, border: "1px solid rgba(255, 255, 255, 0.1)", display: "flex", flexDirection: "column", justifyContent: "center", alignItems: "center", marginBottom: 20 }}>
-                      <div style={{ fontSize: 32 }}>🏸</div>
-                      <div style={{ fontSize: 13, color: "#ffffff", fontWeight: 700, marginTop: 4 }}>
-                        {court.name}
-                      </div>
-                      <div style={{ fontSize: 11, color: "rgba(255, 255, 255, 0.6)" }}>
-                        Tiêu chuẩn thảm chống trơn trượt BWF
-                      </div>
+                    <p
+                      style={{
+                        fontSize: 12.5,
+                        color: "#94a3b8",
+                        lineHeight: 1.5,
+                        marginBottom: 18,
+                      }}
+                    >
+                      {court.description}
+                    </p>
+                    <div
+                      style={{
+                        height: 140,
+                        width: "100%",
+                        borderRadius: 12,
+                        overflow: "hidden",
+                        marginBottom: 20,
+                        border: "1px solid rgba(255, 255, 255, 0.15)",
+                        boxShadow: "0 4px 15px rgba(0, 0, 0, 0.25)",
+                      }}
+                    >
+                      <img
+                        src={court.image}
+                        alt={court.name}
+                        style={{
+                          width: "100%",
+                          height: "100%",
+                          objectFit: "cover",
+                          display: "block",
+                          transition: "transform 0.3s ease",
+                        }}
+                      />
                     </div>
-
                     {/* Bảng giá niêm yết */}
-                    <div style={{ background: "rgba(0, 0, 0, 0.3)", borderRadius: 12, padding: "14px", marginBottom: 22, border: "1px solid rgba(255, 255, 255, 0.06)" }}>
-                      <div style={{ display: "flex", justifyContent: "space-between", padding: "4px 0", fontSize: 13, color: "#cbd5e1" }}>
+                    <div
+                      style={{
+                        background: "rgba(0, 0, 0, 0.3)",
+                        borderRadius: 12,
+                        padding: "14px",
+                        marginBottom: 22,
+                        border: "1px solid rgba(255, 255, 255, 0.06)",
+                      }}
+                    >
+                      <div
+                        style={{
+                          display: "flex",
+                          justifyContent: "space-between",
+                          padding: "4px 0",
+                          fontSize: 13,
+                          color: "#cbd5e1",
+                        }}
+                      >
                         <span>Giờ thường (06:00 - 17:00):</span>
-                        <strong style={{ color: "#4ade80" }}>{court.priceRegular}</strong>
+                        <strong style={{ color: "#4ade80" }}>
+                          {court.priceRegular}
+                        </strong>
                       </div>
-                      <div style={{ display: "flex", justifyContent: "space-between", padding: "4px 0", fontSize: 13, color: "#cbd5e1" }}>
+                      <div
+                        style={{
+                          display: "flex",
+                          justifyContent: "space-between",
+                          padding: "4px 0",
+                          fontSize: 13,
+                          color: "#cbd5e1",
+                        }}
+                      >
                         <span>Giờ vàng (17:00 - 22:00):</span>
-                        <strong style={{ color: "#4ade80" }}>{court.pricePeak}</strong>
+                        <strong style={{ color: "#4ade80" }}>
+                          {court.pricePeak}
+                        </strong>
                       </div>
-                      <div style={{ display: "flex", justifyContent: "space-between", padding: "4px 0", fontSize: 13, color: "#cbd5e1" }}>
+                      <div
+                        style={{
+                          display: "flex",
+                          justifyContent: "space-between",
+                          padding: "4px 0",
+                          fontSize: 13,
+                          color: "#cbd5e1",
+                        }}
+                      >
                         <span>Cuối tuần & Ngày lễ:</span>
-                        <strong style={{ color: "#f87171" }}>{court.priceWeekend}</strong>
+                        <strong style={{ color: "#f87171" }}>
+                          {court.priceWeekend}
+                        </strong>
                       </div>
                     </div>
                   </div>
@@ -692,8 +871,12 @@ export default function HomePage() {
                       borderRadius: 30,
                       fontWeight: 800,
                       fontSize: 14,
-                      background: court.highlighted ? "linear-gradient(135deg, #c0f135 0%, #48df7b 50%, #16a34a 100%)" : "rgba(255, 255, 255, 0.08)",
-                      borderColor: court.highlighted ? "transparent" : "rgba(255, 255, 255, 0.25)",
+                      background: court.highlighted
+                        ? "linear-gradient(135deg, #c0f135 0%, #48df7b 50%, #16a34a 100%)"
+                        : "rgba(255, 255, 255, 0.08)",
+                      borderColor: court.highlighted
+                        ? "transparent"
+                        : "rgba(255, 255, 255, 0.25)",
                       color: court.highlighted ? "#052e16" : "#ffffff",
                     }}
                   >
@@ -720,46 +903,125 @@ export default function HomePage() {
         <div style={{ maxWidth: 1180, margin: "0 auto" }}>
           <Row gutter={[36, 36]}>
             <Col xs={24} md={10}>
-              <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 16 }}>
-                <img src={badmintionLogo} alt="Logo" style={{ width: 80, height: 80, objectFit: "contain" }} />
+              <div
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  gap: 10,
+                  marginBottom: 16,
+                }}
+              >
+                <img
+                  src={badmintonLogo}
+                  alt="Logo"
+                  style={{ width: 80, height: 80, objectFit: "contain" }}
+                />
                 <div>
-                  <div style={{ fontSize: 18, fontWeight: 800, color: "#ffffff" }}>
+                  <div
+                    style={{ fontSize: 18, fontWeight: 800, color: "#ffffff" }}
+                  >
                     CẦU LÔNG <span style={{ color: "#4ade80" }}>HUB</span>
                   </div>
-                  <div style={{ fontSize: 12, color: "rgba(255, 255, 255, 0.85)" }}>
+                  <div
+                    style={{ fontSize: 12, color: "rgba(255, 255, 255, 0.85)" }}
+                  >
                     Badminton Court Management Website
                   </div>
                 </div>
               </div>
-              <p style={{ lineHeight: 1.65, color: "#cbd5e1", marginBottom: 20 }}>
-                Hệ thống sân cầu lông và quản lý đặt sân trực tuyến hiện đại, chuẩn BWF.
+              <p
+                style={{ lineHeight: 1.65, color: "#cbd5e1", marginBottom: 20 }}
+              >
+                Hệ thống sân cầu lông và quản lý đặt sân trực tuyến hiện đại,
+                chuẩn BWF.
               </p>
-              <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-                <div><EnvironmentOutlined style={{ color: "#4ade80", marginRight: 8 }} /> Cần Thơ, Việt Nam</div>
-                <div><PhoneOutlined style={{ color: "#4ade80", marginRight: 8 }} /> Hotline: <strong>0909080807</strong></div>
-                <div><ClockCircleOutlined style={{ color: "#4ade80", marginRight: 8 }} /> 06:00 - 23:00 (Hàng ngày)</div>
+              <div
+                style={{ display: "flex", flexDirection: "column", gap: 10 }}
+              >
+                <div>
+                  <EnvironmentOutlined
+                    style={{ color: "#4ade80", marginRight: 8 }}
+                  />{" "}
+                  Cần Thơ, Việt Nam
+                </div>
+                <div>
+                  <PhoneOutlined style={{ color: "#4ade80", marginRight: 8 }} />{" "}
+                  Hotline: <strong>0909080807</strong>
+                </div>
+                <div>
+                  <ClockCircleOutlined
+                    style={{ color: "#4ade80", marginRight: 8 }}
+                  />{" "}
+                  06:00 - 23:00 (Hàng ngày)
+                </div>
               </div>
             </Col>
 
             <Col xs={24} sm={12} md={7}>
-              <div style={{ color: "#ffffff", fontWeight: 700, fontSize: 16, marginBottom: 16 }}>Liên Kết Nhanh</div>
-              <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-                <a href="#pricing" onClick={(e) => { e.preventDefault(); scrollToSection("pricing"); }} style={{ color: "#94a3b8", textDecoration: "none" }}>Bảng giá sân</a>
-                <Link to="/login" style={{ color: "#94a3b8", textDecoration: "none" }}>Đăng nhập</Link>
-                <Link to="/register" style={{ color: "#94a3b8", textDecoration: "none" }}>Đăng ký</Link>
+              <div
+                style={{
+                  color: "#ffffff",
+                  fontWeight: 700,
+                  fontSize: 16,
+                  marginBottom: 16,
+                }}
+              >
+                Liên Kết Nhanh
+              </div>
+              <div
+                style={{ display: "flex", flexDirection: "column", gap: 10 }}
+              >
+                <a
+                  href="#pricing"
+                  onClick={(e) => {
+                    e.preventDefault();
+                    scrollToSection("pricing");
+                  }}
+                  style={{ color: "#94a3b8", textDecoration: "none" }}
+                >
+                  Bảng giá sân
+                </a>
+                <Link
+                  to="/login"
+                  style={{ color: "#94a3b8", textDecoration: "none" }}
+                >
+                  Đăng nhập
+                </Link>
+                <Link
+                  to="/register"
+                  style={{ color: "#94a3b8", textDecoration: "none" }}
+                >
+                  Đăng ký
+                </Link>
               </div>
             </Col>
 
             <Col xs={24} sm={12} md={7}>
-              <div style={{ color: "#ffffff", fontWeight: 700, fontSize: 16, marginBottom: 16 }}>Quy Định Sân</div>
-              <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+              <div
+                style={{
+                  color: "#ffffff",
+                  fontWeight: 700,
+                  fontSize: 16,
+                  marginBottom: 16,
+                }}
+              >
+                Quy Định Sân
+              </div>
+              <div
+                style={{ display: "flex", flexDirection: "column", gap: 10 }}
+              >
                 <span>Mang giày thể thao đế mềm chuyên dụng</span>
                 <span>Hủy lịch đặt trước tối thiểu 02 giờ</span>
               </div>
             </Col>
           </Row>
 
-          <Divider style={{ borderColor: "rgba(255, 255, 255, 0.08)", margin: "30px 0 20px" }} />
+          <Divider
+            style={{
+              borderColor: "rgba(255, 255, 255, 0.08)",
+              margin: "30px 0 20px",
+            }}
+          />
           <div style={{ textAlign: "center", fontSize: 13, color: "#64748b" }}>
             Cầu Lông Hub — Hệ Thống Quản Lý Sân Cầu Lông © 2026
           </div>
