@@ -60,9 +60,6 @@ export default function LoginPage() {
         >
           Đăng Nhập
         </h2>
-        <p style={{ color: "#94a3b8", fontSize: 14, margin: 0 }}>
-          Nhập số điện thoại hoặc email để tiếp tục
-        </p>
       </div>
 
       {errorMessage && (
@@ -129,7 +126,7 @@ export default function LoginPage() {
           }}
         >
           <Link
-            to="/forgot-password"
+            to="/reset-Password"
             style={{
               color: "#4ade80",
               fontSize: 13,
