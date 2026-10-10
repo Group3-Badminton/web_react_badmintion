@@ -63,11 +63,9 @@ export default function AuthLayout() {
             textShadow: "0 1px 6px rgba(0,0,0,0.7)",
           }}
         >
-          Hệ Thống Quản Lý Sân Cầu Lông Toàn Diện — BCMW
+          Hệ Thống Quản Lý Sân Cầu Lông Toàn Diện
         </p>
       </div>
-
-      {/* Khung kính mờ Glassmorphism */}
       <div
         className="auth-glass-card"
         style={{
@@ -77,19 +75,6 @@ export default function AuthLayout() {
         }}
       >
         <Outlet />
-      </div>
-
-      {/* Footer */}
-      <div
-        style={{
-          marginTop: 28,
-          fontSize: 13,
-          color: "rgba(255, 255, 255, 0.75)",
-          textAlign: "center",
-          textShadow: "0 1px 4px rgba(0,0,0,0.8)",
-        }}
-      >
-        © 2026 BCMW Platform. Hotline hỗ trợ: 0909080807
       </div>
     </div>
   );
