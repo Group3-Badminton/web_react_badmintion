@@ -76,6 +76,15 @@ export default function AppSidebar({ collapsed }) {
       });
     }
 
+    // Product Management (UC-14)
+    if (isAdmin || isStaff) {
+      items.push({
+        key: '/admin/products',
+        icon: <TagOutlined style={{ color: '#009B60' }} />,
+        label: 'Quản lý sản phẩm'
+      });
+    }
+
     // Bookings
     if (isAdmin || hasPermission(STAFF_PERMISSIONS.MANAGE_BOOKINGS)) {
       items.push({

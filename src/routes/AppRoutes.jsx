@@ -11,6 +11,7 @@ import RegisterPage from "../pages/auth/RegisterPage";
 
 // Dashboard & Protected Pages
 import AdminDashboardPage from "../pages/dashboard/AdminDashboardPage";
+import ProductManagementPage from "../pages/product/ProductManagementPage";
 import CustomerBookingPage from "../pages/customer/CustomerBookingPage";
 import ResetPasswordPage from "../pages/auth/ResetPasswordPage";
 import ProfilePage from "../pages/profile/ProfilePage";
@@ -67,6 +68,15 @@ export default function AppRoutes() {
           element={
             <ProtectedRoute allowedRoles={[ROLES.ADMIN, ROLES.STAFF]}>
               <AdminDashboardPage />
+            </ProtectedRoute>
+          }
+        />
+        {/* UC-14 Product Management */}
+        <Route
+          path="/admin/products"
+          element={
+            <ProtectedRoute allowedRoles={[ROLES.ADMIN, ROLES.STAFF]}>
+              <ProductManagementPage />
             </ProtectedRoute>
           }
         />
