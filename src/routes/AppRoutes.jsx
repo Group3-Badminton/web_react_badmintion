@@ -14,6 +14,7 @@ import CustomerBookingPage from "../pages/customer/CustomerBookingPage";
 import ResetPasswordPage from "../pages/auth/ResetPasswordPage";
 import ProfilePage from "../pages/profile/ProfilePage";
 import StaffManagementPage from "../pages/admin/StaffManagementPage";
+import CourtManagementPage from "../pages/admin/CourtManagementPage";
 import { ROLES } from "../utils/constants";
 import { Result, Button } from "antd";
 
@@ -76,6 +77,15 @@ export default function AppRoutes() {
           element={
             <ProtectedRoute allowedRoles={[ROLES.ADMIN]}>
               <StaffManagementPage />
+            </ProtectedRoute>
+          }
+        />
+        {/* Court Management (Staff & Admin) */}
+        <Route
+          path="/admin/courts"
+          element={
+            <ProtectedRoute allowedRoles={[ROLES.ADMIN, ROLES.STAFF]}>
+              <CourtManagementPage />
             </ProtectedRoute>
           }
         />

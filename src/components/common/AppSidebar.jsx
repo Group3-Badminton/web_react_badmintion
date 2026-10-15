@@ -103,8 +103,8 @@ export default function AppSidebar({ collapsed }) {
       });
     }
 
-    // Courts
-    if (isAdmin || hasPermission(STAFF_PERMISSIONS.VIEW_COURTS)) {
+    // Courts (Staff & Admin)
+    if (isAdmin || isStaff) {
       items.push({
         key: '/admin/courts',
         icon: <AppstoreOutlined />,
