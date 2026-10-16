@@ -1,4 +1,3 @@
-import React from "react";
 import { Routes, Route } from "react-router-dom";
 import AuthLayout from "../components/layouts/AuthLayout";
 import MainLayout from "../components/layouts/MainLayout";
@@ -13,9 +12,12 @@ import RegisterPage from "../pages/auth/RegisterPage";
 import AdminDashboardPage from "../pages/dashboard/AdminDashboardPage";
 import ProductManagementPage from "../pages/product/ProductManagementPage";
 import VoucherManagementPage from "../pages/voucher/VoucherManagementPage";
+import AdminBookingListPage from "../pages/admin/AdminBookingListPage";
 import CustomerBookingPage from "../pages/customer/CustomerBookingPage";
 import ResetPasswordPage from "../pages/auth/ResetPasswordPage";
 import ProfilePage from "../pages/profile/ProfilePage";
+import StaffManagementPage from "../pages/admin/StaffManagementPage";
+import CourtManagementPage from "../pages/admin/CourtManagementPage";
 import { ROLES } from "../utils/constants";
 import { Result, Button } from "antd";
 
@@ -87,6 +89,33 @@ export default function AppRoutes() {
           element={
             <ProtectedRoute allowedRoles={[ROLES.ADMIN, ROLES.STAFF]}>
               <VoucherManagementPage />
+            </ProtectedRoute>
+          }
+        />
+        {/* Admin & Staff Booking Management */}
+        <Route
+          path="/admin/bookings"
+          element={
+            <ProtectedRoute allowedRoles={[ROLES.ADMIN, ROLES.STAFF]}>
+              <AdminBookingListPage />
+            </ProtectedRoute>
+          }
+        />
+        {/* Admin Staff Management (Admin only) */}
+        <Route
+          path="/admin/staffs"
+          element={
+            <ProtectedRoute allowedRoles={[ROLES.ADMIN]}>
+              <StaffManagementPage />
+            </ProtectedRoute>
+          }
+        />
+        {/* Court Management (Staff & Admin) */}
+        <Route
+          path="/admin/courts"
+          element={
+            <ProtectedRoute allowedRoles={[ROLES.ADMIN, ROLES.STAFF]}>
+              <CourtManagementPage />
             </ProtectedRoute>
           }
         />
