@@ -14,6 +14,7 @@ import AdminDashboardPage from "../pages/dashboard/AdminDashboardPage";
 import CustomerBookingPage from "../pages/customer/CustomerBookingPage";
 import ResetPasswordPage from "../pages/auth/ResetPasswordPage";
 import ProfilePage from "../pages/profile/ProfilePage";
+import PricingManagementPage from "../pages/admin/PricingManagementPage";
 import { ROLES } from "../utils/constants";
 import { Result, Button } from "antd";
 
@@ -67,6 +68,15 @@ export default function AppRoutes() {
           element={
             <ProtectedRoute allowedRoles={[ROLES.ADMIN, ROLES.STAFF]}>
               <AdminDashboardPage />
+            </ProtectedRoute>
+          }
+        />
+        {/* Pricing Management (Admin only - UC-18) */}
+        <Route
+          path="/admin/prices"
+          element={
+            <ProtectedRoute allowedRoles={[ROLES.ADMIN]}>
+              <PricingManagementPage />
             </ProtectedRoute>
           }
         />
