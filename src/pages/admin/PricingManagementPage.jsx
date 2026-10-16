@@ -17,7 +17,8 @@ import {
   Row,
   Col,
   Statistic,
-  Tooltip
+  Tooltip,
+  Descriptions
 } from 'antd';
 import {
   PlusOutlined,
@@ -28,7 +29,10 @@ import {
   DollarOutlined,
   ClockCircleOutlined,
   FilterOutlined,
-  SearchOutlined
+  SearchOutlined,
+  EyeOutlined,
+  InfoCircleOutlined,
+  CalendarOutlined
 } from '@ant-design/icons';
 import dayjs from 'dayjs';
 import customParseFormat from 'dayjs/plugin/customParseFormat';
@@ -65,6 +69,7 @@ export default function PricingManagementPage() {
   // Bộ lọc
   const [filterCourtType, setFilterCourtType] = useState('ALL_TYPES');
   const [filterStatus, setFilterStatus] = useState('ALL_STATUS');
+  const [filterDay, setFilterDay] = useState('ALL_DAYS');
   const [searchText, setSearchText] = useState('');
 
   // Modal Create / Update
@@ -74,6 +79,10 @@ export default function PricingManagementPage() {
   const [submitting, setSubmitting] = useState(false);
   const [form] = Form.useForm();
 
+  // Modal Chi tiết (View Detail)
+  const [detailVisible, setDetailVisible] = useState(false);
+  const [selectedDetailRule, setSelectedDetailRule] = useState(null);
+
   // Tải danh sách quy tắc giá
   const fetchPriceRules = useCallback(async () => {
     setLoading(true);
@@ -81,6 +90,7 @@ export default function PricingManagementPage() {
       const params = {};
       if (filterCourtType !== 'ALL_TYPES') params.courtType = filterCourtType;
       if (filterStatus !== 'ALL_STATUS') params.status = filterStatus;
+      if (filterDay !== 'ALL_DAYS') params.dayOfWeek = filterDay;
       if (searchText.trim()) params.search = searchText.trim();
 
       const res = await pricingService.getAll(params);
@@ -92,11 +102,16 @@ export default function PricingManagementPage() {
     } finally {
       setLoading(false);
     }
-  }, [filterCourtType, filterStatus, searchText]);
+  }, [filterCourtType, filterStatus, filterDay, searchText]);
 
   useEffect(() => {
     fetchPriceRules();
   }, [fetchPriceRules]);
+
+  const handleOpenDetailModal = (record) => {
+    setSelectedDetailRule(record);
+    setDetailVisible(true);
+  };
 
   // Thống kê nhanh
   const stats = {
@@ -310,7 +325,18 @@ export default function PricingManagementPage() {
       title: 'Thao tác',
       key: 'actions',
       render: (_, record) => (
-        <Space size="middle">
+        <Space size="small">
+          {/* Xem chi tiết quy tắc giá */}
+          <Tooltip title="Xem thông tin chi tiết về giá">
+            <Button
+              type="text"
+              icon={<EyeOutlined style={{ color: '#009B60' }} />}
+              onClick={() => handleOpenDetailModal(record)}
+            >
+              Chi tiết
+            </Button>
+          </Tooltip>
+
           {/* UC-18.3: Update Price */}
           <Tooltip title="Chỉnh sửa quy tắc giá">
             <Button
@@ -440,8 +466,8 @@ export default function PricingManagementPage() {
           boxShadow: '0 2px 8px rgba(0,0,0,0.05)'
         }}
       >
-        <Row gutter={[16, 16]} align="middle">
-          <Col xs={24} sm={8} md={6}>
+        <Row gutter={[12, 12]} align="middle">
+          <Col xs={24} sm={12} md={6}>
             <Input
               placeholder="Tìm theo tên hoặc mô tả..."
               prefix={<SearchOutlined style={{ color: '#94a3b8' }} />}
@@ -450,7 +476,7 @@ export default function PricingManagementPage() {
               allowClear
             />
           </Col>
-          <Col xs={12} sm={8} md={5}>
+          <Col xs={12} sm={6} md={4}>
             <Select
               style={{ width: '100%' }}
               value={filterCourtType}
@@ -463,7 +489,23 @@ export default function PricingManagementPage() {
               <Option value="ALL">Áp dụng chung (ALL)</Option>
             </Select>
           </Col>
-          <Col xs={12} sm={8} md={5}>
+          <Col xs={12} sm={6} md={4}>
+            <Select
+              style={{ width: '100%' }}
+              value={filterDay}
+              onChange={setFilterDay}
+            >
+              <Option value="ALL_DAYS">Tất cả các ngày</Option>
+              <Option value={1}>Thứ 2</Option>
+              <Option value={2}>Thứ 3</Option>
+              <Option value={3}>Thứ 4</Option>
+              <Option value={4}>Thứ 5</Option>
+              <Option value={5}>Thứ 6</Option>
+              <Option value={6}>Thứ 7</Option>
+              <Option value={0}>Chủ Nhật</Option>
+            </Select>
+          </Col>
+          <Col xs={12} sm={6} md={4}>
             <Select
               style={{ width: '100%' }}
               value={filterStatus}
@@ -474,7 +516,7 @@ export default function PricingManagementPage() {
               <Option value="INACTIVE">Đã vô hiệu hóa</Option>
             </Select>
           </Col>
-          <Col xs={24} sm={24} md={8} style={{ textAlign: 'right' }}>
+          <Col xs={12} sm={6} md={6} style={{ textAlign: 'right' }}>
             <Button
               icon={<ReloadOutlined />}
               onClick={fetchPriceRules}
@@ -693,6 +735,114 @@ export default function PricingManagementPage() {
             </Space>
           </div>
         </Form>
+      </Modal>
+
+      {/* Modal Xem chi tiết quy tắc giá (View Detail) */}
+      <Modal
+        title={
+          <Space>
+            <InfoCircleOutlined style={{ color: '#009B60' }} />
+            <span>Chi Tiết Quy Tắc Giá Thuê Sân</span>
+          </Space>
+        }
+        open={detailVisible}
+        onCancel={() => setDetailVisible(false)}
+        footer={[
+          <Button key="close" onClick={() => setDetailVisible(false)}>
+            Đóng
+          </Button>,
+          <Button
+            key="edit"
+            type="primary"
+            icon={<EditOutlined />}
+            onClick={() => {
+              const rule = selectedDetailRule;
+              setDetailVisible(false);
+              handleOpenEditModal(rule);
+            }}
+            style={{ background: '#009B60', borderColor: '#009B60' }}
+          >
+            Chỉnh sửa quy tắc này
+          </Button>
+        ]}
+        width={650}
+      >
+        {selectedDetailRule && (
+          <Descriptions bordered column={1} size="small" style={{ marginTop: 16 }}>
+            <Descriptions.Item label="Tên quy tắc giá">
+              <Text strong style={{ fontSize: 15 }}>{selectedDetailRule.name}</Text>
+            </Descriptions.Item>
+
+            <Descriptions.Item label="Loại sân áp dụng">
+              <Tag
+                color={COURT_TYPE_CONFIG[selectedDetailRule.courtType]?.color || 'default'}
+                style={{ fontWeight: 600, fontSize: 13 }}
+              >
+                {COURT_TYPE_CONFIG[selectedDetailRule.courtType]?.label || selectedDetailRule.courtType}
+              </Tag>
+            </Descriptions.Item>
+
+            <Descriptions.Item label="Ngày áp dụng trong tuần">
+              <div>{renderDaysOfWeek(selectedDetailRule.daysOfWeek)}</div>
+              <div style={{ marginTop: 6, fontSize: 12, color: '#64748b' }}>
+                <CalendarOutlined style={{ marginRight: 4 }} />
+                Chi tiết:{' '}
+                {selectedDetailRule.daysOfWeek
+                  ?.slice()
+                  .sort((a, b) => (a === 0 ? 7 : a) - (b === 0 ? 7 : b))
+                  .map((d) => (d === 0 ? 'Chủ Nhật' : `Thứ ${d + 1}`))
+                  .join(', ')}
+              </div>
+            </Descriptions.Item>
+
+            <Descriptions.Item label="Khung giờ áp dụng">
+              <Space>
+                <ClockCircleOutlined style={{ color: '#009B60' }} />
+                <Text strong style={{ fontSize: 14 }}>
+                  {selectedDetailRule.startTime} - {selectedDetailRule.endTime}
+                </Text>
+              </Space>
+            </Descriptions.Item>
+
+            <Descriptions.Item label="Giá thuê mỗi giờ">
+              <Text strong style={{ color: '#009B60', fontSize: 16 }}>
+                {Number(selectedDetailRule.pricePerHour).toLocaleString('vi-VN')} đ/giờ
+              </Text>
+            </Descriptions.Item>
+
+            <Descriptions.Item label="Trạng thái">
+              {selectedDetailRule.status === 'ACTIVE' ? (
+                <Tag color="success" icon={<CheckCircleOutlined />}>
+                  Đang áp dụng
+                </Tag>
+              ) : (
+                <Tag color="default" icon={<StopOutlined />}>
+                  Đã vô hiệu hóa
+                </Tag>
+              )}
+            </Descriptions.Item>
+
+            <Descriptions.Item label="Điều kiện áp dụng / Ghi chú">
+              {selectedDetailRule.description ? (
+                <Paragraph style={{ margin: 0 }}>{selectedDetailRule.description}</Paragraph>
+              ) : (
+                <Text type="secondary">Không có ghi chú điều kiện</Text>
+              )}
+            </Descriptions.Item>
+
+            <Descriptions.Item label="Ngày tạo">
+              {selectedDetailRule.createdAt
+                ? dayjs(selectedDetailRule.createdAt).format('DD/MM/YYYY HH:mm:ss')
+                : 'Chưa có'}
+            </Descriptions.Item>
+
+            <Descriptions.Item label="Cập nhật lần cuối">
+              {selectedDetailRule.updatedAt
+                ? dayjs(selectedDetailRule.updatedAt).format('DD/MM/YYYY HH:mm:ss')
+                : 'Chưa có'}
+            </Descriptions.Item>
+          </Descriptions>
+        )}
       </Modal>
     </div>
   );

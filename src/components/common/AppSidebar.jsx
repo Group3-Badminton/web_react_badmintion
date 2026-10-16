@@ -12,7 +12,8 @@ import {
   PlayCircleOutlined,
   ShoppingCartOutlined,
   TagOutlined,
-  FileTextOutlined
+  FileTextOutlined,
+  FolderOutlined
 } from '@ant-design/icons';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
@@ -103,21 +104,33 @@ export default function AppSidebar({ collapsed }) {
       });
     }
 
-    // Courts
-    if (isAdmin || hasPermission(STAFF_PERMISSIONS.VIEW_COURTS)) {
-      items.push({
-        key: '/admin/courts',
-        icon: <AppstoreOutlined />,
-        label: 'Quản lý danh mục sân'
+    // Danh mục chung (Bao gồm Bảng giá và Danh mục sân)
+    const generalCategoryChildren = [];
+
+    // Bảng giá (Admin only)
+    if (isAdmin) {
+      generalCategoryChildren.push({
+        key: '/admin/prices',
+        icon: <DollarOutlined />,
+        label: 'Bảng giá'
       });
     }
 
-    // Price tables (Admin only)
-    if (isAdmin) {
+    // Courts
+    if (isAdmin || hasPermission(STAFF_PERMISSIONS.VIEW_COURTS)) {
+      generalCategoryChildren.push({
+        key: '/admin/courts',
+        icon: <AppstoreOutlined />,
+        label: 'Danh mục sân'
+      });
+    }
+
+    if (generalCategoryChildren.length > 0) {
       items.push({
-        key: '/admin/prices',
-        icon: <DollarOutlined />,
-        label: 'Quản lý bảng giá'
+        key: 'general-category',
+        icon: <FolderOutlined style={{ color: '#009B60' }} />,
+        label: 'Danh mục chung',
+        children: generalCategoryChildren
       });
     }
 
@@ -159,9 +172,14 @@ export default function AppSidebar({ collapsed }) {
       <Menu
         mode="inline"
         selectedKeys={[location.pathname]}
+        defaultOpenKeys={['general-category']}
         style={{ borderRight: 0, padding: '12px 0' }}
         items={menuItems}
-        onClick={({ key }) => navigate(key)}
+        onClick={({ key }) => {
+          if (key && key.startsWith('/')) {
+            navigate(key);
+          }
+        }}
       />
     </Sider>
   );
