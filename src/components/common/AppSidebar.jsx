@@ -1,3 +1,4 @@
+// eslint-disable-next-line no-unused-vars
 import React from 'react';
 import { Layout, Menu } from 'antd';
 import {
@@ -103,11 +104,11 @@ export default function AppSidebar({ collapsed }) {
       });
     }
 
-    // Vouchers
-    if (isAdmin || hasPermission(STAFF_PERMISSIONS.VIEW_VOUCHERS)) {
+    // Vouchers (UC-15)
+    if (isAdmin || isStaff) {
       items.push({
         key: '/admin/vouchers',
-        icon: <TagOutlined />,
+        icon: <TagOutlined style={{ color: '#009B60' }} />,
         label: 'Mã giảm giá (Voucher)'
       });
     }

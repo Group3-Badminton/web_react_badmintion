@@ -12,6 +12,7 @@ import RegisterPage from "../pages/auth/RegisterPage";
 // Dashboard & Protected Pages
 import AdminDashboardPage from "../pages/dashboard/AdminDashboardPage";
 import ProductManagementPage from "../pages/product/ProductManagementPage";
+import VoucherManagementPage from "../pages/voucher/VoucherManagementPage";
 import CustomerBookingPage from "../pages/customer/CustomerBookingPage";
 import ResetPasswordPage from "../pages/auth/ResetPasswordPage";
 import ProfilePage from "../pages/profile/ProfilePage";
@@ -77,6 +78,15 @@ export default function AppRoutes() {
           element={
             <ProtectedRoute allowedRoles={[ROLES.ADMIN, ROLES.STAFF]}>
               <ProductManagementPage />
+            </ProtectedRoute>
+          }
+        />
+        {/* UC-15 Voucher Management */}
+        <Route
+          path="/admin/vouchers"
+          element={
+            <ProtectedRoute allowedRoles={[ROLES.ADMIN, ROLES.STAFF]}>
+              <VoucherManagementPage />
             </ProtectedRoute>
           }
         />
