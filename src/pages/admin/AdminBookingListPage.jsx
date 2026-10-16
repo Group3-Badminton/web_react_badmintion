@@ -8,6 +8,7 @@ import {
   Tag,
   Button,
   Input,
+  InputNumber,
   Select,
   DatePicker,
   Space,
@@ -21,7 +22,8 @@ import {
   Avatar,
   Badge,
   Tabs,
-  Alert
+  Alert,
+  Radio
 } from 'antd';
 import {
   CalendarOutlined,
@@ -39,7 +41,8 @@ import {
   EditOutlined,
   EnvironmentOutlined,
   ExclamationCircleOutlined,
-  StopOutlined
+  StopOutlined,
+  PlusOutlined
 } from '@ant-design/icons';
 import dayjs from 'dayjs';
 import { bookingService } from '../../services/bookingService';
@@ -102,8 +105,7 @@ const ALLOWED_STATUS_TRANSITIONS = {
 
 const PAYMENT_STATUS_CONFIG = {
   PAID: { color: 'green', label: 'Đã thanh toán' },
-  UNPAID: { color: 'red', label: 'Chưa thanh toán' },
-  REFUNDED: { color: 'orange', label: 'Đã hoàn tiền' }
+  UNPAID: { color: 'red', label: 'Chưa thanh toán' }
 };
 
 export default function AdminBookingListPage() {
@@ -147,6 +149,7 @@ export default function AdminBookingListPage() {
   const [editPrice, setEditPrice] = useState(0);
   const [editDiscount, setEditDiscount] = useState(0);
   const [editTotalAmount, setEditTotalAmount] = useState(0);
+  const [editPaymentMethod, setEditPaymentMethod] = useState('CASH');
   const [availableSlots, setAvailableSlots] = useState([]);
   const [loadingSlots, setLoadingSlots] = useState(false);
   const [isChangingInfo, setIsChangingInfo] = useState(false);
@@ -158,6 +161,29 @@ export default function AdminBookingListPage() {
   const [rejectReason, setRejectReason] = useState('');
   const [isRejecting, setIsRejecting] = useState(false);
 
+  // Tạo đơn đặt sân mới dành cho Staff / Admin
+  const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
+  const [creatingBooking, setCreatingBooking] = useState(false);
+  const [customers, setCustomers] = useState([]);
+  const [customerMode, setCustomerMode] = useState('WALK_IN');
+  const [selectedCustomerId, setSelectedCustomerId] = useState('');
+  const [newCustomerName, setNewCustomerName] = useState('');
+  const [newCustomerPhone, setNewCustomerPhone] = useState('');
+  const [newCustomerEmail, setNewCustomerEmail] = useState('');
+  const [createCourtId, setCreateCourtId] = useState('');
+  const [createBookingDate, setCreateBookingDate] = useState(dayjs());
+  const [createTimeSlot, setCreateTimeSlot] = useState('');
+  const [createPrice, setCreatePrice] = useState(0);
+  const [createVoucherCode, setCreateVoucherCode] = useState('');
+  const [createDiscount, setCreateDiscount] = useState(0);
+  const [createTotalAmount, setCreateTotalAmount] = useState(0);
+  const [createNote, setCreateNote] = useState('');
+  const [createStatus, setCreateStatus] = useState('CONFIRMED');
+  const [createAvailableSlots, setCreateAvailableSlots] = useState([]);
+  const [loadingCreateSlots, setLoadingCreateSlots] = useState(false);
+  const [appliedCreateVoucher, setAppliedCreateVoucher] = useState(null);
+  const [validatingCreateVoucher, setValidatingCreateVoucher] = useState(false);
+
   // Tải danh sách sân phục vụ bộ lọc
   const fetchCourts = async () => {
     try {
@@ -167,6 +193,199 @@ export default function AdminBookingListPage() {
       }
     } catch (err) {
       console.error('Lỗi tải danh sách sân:', err);
+    }
+  };
+
+  // Tải danh sách khách hàng phục vụ staff đặt sân
+  const fetchCustomers = async () => {
+    try {
+      const res = await bookingService.getCustomers();
+      if (res.success && res.data) {
+        setCustomers(res.data);
+      }
+    } catch (err) {
+      console.error('Lỗi tải danh sách khách hàng:', err);
+    }
+  };
+
+  // Tải khung giờ trống cho form tạo đơn
+  const fetchCreateSlotAvailability = async (courtId, date) => {
+    if (!courtId || !date) return;
+    try {
+      setLoadingCreateSlots(true);
+      const dateStr = date.format('YYYY-MM-DD');
+      const res = await bookingService.getCourtAvailability(courtId, dateStr);
+      if (res.success && res.data && res.data.slots) {
+        setCreateAvailableSlots(res.data.slots);
+      }
+    } catch (err) {
+      console.error('Lỗi tải khung giờ trống:', err);
+    } finally {
+      setLoadingCreateSlots(false);
+    }
+  };
+
+  // Mở modal đặt sân mới
+  const handleOpenCreateModal = () => {
+    fetchCustomers();
+    const defaultCourt = courts.length > 0 ? courts[0]._id : '';
+    setCustomerMode('WALK_IN');
+    setSelectedCustomerId('');
+    setNewCustomerName('');
+    setNewCustomerPhone('');
+    setNewCustomerEmail('');
+    setCreateCourtId(defaultCourt);
+    setCreateBookingDate(dayjs());
+    setCreateTimeSlot('');
+    setCreatePrice(0);
+    setCreateVoucherCode('');
+    setCreateDiscount(0);
+    setCreateTotalAmount(0);
+    setCreateNote('Khách đặt tại quầy');
+    setCreateStatus('CONFIRMED');
+    setAppliedCreateVoucher(null);
+    setIsCreateModalOpen(true);
+    if (defaultCourt) {
+      fetchCreateSlotAvailability(defaultCourt, dayjs());
+    }
+  };
+
+  // Khi đổi Sân ở form tạo đơn
+  const handleCreateCourtChange = (newCourtId) => {
+    setCreateCourtId(newCourtId);
+    setCreateTimeSlot('');
+    setCreatePrice(0);
+    setCreateDiscount(0);
+    setCreateTotalAmount(0);
+    fetchCreateSlotAvailability(newCourtId, createBookingDate);
+  };
+
+  // Khi đổi Ngày ở form tạo đơn
+  const handleCreateDateChange = (newDate) => {
+    setCreateBookingDate(newDate);
+    setCreateTimeSlot('');
+    setCreatePrice(0);
+    setCreateDiscount(0);
+    setCreateTotalAmount(0);
+    fetchCreateSlotAvailability(createCourtId, newDate);
+  };
+
+  // Tính lại tổng tiền form tạo
+  const recalculateCreateAmounts = (priceVal, voucherObj = appliedCreateVoucher) => {
+    const base = Number(priceVal) || 0;
+    let disc = 0;
+    if (voucherObj) {
+      if (voucherObj.discountType === 'PERCENTAGE') {
+        disc = Math.round((base * voucherObj.discountValue) / 100);
+        if (voucherObj.maxDiscount > 0 && disc > voucherObj.maxDiscount) {
+          disc = voucherObj.maxDiscount;
+        }
+      } else if (voucherObj.discountValue) {
+        disc = Math.min(voucherObj.discountValue, base);
+      }
+    }
+    disc = Math.min(disc, base);
+    setCreatePrice(base);
+    setCreateDiscount(disc);
+    setCreateTotalAmount(Math.max(0, base - disc));
+  };
+
+  // Khi đổi Khung giờ ở form tạo đơn
+  const handleCreateTimeSlotChange = (slotVal) => {
+    setCreateTimeSlot(slotVal);
+    const start = slotVal.split(' - ')[0]?.trim();
+    const found = createAvailableSlots.find((s) => s.startTime === start);
+    if (found) {
+      recalculateCreateAmounts(found.price || 0);
+    }
+  };
+
+  // Áp dụng voucher ở form tạo đơn
+  const handleApplyCreateVoucher = async () => {
+    const code = createVoucherCode.trim().toUpperCase();
+    if (!code) {
+      message.warning('Vui lòng nhập mã giảm giá!');
+      return;
+    }
+    try {
+      setValidatingCreateVoucher(true);
+      const res = await bookingService.validateVoucher(code, createPrice);
+      if (res.success && res.data) {
+        setAppliedCreateVoucher(res.data);
+        recalculateCreateAmounts(createPrice, res.data);
+        message.success(`Đã áp dụng mã ${res.data.voucherCode}!`);
+      }
+    } catch (err) {
+      message.error(err?.response?.data?.message || 'Mã giảm giá không hợp lệ!');
+      setAppliedCreateVoucher(null);
+      recalculateCreateAmounts(createPrice, null);
+    } finally {
+      setValidatingCreateVoucher(false);
+    }
+  };
+
+  // Xử lý gửi đơn đặt sân từ Staff
+  const handleSubmitCreateBooking = async () => {
+    if (customerMode === 'EXISTING' && !selectedCustomerId) {
+      message.warning('Vui lòng chọn khách hàng trong danh sách!');
+      return;
+    }
+    if (customerMode === 'WALK_IN') {
+      if (!newCustomerName.trim()) {
+        message.warning('Vui lòng nhập họ tên khách hàng!');
+        return;
+      }
+      if (!newCustomerPhone.trim()) {
+        message.warning('Vui lòng nhập số điện thoại khách hàng!');
+        return;
+      }
+    }
+    if (!createCourtId) {
+      message.warning('Vui lòng chọn sân thi đấu!');
+      return;
+    }
+    if (!createBookingDate) {
+      message.warning('Vui lòng chọn ngày đặt sân!');
+      return;
+    }
+    if (!createTimeSlot) {
+      message.warning('Vui lòng chọn khung giờ chơi!');
+      return;
+    }
+
+    const [startTime, endTime] = createTimeSlot.split(' - ').map((s) => s.trim());
+
+    try {
+      setCreatingBooking(true);
+      const payload = {
+        customerId: customerMode === 'EXISTING' ? selectedCustomerId : undefined,
+        customerName: customerMode === 'WALK_IN' ? newCustomerName.trim() : undefined,
+        customerPhone: customerMode === 'WALK_IN' ? newCustomerPhone.trim() : undefined,
+        customerEmail: customerMode === 'WALK_IN' ? newCustomerEmail.trim() : undefined,
+        courtId: createCourtId,
+        bookingDate: createBookingDate.format('YYYY-MM-DD'),
+        startTime,
+        endTime,
+        price: createPrice,
+        voucherCode: appliedCreateVoucher ? appliedCreateVoucher.voucherCode : undefined,
+        discount: createDiscount,
+        totalAmount: createTotalAmount,
+        paymentMethod: 'CASH',
+        paymentStatus: 'UNPAID',
+        status: createStatus,
+        note: createNote.trim()
+      };
+
+      const res = await bookingService.createBooking(payload);
+      if (res.success) {
+        message.success(`Đặt sân thành công! Mã đơn: #${res.data?.bookingCode}`);
+        setIsCreateModalOpen(false);
+        fetchBookings(1, pagination.pageSize);
+      }
+    } catch (err) {
+      message.error(err?.response?.data?.message || 'Đặt sân không thành công, vui lòng thử lại!');
+    } finally {
+      setCreatingBooking(false);
     }
   };
 
@@ -192,7 +411,6 @@ export default function AdminBookingListPage() {
           limit: pageSize,
           search: search.trim(),
           status: statusFilter,
-          paymentStatus: paymentStatusFilter,
           courtId: courtFilter,
           bookingDate: selectedDate ? selectedDate.format('YYYY-MM-DD') : ''
         };
@@ -215,7 +433,7 @@ export default function AdminBookingListPage() {
         setLoading(false);
       }
     },
-    [search, statusFilter, paymentStatusFilter, courtFilter, selectedDate, pagination.current, pagination.pageSize]
+    [search, statusFilter, courtFilter, selectedDate, pagination.current, pagination.pageSize]
   );
 
   useEffect(() => {
@@ -225,7 +443,7 @@ export default function AdminBookingListPage() {
 
   useEffect(() => {
     fetchBookings(1, pagination.pageSize);
-  }, [statusFilter, paymentStatusFilter, courtFilter, selectedDate]);
+  }, [statusFilter, courtFilter, selectedDate]);
 
   // Tìm kiếm khi nhấn Enter
   const handleSearchSubmit = () => {
@@ -236,7 +454,6 @@ export default function AdminBookingListPage() {
   const handleResetFilters = () => {
     setSearch('');
     setStatusFilter('ALL');
-    setPaymentStatusFilter('ALL');
     setCourtFilter('ALL');
     setSelectedDate(null);
   };
@@ -244,6 +461,36 @@ export default function AdminBookingListPage() {
   // Xử lý chuyển trang
   const handleTableChange = (newPagination) => {
     fetchBookings(newPagination.current, newPagination.pageSize);
+  };
+
+  // Hàm tính toán lại giá, giảm giá voucher và tổng tiền khi thay đổi giá
+  const recalculateAmounts = (newPrice, customDiscount = null) => {
+    const priceVal = typeof newPrice === 'number' ? newPrice : (parseFloat(newPrice) || 0);
+    let disc = 0;
+    if (customDiscount !== null && customDiscount !== undefined) {
+      disc = typeof customDiscount === 'number' ? customDiscount : (parseFloat(customDiscount) || 0);
+    } else {
+      const voucher = selectedBooking?.voucherId;
+      if (voucher) {
+        if (voucher.discountType === 'PERCENTAGE') {
+          disc = Math.round((priceVal * voucher.discountValue) / 100);
+          if (voucher.maxDiscount > 0 && disc > voucher.maxDiscount) {
+            disc = voucher.maxDiscount;
+          }
+        } else if (voucher.discountValue) {
+          disc = Math.min(voucher.discountValue, priceVal);
+        }
+      }
+    }
+    disc = Math.min(disc, priceVal);
+    const total = Math.max(0, priceVal - disc);
+    setEditPrice(priceVal);
+    setEditDiscount(disc);
+    setEditTotalAmount(total);
+  };
+
+  const handlePriceChange = (val) => {
+    recalculateAmounts(val);
   };
 
   // Tải tình trạng khung giờ và giá tiền tương ứng theo Sân và Ngày chơi
@@ -262,22 +509,7 @@ export default function AdminBookingListPage() {
         const found = res.data.slots.find((s) => s.startTime === start);
 
         if (found) {
-          const newPrice = found.price || 0;
-          let disc = 0;
-          const voucher = currentBooking?.voucherId;
-          if (voucher) {
-            if (voucher.discountType === 'PERCENTAGE') {
-              disc = Math.round((newPrice * voucher.discountValue) / 100);
-              if (voucher.maxDiscount > 0 && disc > voucher.maxDiscount) {
-                disc = voucher.maxDiscount;
-              }
-            } else if (voucher.discountValue) {
-              disc = Math.min(voucher.discountValue, newPrice);
-            }
-          }
-          setEditPrice(newPrice);
-          setEditDiscount(disc);
-          setEditTotalAmount(Math.max(0, newPrice - disc));
+          recalculateAmounts(found.price || 0);
         }
       }
     } catch (err) {
@@ -305,22 +537,7 @@ export default function AdminBookingListPage() {
     const start = newSlotStr.split(' - ')[0]?.trim();
     const found = availableSlots.find((s) => s.startTime === start);
     if (found) {
-      const newPrice = found.price || 0;
-      let disc = 0;
-      const voucher = selectedBooking?.voucherId;
-      if (voucher) {
-        if (voucher.discountType === 'PERCENTAGE') {
-          disc = Math.round((newPrice * voucher.discountValue) / 100);
-          if (voucher.maxDiscount > 0 && disc > voucher.maxDiscount) {
-            disc = voucher.maxDiscount;
-          }
-        } else if (voucher.discountValue) {
-          disc = Math.min(voucher.discountValue, newPrice);
-        }
-      }
-      setEditPrice(newPrice);
-      setEditDiscount(disc);
-      setEditTotalAmount(Math.max(0, newPrice - disc));
+      recalculateAmounts(found.price || 0);
     }
   };
 
@@ -339,6 +556,7 @@ export default function AdminBookingListPage() {
     setEditPrice(record.price || 0);
     setEditDiscount(record.discount || 0);
     setEditTotalAmount(record.totalAmount || 0);
+    setEditPaymentMethod(record.paymentMethod || 'CASH');
     setRejectReason('');
     setIsEditInfoMode(false); // Khóa các ô input như xem chi tiết bình thường
     setIsDetailModalOpen(true);
@@ -354,6 +572,7 @@ export default function AdminBookingListPage() {
       setEditPrice(selectedBooking.price || 0);
       setEditDiscount(selectedBooking.discount || 0);
       setEditTotalAmount(selectedBooking.totalAmount || 0);
+      setEditPaymentMethod(selectedBooking.paymentMethod || 'CASH');
       setEditNote(selectedBooking.note || '');
     }
     setIsEditInfoMode(false);
@@ -399,6 +618,9 @@ export default function AdminBookingListPage() {
         startTime,
         endTime,
         price: editPrice,
+        discount: editDiscount,
+        totalAmount: editTotalAmount,
+        paymentMethod: editPaymentMethod || 'CASH',
         note: editNote
       });
 
@@ -526,7 +748,7 @@ export default function AdminBookingListPage() {
                 📞 {customer.phone}
               </Text>
             )}
-            {customer?.email && (
+            {customer?.email && !customer.email.includes('@badminton.local') && (
               <Text type="secondary" style={{ fontSize: 12, marginLeft: 28 }}>
                 ✉️ {customer.email}
               </Text>
@@ -597,6 +819,28 @@ export default function AdminBookingListPage() {
             }}
           >
             {conf.label}
+          </Tag>
+        );
+      }
+    },
+    {
+      title: 'Thanh Toán',
+      dataIndex: 'paymentStatus',
+      key: 'paymentStatus',
+      width: 140,
+      render: (paymentStatus) => {
+        const isPaid = paymentStatus === 'PAID';
+        return (
+          <Tag
+            color={isPaid ? 'green' : 'red'}
+            style={{
+              padding: '4px 10px',
+              borderRadius: 6,
+              fontSize: 13,
+              fontWeight: 500
+            }}
+          >
+            {isPaid ? 'Đã thanh toán' : 'Chưa thanh toán'}
           </Tag>
         );
       }
@@ -683,19 +927,37 @@ export default function AdminBookingListPage() {
             Tiếp nhận các đơn đặt lịch từ khách hàng, kiểm tra thông tin và xác nhận giữ sân
           </Text>
         </div>
-        <Button
-          icon={<ReloadOutlined spin={loading} />}
-          style={{
-            background: 'rgba(255, 255, 255, 0.15)',
-            borderColor: 'rgba(255, 255, 255, 0.3)',
-            color: '#fff',
-            borderRadius: 8
-          }}
-          onClick={() => fetchBookings(pagination.current, pagination.pageSize)}
-          loading={loading}
-        >
-          Làm mới dữ liệu
-        </Button>
+        <Space size={12}>
+          <Button
+            type="primary"
+            icon={<PlusOutlined />}
+            style={{
+              backgroundColor: '#bbf246',
+              borderColor: '#bbf246',
+              color: '#092615',
+              fontWeight: 'bold',
+              borderRadius: 8,
+              height: 38
+            }}
+            onClick={handleOpenCreateModal}
+          >
+            Đặt Sân Mới
+          </Button>
+          <Button
+            icon={<ReloadOutlined spin={loading} />}
+            style={{
+              background: 'rgba(255, 255, 255, 0.15)',
+              borderColor: 'rgba(255, 255, 255, 0.3)',
+              color: '#fff',
+              borderRadius: 8,
+              height: 38
+            }}
+            onClick={() => fetchBookings(pagination.current, pagination.pageSize)}
+            loading={loading}
+          >
+            Làm mới dữ liệu
+          </Button>
+        </Space>
       </div>
 
       {/* KPI Stats Cards - Tập trung vào Nhận đơn & Xác nhận */}
@@ -778,7 +1040,7 @@ export default function AdminBookingListPage() {
       >
         <Row gutter={[12, 12]} align="middle">
           {/* Ô tìm kiếm */}
-          <Col xs={24} sm={12} md={6}>
+          <Col xs={24} sm={12} md={7}>
             <Input
               placeholder="Tìm mã đơn, tên khách, SĐT..."
               prefix={<SearchOutlined style={{ color: '#bfbfbf' }} />}
@@ -790,7 +1052,7 @@ export default function AdminBookingListPage() {
           </Col>
 
           {/* Lọc theo trạng thái đặt đơn */}
-          <Col xs={12} sm={6} md={4}>
+          <Col xs={12} sm={6} md={5}>
             <Select
               style={{ width: '100%' }}
               value={statusFilter}
@@ -805,23 +1067,8 @@ export default function AdminBookingListPage() {
             </Select>
           </Col>
 
-          {/* Lọc theo thanh toán */}
-          <Col xs={12} sm={6} md={4}>
-            <Select
-              style={{ width: '100%' }}
-              value={paymentStatusFilter}
-              onChange={setPaymentStatusFilter}
-              placeholder="Thanh toán"
-            >
-              <Option value="ALL">Tất cả thanh toán</Option>
-              <Option value="PAID">Đã thanh toán</Option>
-              <Option value="UNPAID">Chưa thanh toán</Option>
-              <Option value="REFUNDED">Đã hoàn tiền</Option>
-            </Select>
-          </Col>
-
           {/* Lọc theo sân */}
-          <Col xs={12} sm={6} md={4}>
+          <Col xs={12} sm={6} md={5}>
             <Select
               style={{ width: '100%' }}
               value={courtFilter}
@@ -838,7 +1085,7 @@ export default function AdminBookingListPage() {
           </Col>
 
           {/* Lọc theo ngày đặt sân */}
-          <Col xs={12} sm={6} md={4}>
+          <Col xs={12} sm={6} md={5}>
             <DatePicker
               style={{ width: '100%' }}
               placeholder="Chọn ngày đặt"
@@ -912,7 +1159,7 @@ export default function AdminBookingListPage() {
           isEditInfoMode
             ? [
                 <Button key="cancel-edit" onClick={handleCancelEditInfo}>
-                  Khóa Lại (Hủy Bỏ)
+                  Hủy
                 </Button>,
                 <Button
                   key="save-info"
@@ -922,7 +1169,7 @@ export default function AdminBookingListPage() {
                   style={{ backgroundColor: '#009B60', borderColor: '#009B60' }}
                   onClick={handleChangeBookingInfo}
                 >
-                  Lưu Thay Đổi Thông Tin (AF1)
+                  xác nhận
                 </Button>
               ]
             : [
@@ -936,7 +1183,7 @@ export default function AdminBookingListPage() {
                   Đóng
                 </Button>,
 
-                // AF2: Từ chối yêu cầu đặt sân (Reject Booking) - Chỉ hiện khi đơn PENDING
+                // AF2: Từ chối yêu cầu đặt sân - Chỉ hiện khi đơn PENDING
                 selectedBooking?.status === 'PENDING' && (
                   <Button
                     key="reject"
@@ -944,11 +1191,11 @@ export default function AdminBookingListPage() {
                     icon={<StopOutlined />}
                     onClick={() => setIsRejectModalOpen(true)}
                   >
-                    Từ Chối Đặt Sân (AF2)
+                    Từ chối
                   </Button>
                 ),
 
-                // AF1: Nút Thay Đổi Thông Tin Đặt Sân (Nằm KẾ BÊN Nút Từ Chối, chỉ hiện khi đơn PENDING - chưa xác nhận)
+                // AF1: Nút Thay Đổi Thông Tin Đặt Sân - Chỉ hiện khi đơn PENDING
                 selectedBooking?.status === 'PENDING' && (
                   <Button
                     key="unlock-edit"
@@ -956,7 +1203,7 @@ export default function AdminBookingListPage() {
                     style={{ borderColor: '#fa8c16', color: '#d46b08', fontWeight: 600 }}
                     onClick={() => setIsEditInfoMode(true)}
                   >
-                    Thay Đổi Thông Tin Đặt Sân (AF1)
+                    thay đổi thông tin
                   </Button>
                 ),
 
@@ -966,7 +1213,7 @@ export default function AdminBookingListPage() {
                     key="confirm"
                     title="Xác nhận nhận và duyệt đơn này?"
                     onConfirm={() => handleUpdateStatus(selectedBooking._id, 'CONFIRMED')}
-                    okText="Duyệt đơn"
+                    okText="Xác nhận"
                     cancelText="Hủy"
                   >
                     <Button
@@ -974,24 +1221,10 @@ export default function AdminBookingListPage() {
                       style={{ backgroundColor: '#009B60', borderColor: '#009B60' }}
                       icon={<CheckOutlined />}
                     >
-                      Xác Nhận Duyệt Đơn
+                      xác nhận
                     </Button>
                   </Popconfirm>
-                ),
-
-                // Lưu cập nhật trạng thái (Chỉ hiện khi đơn không phải PENDING và chưa kết thúc)
-                selectedBooking?.status !== 'PENDING' &&
-                  !['COMPLETED', 'CANCELLED', 'REJECTED'].includes(selectedBooking?.status) && (
-                    <Button
-                      key="submit"
-                      type="primary"
-                      loading={isUpdating}
-                      icon={<CheckOutlined />}
-                      onClick={handleSaveModalUpdate}
-                    >
-                      Lưu Trạng Thái
-                    </Button>
-                  )
+                )
               ].filter(Boolean)
         }
       >
@@ -1018,7 +1251,28 @@ export default function AdminBookingListPage() {
               </Descriptions.Item>
 
               <Descriptions.Item label="Email Khách">
-                {selectedBooking.customerId?.email || 'Chưa cập nhật'}
+                {selectedBooking.customerId?.email && !selectedBooking.customerId.email.includes('@badminton.local')
+                  ? selectedBooking.customerId.email
+                  : ''}
+              </Descriptions.Item>
+
+              <Descriptions.Item label="Trạng Thái Đơn">
+                <Tag
+                  color={STATUS_CONFIG[selectedBooking.status]?.color || 'default'}
+                  icon={STATUS_CONFIG[selectedBooking.status]?.icon}
+                  style={{ padding: '2px 8px', borderRadius: 4, fontSize: 13 }}
+                >
+                  {STATUS_CONFIG[selectedBooking.status]?.label || selectedBooking.status}
+                </Tag>
+              </Descriptions.Item>
+
+              <Descriptions.Item label="Trạng Thái Thanh Toán">
+                <Tag
+                  color={selectedBooking.paymentStatus === 'PAID' ? 'green' : 'red'}
+                  style={{ padding: '2px 8px', borderRadius: 4, fontSize: 13 }}
+                >
+                  {selectedBooking.paymentStatus === 'PAID' ? 'Đã thanh toán' : 'Chưa thanh toán'}
+                </Tag>
               </Descriptions.Item>
 
               {/* Sân Thi Đấu: Mở khóa khi isEditInfoMode = true */}
@@ -1105,12 +1359,19 @@ export default function AdminBookingListPage() {
                 )}
               </Descriptions.Item>
 
-              {/* Đơn Giá Sân: Tự động đổi theo giờ và sân */}
+              {/* Đơn Giá Sân: Cho phép nhập hoặc tự động đổi theo giờ và sân */}
               <Descriptions.Item label="Đơn Giá Sân">
                 {isEditInfoMode ? (
-                  <Text strong style={{ color: '#009B60' }}>
-                    {(editPrice || 0).toLocaleString('vi-VN')} đ
-                  </Text>
+                  <InputNumber
+                    style={{ width: '100%' }}
+                    min={0}
+                    step={10000}
+                    value={editPrice}
+                    onChange={handlePriceChange}
+                    formatter={(value) => `${value}`.replace(/\B(?=(\d{3})+(?!\d))/g, ',')}
+                    parser={(value) => value.replace(/\$\s?|(,*)/g, '')}
+                    addonAfter="đ"
+                  />
                 ) : (
                   `${(selectedBooking.price || 0).toLocaleString('vi-VN')} đ`
                 )}
@@ -1118,28 +1379,43 @@ export default function AdminBookingListPage() {
 
               {/* Giảm Giá */}
               <Descriptions.Item label="Giảm Giá">
-                {isEditInfoMode ? (
-                  `${(editDiscount || 0).toLocaleString('vi-VN')} đ`
-                ) : (
-                  `${(selectedBooking.discount || 0).toLocaleString('vi-VN')} đ`
-                )}
+                <Text style={{ color: (isEditInfoMode ? editDiscount : selectedBooking.discount) > 0 ? '#52c41a' : undefined, fontWeight: 500 }}>
+                  {isEditInfoMode
+                    ? `${(editDiscount || 0).toLocaleString('vi-VN')} đ`
+                    : `${(selectedBooking.discount || 0).toLocaleString('vi-VN')} đ`}
+                </Text>
               </Descriptions.Item>
 
-              {/* Tổng Thanh Toán: Tự động tính lại */}
+              {/* Tổng Thanh Toán: Tự động tính lại khi thay đổi giá */}
               <Descriptions.Item label="Tổng Thanh Toán">
-                {isEditInfoMode ? (
-                  <Text strong style={{ fontSize: 16, color: '#d4380d' }}>
-                    {(editTotalAmount || 0).toLocaleString('vi-VN')} đ
-                  </Text>
-                ) : (
-                  <Text strong style={{ fontSize: 16, color: '#d4380d' }}>
-                    {(selectedBooking.totalAmount || 0).toLocaleString('vi-VN')} đ
-                  </Text>
-                )}
+                <Text strong style={{ fontSize: 16, color: '#d4380d' }}>
+                  {isEditInfoMode
+                    ? `${(editTotalAmount || 0).toLocaleString('vi-VN')} đ`
+                    : `${(selectedBooking.totalAmount || 0).toLocaleString('vi-VN')} đ`}
+                </Text>
               </Descriptions.Item>
 
               <Descriptions.Item label="Phương Thức">
-                <Tag color="blue">{selectedBooking.paymentMethod || 'CASH'}</Tag>
+                {isEditInfoMode ? (
+                  <Select
+                    style={{ width: '100%' }}
+                    value={editPaymentMethod || 'CASH'}
+                    onChange={setEditPaymentMethod}
+                    placeholder="Phương thức thanh toán"
+                  >
+                    <Option value="CASH">Tiền mặt</Option>
+                    <Option value="VIETQR">VietQR</Option>
+                    <Option value="TRANSFER">Chuyển khoản</Option>
+                  </Select>
+                ) : (
+                  <Tag color="blue">
+                    {selectedBooking.paymentMethod === 'VIETQR'
+                      ? 'VietQR'
+                      : selectedBooking.paymentMethod === 'TRANSFER'
+                      ? 'Chuyển khoản'
+                      : 'Tiền mặt'}
+                  </Tag>
+                )}
               </Descriptions.Item>
 
               {selectedBooking.voucherId && (
@@ -1164,68 +1440,6 @@ export default function AdminBookingListPage() {
                 )}
               </Descriptions.Item>
             </Descriptions>
-
-            {/* Phân mục cập nhật trạng thái đơn */}
-            <Divider orientation="left" style={{ margin: '18px 0 12px', fontSize: 14 }}>
-              <CheckCircleOutlined style={{ marginRight: 6, color: '#009B60' }} />
-              Cập Nhật Trạng Thái & Thanh Toán
-            </Divider>
-
-            <Row gutter={[16, 16]}>
-              <Col xs={24} sm={12}>
-                <div style={{ marginBottom: 6 }}>
-                  <Text strong>Trạng Thái Đơn:</Text>
-                </div>
-                <Select
-                  style={{ width: '100%' }}
-                  value={editStatus}
-                  onChange={setEditStatus}
-                  disabled={
-                    isEditInfoMode ||
-                    ['COMPLETED', 'CANCELLED', 'REJECTED'].includes(selectedBooking.status)
-                  }
-                >
-                  {(ALLOWED_STATUS_TRANSITIONS[selectedBooking.status] || []).map((item) => (
-                    <Option key={item.value} value={item.value}>
-                      {item.label}
-                    </Option>
-                  ))}
-                </Select>
-              </Col>
-
-              <Col xs={24} sm={12}>
-                <div style={{ marginBottom: 6 }}>
-                  <Text strong>Trạng Thái Thanh Toán:</Text>
-                </div>
-                <Select
-                  style={{ width: '100%' }}
-                  value={editPaymentStatus}
-                  onChange={setEditPaymentStatus}
-                  disabled={
-                    isEditInfoMode ||
-                    ['CANCELLED', 'REJECTED'].includes(selectedBooking.status)
-                  }
-                >
-                  <Option value="UNPAID">Chưa thanh toán (UNPAID)</Option>
-                  <Option value="PAID">Đã thanh toán (PAID)</Option>
-                  <Option value="REFUNDED">Đã hoàn tiền (REFUNDED)</Option>
-                </Select>
-              </Col>
-
-              {!isEditInfoMode && (
-                <Col xs={24}>
-                  <div style={{ marginBottom: 6 }}>
-                    <Text strong>Ghi Chú Đơn Đặt Sân:</Text>
-                  </div>
-                  <Input.TextArea
-                    rows={2}
-                    value={editNote}
-                    onChange={(e) => setEditNote(e.target.value)}
-                    placeholder="Nhập ghi chú hoặc lý do thay đổi..."
-                  />
-                </Col>
-              )}
-            </Row>
           </div>
         )}
       </Modal>
@@ -1235,15 +1449,15 @@ export default function AdminBookingListPage() {
         title={
           <Space>
             <StopOutlined style={{ color: '#ff4d4f' }} />
-            <span>Từ Chối Yêu Cầu Đặt Sân (Reject Booking - AF2)</span>
+            <span>Từ Chối Đặt Sân</span>
           </Space>
         }
         open={isRejectModalOpen}
         onCancel={() => setIsRejectModalOpen(false)}
         onOk={handleRejectBooking}
-        okText="Xác Nhận Từ Chối"
+        okText="Từ chối"
         okButtonProps={{ danger: true, loading: isRejecting }}
-        cancelText="Quay Lại"
+        cancelText="Quay lại"
         width={500}
       >
         <div style={{ marginTop: 12 }}>
@@ -1270,6 +1484,274 @@ export default function AdminBookingListPage() {
             value={rejectReason}
             onChange={(e) => setRejectReason(e.target.value)}
           />
+        </div>
+      </Modal>
+
+      {/* Modal Đặt Sân Mới dành cho Staff / Admin */}
+      <Modal
+        title={
+          <Space>
+            <CalendarOutlined style={{ color: '#009B60' }} />
+            <span style={{ fontSize: 16 }}>Đặt Sân Cầu Lông Mới (Dành Cho Nhân Viên)</span>
+          </Space>
+        }
+        open={isCreateModalOpen}
+        onCancel={() => setIsCreateModalOpen(false)}
+        width={720}
+        footer={[
+          <Button key="cancel-create" onClick={() => setIsCreateModalOpen(false)}>
+            Hủy
+          </Button>,
+          <Button
+            key="submit-create"
+            type="primary"
+            loading={creatingBooking}
+            icon={<CheckCircleOutlined />}
+            style={{ backgroundColor: '#009B60', borderColor: '#009B60' }}
+            onClick={handleSubmitCreateBooking}
+          >
+            Xác nhận đặt sân
+          </Button>
+        ]}
+      >
+        <div style={{ marginTop: 12 }}>
+          {/* 1. Thông tin khách hàng */}
+          <Card
+            size="small"
+            title={
+              <Space>
+                <UserOutlined style={{ color: '#009B60' }} />
+                <span>1. Thông Tin Khách Hàng</span>
+              </Space>
+            }
+            style={{ borderRadius: 10, marginBottom: 16 }}
+          >
+            <div style={{ marginBottom: 12 }}>
+              <Radio.Group
+                value={customerMode}
+                onChange={(e) => setCustomerMode(e.target.value)}
+              >
+                <Radio value="WALK_IN">Khách vãng lai / Đặt tại quầy</Radio>
+                <Radio value="EXISTING">Chọn từ danh sách khách hàng</Radio>
+              </Radio.Group>
+            </div>
+
+            {customerMode === 'EXISTING' ? (
+              <div>
+                <Text strong style={{ display: 'block', marginBottom: 6 }}>
+                  Chọn khách hàng <span style={{ color: 'red' }}>*</span>
+                </Text>
+                <Select
+                  showSearch
+                  style={{ width: '100%' }}
+                  placeholder="Tìm theo tên hoặc số điện thoại..."
+                  value={selectedCustomerId || undefined}
+                  onChange={setSelectedCustomerId}
+                  filterOption={(input, option) =>
+                    (option?.children || '').toLowerCase().includes(input.toLowerCase())
+                  }
+                >
+                  {customers.map((c) => (
+                    <Option key={c._id} value={c._id}>
+                      {c.fullName} - 📞 {c.phone || 'Chưa có SĐT'} {c.email && !c.email.includes('@badminton.local') ? `(${c.email})` : ''}
+                    </Option>
+                  ))}
+                </Select>
+              </div>
+            ) : (
+              <Row gutter={[12, 12]}>
+                <Col xs={24} sm={12}>
+                  <Text strong style={{ display: 'block', marginBottom: 4 }}>
+                    Họ và tên khách hàng <span style={{ color: 'red' }}>*</span>
+                  </Text>
+                  <Input
+                    placeholder="Nguyễn Văn A..."
+                    value={newCustomerName}
+                    onChange={(e) => setNewCustomerName(e.target.value)}
+                  />
+                </Col>
+                <Col xs={24} sm={12}>
+                  <Text strong style={{ display: 'block', marginBottom: 4 }}>
+                    Số điện thoại <span style={{ color: 'red' }}>*</span>
+                  </Text>
+                  <Input
+                    placeholder="0901234567..."
+                    value={newCustomerPhone}
+                    onChange={(e) => setNewCustomerPhone(e.target.value)}
+                  />
+                </Col>
+                <Col xs={24}>
+                  <Text strong style={{ display: 'block', marginBottom: 4 }}>
+                    Email liên hệ (tùy chọn)
+                  </Text>
+                  <Input
+                    placeholder="email@example.com"
+                    value={newCustomerEmail}
+                    onChange={(e) => setNewCustomerEmail(e.target.value)}
+                  />
+                </Col>
+              </Row>
+            )}
+          </Card>
+
+          {/* 2. Thông tin lịch đặt sân */}
+          <Card
+            size="small"
+            title={
+              <Space>
+                <ClockCircleOutlined style={{ color: '#009B60' }} />
+                <span>2. Chọn Sân & Thời Gian</span>
+              </Space>
+            }
+            style={{ borderRadius: 10, marginBottom: 16 }}
+          >
+            <Row gutter={[12, 12]}>
+              <Col xs={24} sm={12}>
+                <Text strong style={{ display: 'block', marginBottom: 4 }}>
+                  Sân thi đấu <span style={{ color: 'red' }}>*</span>
+                </Text>
+                <Select
+                  style={{ width: '100%' }}
+                  value={createCourtId || undefined}
+                  onChange={handleCreateCourtChange}
+                  placeholder="Chọn sân"
+                >
+                  {courts.map((c) => (
+                    <Option key={c._id} value={c._id}>
+                      🏸 {c.courtName} ({c.courtType})
+                    </Option>
+                  ))}
+                </Select>
+              </Col>
+
+              <Col xs={24} sm={12}>
+                <Text strong style={{ display: 'block', marginBottom: 4 }}>
+                  Ngày chơi <span style={{ color: 'red' }}>*</span>
+                </Text>
+                <DatePicker
+                  style={{ width: '100%' }}
+                  value={createBookingDate}
+                  onChange={handleCreateDateChange}
+                  disabledDate={(current) => current && current < dayjs().startOf('day')}
+                  format="DD/MM/YYYY"
+                />
+              </Col>
+
+              <Col xs={24}>
+                <Text strong style={{ display: 'block', marginBottom: 4 }}>
+                  Khung giờ chơi <span style={{ color: 'red' }}>*</span>
+                </Text>
+                <Select
+                  style={{ width: '100%' }}
+                  value={createTimeSlot || undefined}
+                  onChange={handleCreateTimeSlotChange}
+                  loading={loadingCreateSlots}
+                  placeholder="Chọn khung giờ khả dụng"
+                >
+                  {createAvailableSlots.map((slot) => {
+                    const slotVal = `${slot.startTime} - ${slot.endTime}`;
+                    return (
+                      <Option key={slotVal} value={slotVal} disabled={slot.isBooked}>
+                        ⏰ {slotVal} — {(slot.price || 0).toLocaleString('vi-VN')} đ
+                        {slot.isBooked ? ' (Đã có người đặt)' : ' (Còn trống)'}
+                      </Option>
+                    );
+                  })}
+                </Select>
+              </Col>
+            </Row>
+          </Card>
+
+          {/* 3. Giá tiền & Thanh toán */}
+          <Card
+            size="small"
+            title={
+              <Space>
+                <DollarOutlined style={{ color: '#009B60' }} />
+                <span>3. Giá Tiền & Thanh Toán</span>
+              </Space>
+            }
+            style={{ borderRadius: 10, marginBottom: 16 }}
+          >
+            <Row gutter={[12, 12]}>
+              <Col xs={24} sm={8}>
+                <Text strong style={{ display: 'block', marginBottom: 4 }}>
+                  Đơn giá sân (VNĐ)
+                </Text>
+                <InputNumber
+                  style={{ width: '100%' }}
+                  min={0}
+                  step={10000}
+                  value={createPrice}
+                  onChange={(val) => recalculateCreateAmounts(val)}
+                  formatter={(value) => `${value}`.replace(/\B(?=(\d{3})+(?!\d))/g, ',')}
+                  parser={(value) => value.replace(/\$\s?|(,*)/g, '')}
+                  addonAfter="đ"
+                />
+              </Col>
+
+              <Col xs={24} sm={8}>
+                <Text strong style={{ display: 'block', marginBottom: 4 }}>
+                  Mã giảm giá (Voucher)
+                </Text>
+                <Space.Compact style={{ width: '100%' }}>
+                  <Input
+                    placeholder="Mã voucher..."
+                    value={createVoucherCode}
+                    onChange={(e) => setCreateVoucherCode(e.target.value.toUpperCase())}
+                  />
+                  <Button
+                    type="primary"
+                    onClick={handleApplyCreateVoucher}
+                    loading={validatingCreateVoucher}
+                    style={{ backgroundColor: '#009B60', borderColor: '#009B60' }}
+                  >
+                    Áp dụng
+                  </Button>
+                </Space.Compact>
+              </Col>
+
+              <Col xs={24} sm={8}>
+                <Text strong style={{ display: 'block', marginBottom: 4 }}>
+                  Tổng tiền thanh toán
+                </Text>
+                <div
+                  style={{
+                    height: 32,
+                    display: 'flex',
+                    alignItems: 'center',
+                    padding: '0 11px',
+                    borderRadius: 6,
+                    backgroundColor: '#fff1f0',
+                    border: '1px solid #ffa39e'
+                  }}
+                >
+                  <Text strong style={{ color: '#d4380d', fontSize: 16 }}>
+                    {(createTotalAmount || 0).toLocaleString('vi-VN')} đ
+                  </Text>
+                  {createDiscount > 0 && (
+                    <Text type="secondary" style={{ marginLeft: 8, fontSize: 12 }}>
+                      (Giảm {createDiscount.toLocaleString('vi-VN')} đ)
+                    </Text>
+                  )}
+                </div>
+              </Col>
+
+
+
+              <Col xs={24}>
+                <Text strong style={{ display: 'block', marginBottom: 4 }}>
+                  Ghi chú cho đơn đặt
+                </Text>
+                <Input.TextArea
+                  rows={2}
+                  placeholder="Ghi chú thêm (VD: Khách gọi điện đặt, cần chuẩn bị vợt...)"
+                  value={createNote}
+                  onChange={(e) => setCreateNote(e.target.value)}
+                />
+              </Col>
+            </Row>
+          </Card>
         </div>
       </Modal>
     </div>

@@ -64,6 +64,12 @@ export const bookingService = {
   rejectBooking: async (id, data = {}) => {
     const response = await api.patch(`/bookings/${id}/reject`, data);
     return response.data;
+  },
+
+  // 9. Lấy danh sách khách hàng phục vụ staff / admin đặt sân
+  getCustomers: async () => {
+    const response = await api.get('/bookings/customers');
+    return response.data;
   }
 };
 

@@ -83,7 +83,7 @@ export default function CustomerBookingPage() {
   const [appliedVoucher, setAppliedVoucher] = useState(null);
 
   // Phương thức thanh toán
-  const [paymentMethod, setPaymentMethod] = useState('VIETQR');
+  const [paymentMethod, setPaymentMethod] = useState('CASH');
 
   // Đặt sân
   const [submittingBooking, setSubmittingBooking] = useState(false);
@@ -820,69 +820,30 @@ export default function CustomerBookingPage() {
                 }
                 style={{ borderRadius: 14, marginBottom: 20 }}
               >
-                <Radio.Group
-                  value={paymentMethod}
-                  onChange={(e) => setPaymentMethod(e.target.value)}
-                  style={{ width: '100%' }}
+                <div
+                  style={{
+                    padding: '16px',
+                    borderRadius: 10,
+                    border: '2px solid #009B60',
+                    backgroundColor: '#f0fdf4',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'space-between'
+                  }}
                 >
-                  <Space direction="vertical" style={{ width: '100%' }} size={12}>
-                    <div
-                      onClick={() => setPaymentMethod('VIETQR')}
-                      style={{
-                        padding: '12px 16px',
-                        borderRadius: 10,
-                        border: paymentMethod === 'VIETQR' ? '2px solid #009B60' : '1px solid #e2e8f0',
-                        backgroundColor: paymentMethod === 'VIETQR' ? '#f0fdf4' : '#fff',
-                        cursor: 'pointer',
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'space-between'
-                      }}
-                    >
-                      <Radio value="VIETQR">
-                        <Space>
-                          <QrcodeOutlined style={{ fontSize: 18, color: '#009B60' }} />
-                          <Text strong>Thanh toán tức thì qua VietQR (Quét mã App Ngân hàng)</Text>
-                        </Space>
-                      </Radio>
-                      <Tag color="green">Khuyên Dùng</Tag>
-                    </div>
-
-                    <div
-                      onClick={() => setPaymentMethod('TRANSFER')}
-                      style={{
-                        padding: '12px 16px',
-                        borderRadius: 10,
-                        border: paymentMethod === 'TRANSFER' ? '2px solid #009B60' : '1px solid #e2e8f0',
-                        backgroundColor: paymentMethod === 'TRANSFER' ? '#f0fdf4' : '#fff',
-                        cursor: 'pointer'
-                      }}
-                    >
-                      <Radio value="TRANSFER">
-                        <Space>
-                          <Text strong>Chuyển khoản ngân hàng trực tiếp</Text>
-                        </Space>
-                      </Radio>
-                    </div>
-
-                    <div
-                      onClick={() => setPaymentMethod('CASH')}
-                      style={{
-                        padding: '12px 16px',
-                        borderRadius: 10,
-                        border: paymentMethod === 'CASH' ? '2px solid #009B60' : '1px solid #e2e8f0',
-                        backgroundColor: paymentMethod === 'CASH' ? '#f0fdf4' : '#fff',
-                        cursor: 'pointer'
-                      }}
-                    >
-                      <Radio value="CASH">
-                        <Space>
-                          <Text strong>Thanh toán tiền mặt tại quầy khi nhận sân</Text>
-                        </Space>
-                      </Radio>
+                  <Space>
+                    <DollarOutlined style={{ fontSize: 22, color: '#009B60' }} />
+                    <div>
+                      <Text strong style={{ display: 'block', fontSize: 14 }}>
+                        Thanh toán tiền mặt tại quầy khi nhận sân
+                      </Text>
+                      <Text type="secondary" style={{ fontSize: 12 }}>
+                        Không thanh toán lúc đặt sân • Trạng thái đơn: Chưa thanh toán
+                      </Text>
                     </div>
                   </Space>
-                </Radio.Group>
+                  <Tag color="green">Mặc định</Tag>
+                </div>
               </Card>
             </Col>
 
@@ -1053,43 +1014,22 @@ export default function CustomerBookingPage() {
                     {(createdBooking.totalAmount || 0).toLocaleString('vi-VN')} đ
                   </Text>
                 </Descriptions.Item>
-                <Descriptions.Item label="Hình Thức">
-                  <Tag color="blue">{createdBooking.paymentMethod}</Tag>
+                <Descriptions.Item label="Thanh Toán">
+                  <Tag color="red">Chưa thanh toán</Tag>
+                </Descriptions.Item>
+                <Descriptions.Item label="Hình Thức" span={2}>
+                  <Tag color="blue">Tiền mặt tại quầy khi nhận sân</Tag>
                 </Descriptions.Item>
               </Descriptions>
             </Card>
 
-            {/* Nếu thanh toán VIETQR: Hiển thị mã QR ngân hàng thanh toán nhanh */}
-            {createdBooking.paymentMethod === 'VIETQR' && (
-              <div
-                style={{
-                  background: '#f0fdf4',
-                  border: '1px solid #bbf7d0',
-                  borderRadius: 12,
-                  padding: 16,
-                  textAlign: 'center',
-                  marginBottom: 20
-                }}
-              >
-                <Text strong style={{ color: '#166534', fontSize: 15, display: 'block', marginBottom: 12 }}>
-                  <QrcodeOutlined style={{ marginRight: 6 }} />
-                  Quét Mã VietQR Để Thanh Toán Nhanh
-                </Text>
-                <img
-                  alt="VietQR"
-                  src={`https://img.vietqr.io/image/970422-0901234567-compact2.png?amount=${createdBooking.totalAmount}&addInfo=${createdBooking.bookingCode}&accountName=CLB%20CAU%20LONG`}
-                  style={{
-                    maxWidth: 240,
-                    width: '100%',
-                    borderRadius: 10,
-                    boxShadow: '0 4px 12px rgba(0,0,0,0.1)'
-                  }}
-                />
-                <div style={{ marginTop: 10, fontSize: 13, color: '#475569' }}>
-                  Nội dung chuyển khoản: <Text code strong>{createdBooking.bookingCode}</Text>
-                </div>
-              </div>
-            )}
+            <Alert
+              message="Đơn đặt sân chưa thanh toán"
+              description="Hệ thống không thu tiền lúc đặt sân. Quý khách vui lòng thanh toán trực tiếp tại quầy lễ tân khi đến nhận sân chơi."
+              type="info"
+              showIcon
+              style={{ borderRadius: 12, marginBottom: 20 }}
+            />
 
             <div style={{ display: 'flex', justifyContent: 'center', gap: 12 }}>
               <Button onClick={() => navigate('/')} style={{ borderRadius: 8, height: 40, padding: '0 24px' }}>
