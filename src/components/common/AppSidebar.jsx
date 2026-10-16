@@ -107,12 +107,12 @@ export default function AppSidebar({ collapsed }) {
     // Danh mục chung (Bao gồm Bảng giá và Danh mục sân)
     const generalCategoryChildren = [];
 
-    // Bảng giá (Admin only)
-    if (isAdmin) {
+    // Bảng giá sân (Admin & Staff)
+    if (isAdmin || isStaff) {
       generalCategoryChildren.push({
         key: '/admin/prices',
         icon: <DollarOutlined />,
-        label: 'Bảng giá'
+        label: 'Bảng giá sân'
       });
     }
 

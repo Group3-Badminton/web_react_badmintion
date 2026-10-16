@@ -71,11 +71,11 @@ export default function AppRoutes() {
             </ProtectedRoute>
           }
         />
-        {/* Pricing Management (Admin only - UC-18) */}
+        {/* Pricing Management (Admin & Staff - UC-16) */}
         <Route
           path="/admin/prices"
           element={
-            <ProtectedRoute allowedRoles={[ROLES.ADMIN]}>
+            <ProtectedRoute allowedRoles={[ROLES.ADMIN, ROLES.STAFF]}>
               <PricingManagementPage />
             </ProtectedRoute>
           }
