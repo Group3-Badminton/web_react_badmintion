@@ -10,6 +10,7 @@ import RegisterPage from "../pages/auth/RegisterPage";
 
 // Dashboard & Protected Pages
 import AdminDashboardPage from "../pages/dashboard/AdminDashboardPage";
+import AdminBookingListPage from "../pages/admin/AdminBookingListPage";
 import CustomerBookingPage from "../pages/customer/CustomerBookingPage";
 import ResetPasswordPage from "../pages/auth/ResetPasswordPage";
 import ProfilePage from "../pages/profile/ProfilePage";
@@ -68,6 +69,15 @@ export default function AppRoutes() {
           element={
             <ProtectedRoute allowedRoles={[ROLES.ADMIN, ROLES.STAFF]}>
               <AdminDashboardPage />
+            </ProtectedRoute>
+          }
+        />
+        {/* Admin & Staff Booking Management */}
+        <Route
+          path="/admin/bookings"
+          element={
+            <ProtectedRoute allowedRoles={[ROLES.ADMIN, ROLES.STAFF]}>
+              <AdminBookingListPage />
             </ProtectedRoute>
           }
         />
