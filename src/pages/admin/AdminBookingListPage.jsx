@@ -19,7 +19,9 @@ import {
   Typography,
   Divider,
   Avatar,
-  Badge
+  Badge,
+  Tabs,
+  Alert
 } from 'antd';
 import {
   CalendarOutlined,
@@ -36,7 +38,8 @@ import {
   FilterOutlined,
   EditOutlined,
   EnvironmentOutlined,
-  ExclamationCircleOutlined
+  ExclamationCircleOutlined,
+  StopOutlined
 } from '@ant-design/icons';
 import dayjs from 'dayjs';
 import { bookingService } from '../../services/bookingService';
@@ -58,9 +61,43 @@ const STATUS_CONFIG = {
   },
   CANCELLED: {
     color: 'red',
-    label: 'Đã hủy / Từ chối',
+    label: 'Đã hủy',
+    icon: <CloseCircleOutlined />
+  },
+  REJECTED: {
+    color: 'magenta',
+    label: 'Từ chối đặt sân',
     icon: <CloseCircleOutlined />
   }
+};
+
+// Quy tắc chuyển trạng thái chỉ theo 1 chiều hợp lệ, không được đi ngược lại
+const ALLOWED_STATUS_TRANSITIONS = {
+  PENDING: [
+    { value: 'PENDING', label: 'Chờ duyệt (PENDING - Hiện tại)' },
+    { value: 'CONFIRMED', label: 'Đã xác nhận (CONFIRMED)' },
+    { value: 'CANCELLED', label: 'Đã hủy (CANCELLED)' },
+    { value: 'REJECTED', label: 'Từ chối (REJECTED)' }
+  ],
+  CONFIRMED: [
+    { value: 'CONFIRMED', label: 'Đã xác nhận (CONFIRMED - Hiện tại)' },
+    { value: 'CHECKED_IN', label: 'Đã nhận sân (CHECKED_IN)' },
+    { value: 'CANCELLED', label: 'Đã hủy (CANCELLED)' }
+  ],
+  CHECKED_IN: [
+    { value: 'CHECKED_IN', label: 'Đã nhận sân (CHECKED_IN - Hiện tại)' },
+    { value: 'COMPLETED', label: 'Hoàn thành ca chơi (COMPLETED)' },
+    { value: 'CANCELLED', label: 'Đã hủy (CANCELLED)' }
+  ],
+  COMPLETED: [
+    { value: 'COMPLETED', label: 'Hoàn thành (COMPLETED - Đã kết thúc)' }
+  ],
+  CANCELLED: [
+    { value: 'CANCELLED', label: 'Đã hủy (CANCELLED - Đã kết thúc)' }
+  ],
+  REJECTED: [
+    { value: 'REJECTED', label: 'Từ chối (REJECTED - Đã kết thúc)' }
+  ]
 };
 
 const PAYMENT_STATUS_CONFIG = {
@@ -103,6 +140,24 @@ export default function AdminBookingListPage() {
   const [editPaymentStatus, setEditPaymentStatus] = useState('');
   const [editNote, setEditNote] = useState('');
 
+  // AF1: Thay đổi thông tin đặt sân (Change Booking Information)
+  const [editCourtId, setEditCourtId] = useState('');
+  const [editBookingDate, setEditBookingDate] = useState(null);
+  const [editTimeSlot, setEditTimeSlot] = useState('');
+  const [editPrice, setEditPrice] = useState(0);
+  const [editDiscount, setEditDiscount] = useState(0);
+  const [editTotalAmount, setEditTotalAmount] = useState(0);
+  const [availableSlots, setAvailableSlots] = useState([]);
+  const [loadingSlots, setLoadingSlots] = useState(false);
+  const [isChangingInfo, setIsChangingInfo] = useState(false);
+  const [isEditInfoMode, setIsEditInfoMode] = useState(false);
+  const [timeSlots, setTimeSlots] = useState([]);
+
+  // AF2: Từ chối yêu cầu đặt sân (Reject Booking)
+  const [isRejectModalOpen, setIsRejectModalOpen] = useState(false);
+  const [rejectReason, setRejectReason] = useState('');
+  const [isRejecting, setIsRejecting] = useState(false);
+
   // Tải danh sách sân phục vụ bộ lọc
   const fetchCourts = async () => {
     try {
@@ -112,6 +167,18 @@ export default function AdminBookingListPage() {
       }
     } catch (err) {
       console.error('Lỗi tải danh sách sân:', err);
+    }
+  };
+
+  // Tải danh sách khung giờ phục vụ đổi giờ đặt sân
+  const fetchTimeSlots = async () => {
+    try {
+      const res = await bookingService.getTimeSlots();
+      if (res.success && res.data) {
+        setTimeSlots(res.data);
+      }
+    } catch (err) {
+      console.error('Lỗi tải danh sách khung giờ:', err);
     }
   };
 
@@ -153,6 +220,7 @@ export default function AdminBookingListPage() {
 
   useEffect(() => {
     fetchCourts();
+    fetchTimeSlots();
   }, []);
 
   useEffect(() => {
@@ -178,13 +246,117 @@ export default function AdminBookingListPage() {
     fetchBookings(newPagination.current, newPagination.pageSize);
   };
 
+  // Tải tình trạng khung giờ và giá tiền tương ứng theo Sân và Ngày chơi
+  const fetchCourtAvailabilityForModal = async (courtId, bookingDate, currentBooking, targetSlotStr) => {
+    if (!courtId || !bookingDate) return;
+    try {
+      setLoadingSlots(true);
+      const dateStr = dayjs(bookingDate).format('YYYY-MM-DD');
+      const res = await bookingService.getCourtAvailability(courtId, dateStr);
+      if (res.success && res.data && res.data.slots) {
+        setAvailableSlots(res.data.slots);
+
+        // Khung giờ đang chọn
+        const slotStr = targetSlotStr || `${currentBooking?.startTime} - ${currentBooking?.endTime}`;
+        const start = slotStr ? slotStr.split(' - ')[0]?.trim() : '';
+        const found = res.data.slots.find((s) => s.startTime === start);
+
+        if (found) {
+          const newPrice = found.price || 0;
+          let disc = 0;
+          const voucher = currentBooking?.voucherId;
+          if (voucher) {
+            if (voucher.discountType === 'PERCENTAGE') {
+              disc = Math.round((newPrice * voucher.discountValue) / 100);
+              if (voucher.maxDiscount > 0 && disc > voucher.maxDiscount) {
+                disc = voucher.maxDiscount;
+              }
+            } else if (voucher.discountValue) {
+              disc = Math.min(voucher.discountValue, newPrice);
+            }
+          }
+          setEditPrice(newPrice);
+          setEditDiscount(disc);
+          setEditTotalAmount(Math.max(0, newPrice - disc));
+        }
+      }
+    } catch (err) {
+      console.error('Lỗi tải bảng giá và khung giờ sân:', err);
+    } finally {
+      setLoadingSlots(false);
+    }
+  };
+
+  // Đổi sân thi đấu -> Tải lại danh sách giờ và giá của sân đó
+  const handleCourtChange = (newCourtId) => {
+    setEditCourtId(newCourtId);
+    fetchCourtAvailabilityForModal(newCourtId, editBookingDate, selectedBooking, editTimeSlot);
+  };
+
+  // Đổi ngày chơi -> Tải lại danh sách giờ và giá (ngày thường / cuối tuần)
+  const handleBookingDateChange = (newDate) => {
+    setEditBookingDate(newDate);
+    fetchCourtAvailabilityForModal(editCourtId, newDate, selectedBooking, editTimeSlot);
+  };
+
+  // Đổi giờ đặt -> Cập nhật ngay giá đi kèm với giờ và sân đó
+  const handleTimeSlotChange = (newSlotStr) => {
+    setEditTimeSlot(newSlotStr);
+    const start = newSlotStr.split(' - ')[0]?.trim();
+    const found = availableSlots.find((s) => s.startTime === start);
+    if (found) {
+      const newPrice = found.price || 0;
+      let disc = 0;
+      const voucher = selectedBooking?.voucherId;
+      if (voucher) {
+        if (voucher.discountType === 'PERCENTAGE') {
+          disc = Math.round((newPrice * voucher.discountValue) / 100);
+          if (voucher.maxDiscount > 0 && disc > voucher.maxDiscount) {
+            disc = voucher.maxDiscount;
+          }
+        } else if (voucher.discountValue) {
+          disc = Math.min(voucher.discountValue, newPrice);
+        }
+      }
+      setEditPrice(newPrice);
+      setEditDiscount(disc);
+      setEditTotalAmount(Math.max(0, newPrice - disc));
+    }
+  };
+
   // Mở modal xem chi tiết
   const handleOpenDetailModal = (record) => {
     setSelectedBooking(record);
     setEditStatus(record.status);
     setEditPaymentStatus(record.paymentStatus);
     setEditNote(record.note || '');
+    const courtId = record.courtId?._id || record.courtId || '';
+    const date = record.bookingDate ? dayjs(record.bookingDate) : dayjs();
+    const slotStr = `${record.startTime} - ${record.endTime}`;
+    setEditCourtId(courtId);
+    setEditBookingDate(date);
+    setEditTimeSlot(slotStr);
+    setEditPrice(record.price || 0);
+    setEditDiscount(record.discount || 0);
+    setEditTotalAmount(record.totalAmount || 0);
+    setRejectReason('');
+    setIsEditInfoMode(false); // Khóa các ô input như xem chi tiết bình thường
     setIsDetailModalOpen(true);
+    fetchCourtAvailabilityForModal(courtId, date, record, slotStr);
+  };
+
+  // Hủy sửa thông tin đặt sân (khóa lại)
+  const handleCancelEditInfo = () => {
+    if (selectedBooking) {
+      setEditCourtId(selectedBooking.courtId?._id || selectedBooking.courtId || '');
+      setEditBookingDate(selectedBooking.bookingDate ? dayjs(selectedBooking.bookingDate) : dayjs());
+      setEditTimeSlot(`${selectedBooking.startTime} - ${selectedBooking.endTime}`);
+      setEditPrice(selectedBooking.price || 0);
+      setEditDiscount(selectedBooking.discount || 0);
+      setEditTotalAmount(selectedBooking.totalAmount || 0);
+      setEditNote(selectedBooking.note || '');
+    }
+    setIsEditInfoMode(false);
   };
 
   // Thao tác duyệt / xác nhận hoặc từ chối đơn
@@ -204,6 +376,78 @@ export default function AdminBookingListPage() {
       message.error(err?.response?.data?.message || 'Thao tác thất bại!');
     } finally {
       setLoading(false);
+    }
+  };
+
+  // AF1: Xử lý thay đổi thông tin đặt sân (Change Booking Information)
+  const handleChangeBookingInfo = async () => {
+    if (!selectedBooking) return;
+    try {
+      setIsChangingInfo(true);
+      let startTime = selectedBooking.startTime;
+      let endTime = selectedBooking.endTime;
+
+      if (editTimeSlot && editTimeSlot.includes(' - ')) {
+        const parts = editTimeSlot.split(' - ');
+        startTime = parts[0].trim();
+        endTime = parts[1].trim();
+      }
+
+      const res = await bookingService.changeBookingInfo(selectedBooking._id, {
+        courtId: editCourtId,
+        bookingDate: editBookingDate ? editBookingDate.format('YYYY-MM-DD') : undefined,
+        startTime,
+        endTime,
+        price: editPrice,
+        note: editNote
+      });
+
+      if (res.success) {
+        if (res.message && res.message.includes('không thể gửi thông báo')) {
+          message.warning(res.message); // E4
+        } else {
+          message.success('Thay đổi thông tin đặt sân thành công!');
+        }
+        setIsEditInfoMode(false);
+        setIsDetailModalOpen(false);
+        fetchBookings();
+      }
+    } catch (err) {
+      const errMsg =
+        err?.response?.data?.message ||
+        'Không thể xử lý yêu cầu đặt sân do lỗi hệ thống. Trạng thái đặt sân chưa được thay đổi. Vui lòng thử lại sau.';
+      message.error(errMsg);
+    } finally {
+      setIsChangingInfo(false);
+    }
+  };
+
+  // AF2: Xử lý từ chối yêu cầu đặt sân (Reject Booking)
+  const handleRejectBooking = async () => {
+    if (!selectedBooking) return;
+    try {
+      setIsRejecting(true);
+      const res = await bookingService.rejectBooking(selectedBooking._id, {
+        reason: rejectReason
+      });
+
+      if (res.success) {
+        if (res.message && res.message.includes('không thể gửi thông báo')) {
+          message.warning(res.message); // E4
+        } else {
+          message.success('Từ chối yêu cầu đặt sân thành công!');
+        }
+        setIsRejectModalOpen(false);
+        setIsDetailModalOpen(false);
+        fetchBookings();
+      }
+    } catch (err) {
+      const errMsg =
+        err?.response?.data?.message ||
+        'Không thể xử lý yêu cầu đặt sân do lỗi hệ thống. Trạng thái đặt sân chưa được thay đổi. Vui lòng thử lại sau.';
+      message.error(errMsg);
+    } finally {
+      setIsRejecting(false);
     }
   };
 
@@ -333,32 +577,7 @@ export default function AdminBookingListPage() {
         </Space>
       )
     },
-    {
-      title: 'Tiền & Thanh Toán',
-      key: 'payment',
-      width: 180,
-      render: (_, record) => {
-        const payConfig = PAYMENT_STATUS_CONFIG[record.paymentStatus] || {
-          color: 'default',
-          label: record.paymentStatus
-        };
-        return (
-          <Space direction="vertical" size={4}>
-            <Text strong style={{ fontSize: 15, color: '#d4380d' }}>
-              {(record.totalAmount || 0).toLocaleString('vi-VN')} đ
-            </Text>
-            <Space wrap size={4}>
-              <Tag color={payConfig.color} style={{ margin: 0, borderRadius: 4 }}>
-                {payConfig.label}
-              </Tag>
-              <Tag color="default" style={{ margin: 0, borderRadius: 4 }}>
-                {record.paymentMethod || 'CASH'}
-              </Tag>
-            </Space>
-          </Space>
-        );
-      }
-    },
+
     {
       title: 'Trạng Thái Đơn',
       dataIndex: 'status',
@@ -582,6 +801,7 @@ export default function AdminBookingListPage() {
               <Option value="PENDING">Chờ duyệt (PENDING)</Option>
               <Option value="CONFIRMED">Đã xác nhận (CONFIRMED)</Option>
               <Option value="CANCELLED">Đã hủy (CANCELLED)</Option>
+              <Option value="REJECTED">Từ chối (REJECTED)</Option>
             </Select>
           </Col>
 
@@ -664,72 +884,124 @@ export default function AdminBookingListPage() {
             showTotal: (total, range) => `${range[0]}-${range[1]} trên tổng số ${total} đơn đặt sân`
           }}
           onChange={handleTableChange}
-          scroll={{ x: 1050 }}
+          scroll={{ x: 900 }}
           locale={{ emptyText: 'Chưa có đơn đặt sân nào phù hợp với bộ lọc' }}
         />
       </Card>
 
-      {/* Modal Xem chi tiết & Xử lý đơn đặt sân */}
+      {/* Modal Xem chi tiết & Xử lý đơn đặt sân (Hỗ trợ AF1 & AF2) */}
       <Modal
         title={
           <Space>
             <CalendarOutlined style={{ color: '#009B60' }} />
             <span>Chi Tiết Đơn Đặt Sân #{selectedBooking?.bookingCode}</span>
+            {selectedBooking?.status && (
+              <Tag color={STATUS_CONFIG[selectedBooking.status]?.color || 'default'}>
+                {STATUS_CONFIG[selectedBooking.status]?.label || selectedBooking.status}
+              </Tag>
+            )}
           </Space>
         }
         open={isDetailModalOpen}
-        onCancel={() => setIsDetailModalOpen(false)}
-        width={700}
-        footer={[
-          <Button key="back" onClick={() => setIsDetailModalOpen(false)}>
-            Đóng
-          </Button>,
-          selectedBooking?.status === 'PENDING' && (
-            <Popconfirm
-              key="confirm"
-              title="Xác nhận nhận và duyệt đơn này?"
-              onConfirm={() => handleUpdateStatus(selectedBooking._id, 'CONFIRMED')}
-              okText="Duyệt đơn"
-              cancelText="Hủy"
-            >
-              <Button
-                type="primary"
-                style={{ backgroundColor: '#009B60', borderColor: '#009B60' }}
-                icon={<CheckOutlined />}
-              >
-                Xác Nhận Duyệt Đơn
-              </Button>
-            </Popconfirm>
-          ),
-          selectedBooking && ['PENDING', 'CONFIRMED'].includes(selectedBooking.status) && (
-            <Popconfirm
-              key="cancel"
-              title="Bạn chắc chắn muốn hủy đơn này?"
-              onConfirm={() => handleUpdateStatus(selectedBooking._id, 'CANCELLED')}
-              okText="Hủy đơn"
-              cancelText="Quay lại"
-              okButtonProps={{ danger: true }}
-            >
-              <Button danger>Hủy Đơn Này</Button>
-            </Popconfirm>
-          ),
-          <Button
-            key="submit"
-            type="primary"
-            loading={isUpdating}
-            icon={<CheckOutlined />}
-            onClick={handleSaveModalUpdate}
-          >
-            Lưu Thay Đổi
-          </Button>
-        ].filter(Boolean)}
+        onCancel={() => {
+          setIsEditInfoMode(false);
+          setIsDetailModalOpen(false);
+        }}
+        width={780}
+        footer={
+          isEditInfoMode
+            ? [
+                <Button key="cancel-edit" onClick={handleCancelEditInfo}>
+                  Khóa Lại (Hủy Bỏ)
+                </Button>,
+                <Button
+                  key="save-info"
+                  type="primary"
+                  loading={isChangingInfo}
+                  icon={<CheckCircleOutlined />}
+                  style={{ backgroundColor: '#009B60', borderColor: '#009B60' }}
+                  onClick={handleChangeBookingInfo}
+                >
+                  Lưu Thay Đổi Thông Tin (AF1)
+                </Button>
+              ]
+            : [
+                <Button
+                  key="back"
+                  onClick={() => {
+                    setIsEditInfoMode(false);
+                    setIsDetailModalOpen(false);
+                  }}
+                >
+                  Đóng
+                </Button>,
+
+                // AF2: Từ chối yêu cầu đặt sân (Reject Booking) - Chỉ hiện khi đơn PENDING
+                selectedBooking?.status === 'PENDING' && (
+                  <Button
+                    key="reject"
+                    danger
+                    icon={<StopOutlined />}
+                    onClick={() => setIsRejectModalOpen(true)}
+                  >
+                    Từ Chối Đặt Sân (AF2)
+                  </Button>
+                ),
+
+                // AF1: Nút Thay Đổi Thông Tin Đặt Sân (Nằm KẾ BÊN Nút Từ Chối, chỉ hiện khi đơn PENDING - chưa xác nhận)
+                selectedBooking?.status === 'PENDING' && (
+                  <Button
+                    key="unlock-edit"
+                    icon={<EditOutlined />}
+                    style={{ borderColor: '#fa8c16', color: '#d46b08', fontWeight: 600 }}
+                    onClick={() => setIsEditInfoMode(true)}
+                  >
+                    Thay Đổi Thông Tin Đặt Sân (AF1)
+                  </Button>
+                ),
+
+                // Duyệt đơn đặt sân (Chỉ hiện khi PENDING)
+                selectedBooking?.status === 'PENDING' && (
+                  <Popconfirm
+                    key="confirm"
+                    title="Xác nhận nhận và duyệt đơn này?"
+                    onConfirm={() => handleUpdateStatus(selectedBooking._id, 'CONFIRMED')}
+                    okText="Duyệt đơn"
+                    cancelText="Hủy"
+                  >
+                    <Button
+                      type="primary"
+                      style={{ backgroundColor: '#009B60', borderColor: '#009B60' }}
+                      icon={<CheckOutlined />}
+                    >
+                      Xác Nhận Duyệt Đơn
+                    </Button>
+                  </Popconfirm>
+                ),
+
+                // Lưu cập nhật trạng thái (Chỉ hiện khi đơn không phải PENDING và chưa kết thúc)
+                selectedBooking?.status !== 'PENDING' &&
+                  !['COMPLETED', 'CANCELLED', 'REJECTED'].includes(selectedBooking?.status) && (
+                    <Button
+                      key="submit"
+                      type="primary"
+                      loading={isUpdating}
+                      icon={<CheckOutlined />}
+                      onClick={handleSaveModalUpdate}
+                    >
+                      Lưu Trạng Thái
+                    </Button>
+                  )
+              ].filter(Boolean)
+        }
       >
         {selectedBooking && (
-          <div style={{ marginTop: 16 }}>
+          <div style={{ marginTop: 8 }}>
+            {/* Bảng thông tin chi tiết đơn đặt sân */}
             <Descriptions bordered size="small" column={{ xs: 1, sm: 2 }}>
               <Descriptions.Item label="Mã Đơn">
                 <Text strong style={{ color: '#009B60' }}>
-                  {selectedBooking.bookingCode}
+                  #{selectedBooking.bookingCode}
                 </Text>
               </Descriptions.Item>
 
@@ -749,47 +1021,154 @@ export default function AdminBookingListPage() {
                 {selectedBooking.customerId?.email || 'Chưa cập nhật'}
               </Descriptions.Item>
 
+              {/* Sân Thi Đấu: Mở khóa khi isEditInfoMode = true */}
               <Descriptions.Item label="Sân Thi Đấu">
-                <Text strong>{selectedBooking.courtId?.courtName}</Text>
-                {selectedBooking.courtId?.location && (
-                  <Text type="secondary" style={{ display: 'block', fontSize: 12 }}>
-                    📍 {selectedBooking.courtId.location}
-                  </Text>
+                {isEditInfoMode ? (
+                  <Select
+                    style={{ width: '100%' }}
+                    value={editCourtId}
+                    onChange={handleCourtChange}
+                    placeholder="Chọn sân thi đấu"
+                  >
+                    {courts.map((c) => (
+                      <Option key={c._id} value={c._id}>
+                        🏸 {c.courtName} ({c.courtType})
+                      </Option>
+                    ))}
+                  </Select>
+                ) : (
+                  <div>
+                    <Text strong>🏸 {selectedBooking.courtId?.courtName || 'Chưa chọn sân'}</Text>
+                    {selectedBooking.courtId?.courtType && (
+                      <Tag color="cyan" style={{ marginLeft: 6 }}>
+                        {selectedBooking.courtId.courtType}
+                      </Tag>
+                    )}
+                    {selectedBooking.courtId?.location && (
+                      <Text type="secondary" style={{ display: 'block', fontSize: 12 }}>
+                        📍 {selectedBooking.courtId.location}
+                      </Text>
+                    )}
+                  </div>
                 )}
               </Descriptions.Item>
 
+              {/* Ngày Chơi: Mở khóa khi isEditInfoMode = true */}
               <Descriptions.Item label="Ngày Chơi">
-                <Text strong>{dayjs(selectedBooking.bookingDate).format('DD/MM/YYYY')}</Text>
+                {isEditInfoMode ? (
+                  <DatePicker
+                    style={{ width: '100%' }}
+                    value={editBookingDate}
+                    onChange={handleBookingDateChange}
+                    disabledDate={(current) => current && current < dayjs().startOf('day')}
+                    format="DD/MM/YYYY"
+                  />
+                ) : (
+                  <Text strong>📅 {dayjs(selectedBooking.bookingDate).format('DD/MM/YYYY')}</Text>
+                )}
               </Descriptions.Item>
 
+              {/* Khung Giờ & Giá đi kèm: Mở khóa khi isEditInfoMode = true */}
               <Descriptions.Item label="Khung Giờ">
-                <Tag color="geekblue">
-                  {selectedBooking.startTime} - {selectedBooking.endTime}
-                </Tag>
+                {isEditInfoMode ? (
+                  <Select
+                    style={{ width: '100%' }}
+                    value={editTimeSlot}
+                    onChange={handleTimeSlotChange}
+                    loading={loadingSlots}
+                    placeholder="Chọn khung giờ"
+                  >
+                    {availableSlots.length > 0
+                      ? availableSlots.map((slot) => {
+                          const slotVal = `${slot.startTime} - ${slot.endTime}`;
+                          const isCurrentBookingSlot =
+                            selectedBooking?.startTime === slot.startTime &&
+                            (selectedBooking?.courtId?._id || selectedBooking?.courtId) === editCourtId;
+                          const isBooked = slot.isBooked && !isCurrentBookingSlot;
+                          return (
+                            <Option key={slotVal} value={slotVal} disabled={isBooked}>
+                              ⏰ {slotVal} — {(slot.price || 0).toLocaleString('vi-VN')} đ
+                              {isBooked ? ' (Đã có người đặt)' : ''}
+                            </Option>
+                          );
+                        })
+                      : timeSlots.map((ts) => (
+                          <Option key={`${ts.startTime} - ${ts.endTime}`} value={`${ts.startTime} - ${ts.endTime}`}>
+                            ⏰ {ts.startTime} - {ts.endTime}
+                          </Option>
+                        ))}
+                  </Select>
+                ) : (
+                  <Tag color="geekblue" style={{ fontSize: 13, padding: '2px 8px' }}>
+                    ⏰ {selectedBooking.startTime} - {selectedBooking.endTime}
+                  </Tag>
+                )}
               </Descriptions.Item>
 
+              {/* Đơn Giá Sân: Tự động đổi theo giờ và sân */}
               <Descriptions.Item label="Đơn Giá Sân">
-                {(selectedBooking.price || 0).toLocaleString('vi-VN')} đ
+                {isEditInfoMode ? (
+                  <Text strong style={{ color: '#009B60' }}>
+                    {(editPrice || 0).toLocaleString('vi-VN')} đ
+                  </Text>
+                ) : (
+                  `${(selectedBooking.price || 0).toLocaleString('vi-VN')} đ`
+                )}
               </Descriptions.Item>
 
+              {/* Giảm Giá */}
               <Descriptions.Item label="Giảm Giá">
-                {(selectedBooking.discount || 0).toLocaleString('vi-VN')} đ
+                {isEditInfoMode ? (
+                  `${(editDiscount || 0).toLocaleString('vi-VN')} đ`
+                ) : (
+                  `${(selectedBooking.discount || 0).toLocaleString('vi-VN')} đ`
+                )}
               </Descriptions.Item>
 
+              {/* Tổng Thanh Toán: Tự động tính lại */}
               <Descriptions.Item label="Tổng Thanh Toán">
-                <Text strong style={{ fontSize: 16, color: '#d4380d' }}>
-                  {(selectedBooking.totalAmount || 0).toLocaleString('vi-VN')} đ
-                </Text>
+                {isEditInfoMode ? (
+                  <Text strong style={{ fontSize: 16, color: '#d4380d' }}>
+                    {(editTotalAmount || 0).toLocaleString('vi-VN')} đ
+                  </Text>
+                ) : (
+                  <Text strong style={{ fontSize: 16, color: '#d4380d' }}>
+                    {(selectedBooking.totalAmount || 0).toLocaleString('vi-VN')} đ
+                  </Text>
+                )}
               </Descriptions.Item>
 
               <Descriptions.Item label="Phương Thức">
                 <Tag color="blue">{selectedBooking.paymentMethod || 'CASH'}</Tag>
               </Descriptions.Item>
+
+              {selectedBooking.voucherId && (
+                <Descriptions.Item label="Mã Khuyến Mãi" span={2}>
+                  <Tag color="magenta">
+                    🏷️ {selectedBooking.voucherId.voucherCode} - {selectedBooking.voucherId.voucherName}
+                  </Tag>
+                </Descriptions.Item>
+              )}
+
+              {/* Ghi Chú Đơn: Mở khóa khi isEditInfoMode = true */}
+              <Descriptions.Item label="Ghi Chú Đơn" span={2}>
+                {isEditInfoMode ? (
+                  <Input.TextArea
+                    rows={2}
+                    value={editNote}
+                    onChange={(e) => setEditNote(e.target.value)}
+                    placeholder="Nhập ghi chú cho đơn đặt sân hoặc lý do thay đổi..."
+                  />
+                ) : (
+                  <Text>{selectedBooking.note || 'Không có ghi chú'}</Text>
+                )}
+              </Descriptions.Item>
             </Descriptions>
 
-            <Divider orientation="left" style={{ margin: '20px 0 12px', fontSize: 14 }}>
-              <EditOutlined style={{ marginRight: 6, color: '#009B60' }} />
-              Chỉnh Sửa Trạng Thái & Ghi Chú
+            {/* Phân mục cập nhật trạng thái đơn */}
+            <Divider orientation="left" style={{ margin: '18px 0 12px', fontSize: 14 }}>
+              <CheckCircleOutlined style={{ marginRight: 6, color: '#009B60' }} />
+              Cập Nhật Trạng Thái & Thanh Toán
             </Divider>
 
             <Row gutter={[16, 16]}>
@@ -801,10 +1180,16 @@ export default function AdminBookingListPage() {
                   style={{ width: '100%' }}
                   value={editStatus}
                   onChange={setEditStatus}
+                  disabled={
+                    isEditInfoMode ||
+                    ['COMPLETED', 'CANCELLED', 'REJECTED'].includes(selectedBooking.status)
+                  }
                 >
-                  <Option value="PENDING">Chờ duyệt (PENDING)</Option>
-                  <Option value="CONFIRMED">Đã xác nhận (CONFIRMED)</Option>
-                  <Option value="CANCELLED">Đã hủy / Từ chối (CANCELLED)</Option>
+                  {(ALLOWED_STATUS_TRANSITIONS[selectedBooking.status] || []).map((item) => (
+                    <Option key={item.value} value={item.value}>
+                      {item.label}
+                    </Option>
+                  ))}
                 </Select>
               </Col>
 
@@ -816,27 +1201,76 @@ export default function AdminBookingListPage() {
                   style={{ width: '100%' }}
                   value={editPaymentStatus}
                   onChange={setEditPaymentStatus}
+                  disabled={
+                    isEditInfoMode ||
+                    ['CANCELLED', 'REJECTED'].includes(selectedBooking.status)
+                  }
                 >
-                  <Option value="PAID">Đã thanh toán (PAID)</Option>
                   <Option value="UNPAID">Chưa thanh toán (UNPAID)</Option>
+                  <Option value="PAID">Đã thanh toán (PAID)</Option>
                   <Option value="REFUNDED">Đã hoàn tiền (REFUNDED)</Option>
                 </Select>
               </Col>
 
-              <Col xs={24}>
-                <div style={{ marginBottom: 6 }}>
-                  <Text strong>Ghi Chú Đơn Đặt Sân:</Text>
-                </div>
-                <Input.TextArea
-                  rows={3}
-                  value={editNote}
-                  onChange={(e) => setEditNote(e.target.value)}
-                  placeholder="Nhập ghi chú cho đơn đặt sân..."
-                />
-              </Col>
+              {!isEditInfoMode && (
+                <Col xs={24}>
+                  <div style={{ marginBottom: 6 }}>
+                    <Text strong>Ghi Chú Đơn Đặt Sân:</Text>
+                  </div>
+                  <Input.TextArea
+                    rows={2}
+                    value={editNote}
+                    onChange={(e) => setEditNote(e.target.value)}
+                    placeholder="Nhập ghi chú hoặc lý do thay đổi..."
+                  />
+                </Col>
+              )}
             </Row>
           </div>
         )}
+      </Modal>
+
+      {/* Modal AF2: Từ Chối Yêu Cầu Đặt Sân (Reject Booking) */}
+      <Modal
+        title={
+          <Space>
+            <StopOutlined style={{ color: '#ff4d4f' }} />
+            <span>Từ Chối Yêu Cầu Đặt Sân (Reject Booking - AF2)</span>
+          </Space>
+        }
+        open={isRejectModalOpen}
+        onCancel={() => setIsRejectModalOpen(false)}
+        onOk={handleRejectBooking}
+        okText="Xác Nhận Từ Chối"
+        okButtonProps={{ danger: true, loading: isRejecting }}
+        cancelText="Quay Lại"
+        width={500}
+      >
+        <div style={{ marginTop: 12 }}>
+          <Alert
+            message="Xác nhận từ chối đơn đặt sân"
+            description={
+              <span>
+                Đơn đặt sân mang mã{' '}
+                <Text strong>#{selectedBooking?.bookingCode}</Text> sẽ được chuyển sang trạng thái{' '}
+                <Tag color="magenta">REJECTED</Tag> và hệ thống sẽ gửi thông báo đến khách hàng.
+              </span>
+            }
+            type="warning"
+            showIcon
+            style={{ marginBottom: 16 }}
+          />
+
+          <Text strong style={{ display: 'block', marginBottom: 6 }}>
+            Lý do từ chối đặt sân:
+          </Text>
+          <Input.TextArea
+            rows={3}
+            placeholder="Ví dụ: Sân đang bảo trì đột xuất, khách hàng yêu cầu hủy, quá giờ xác nhận..."
+            value={rejectReason}
+            onChange={(e) => setRejectReason(e.target.value)}
+          />
+        </div>
       </Modal>
     </div>
   );
