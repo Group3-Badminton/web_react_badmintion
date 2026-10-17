@@ -177,6 +177,7 @@ export default function AdminBookingListPage() {
   const [createVoucherCode, setCreateVoucherCode] = useState('');
   const [createDiscount, setCreateDiscount] = useState(0);
   const [createTotalAmount, setCreateTotalAmount] = useState(0);
+  const [createPaymentMethod, setCreatePaymentMethod] = useState('CASH');
   const [createNote, setCreateNote] = useState('');
   const [createStatus, setCreateStatus] = useState('CONFIRMED');
   const [createAvailableSlots, setCreateAvailableSlots] = useState([]);
@@ -241,6 +242,7 @@ export default function AdminBookingListPage() {
     setCreateVoucherCode('');
     setCreateDiscount(0);
     setCreateTotalAmount(0);
+    setCreatePaymentMethod('CASH');
     setCreateNote('Khách đặt tại quầy');
     setCreateStatus('CONFIRMED');
     setAppliedCreateVoucher(null);
@@ -370,7 +372,7 @@ export default function AdminBookingListPage() {
         voucherCode: appliedCreateVoucher ? appliedCreateVoucher.voucherCode : undefined,
         discount: createDiscount,
         totalAmount: createTotalAmount,
-        paymentMethod: 'CASH',
+        paymentMethod: createPaymentMethod || 'CASH',
         paymentStatus: 'UNPAID',
         status: createStatus,
         note: createNote.trim()
@@ -621,14 +623,15 @@ export default function AdminBookingListPage() {
         discount: editDiscount,
         totalAmount: editTotalAmount,
         paymentMethod: editPaymentMethod || 'CASH',
-        note: editNote
+        note: editNote,
+        status: 'CONFIRMED'
       });
 
       if (res.success) {
         if (res.message && res.message.includes('không thể gửi thông báo')) {
           message.warning(res.message); // E4
         } else {
-          message.success('Thay đổi thông tin đặt sân thành công!');
+          message.success('Thay đổi thông tin và xác nhận đặt sân thành công!');
         }
         setIsEditInfoMode(false);
         setIsDetailModalOpen(false);
@@ -1158,74 +1161,74 @@ export default function AdminBookingListPage() {
         footer={
           isEditInfoMode
             ? [
-                <Button key="cancel-edit" onClick={handleCancelEditInfo}>
-                  Hủy
-                </Button>,
-                <Button
-                  key="save-info"
-                  type="primary"
-                  loading={isChangingInfo}
-                  icon={<CheckCircleOutlined />}
-                  style={{ backgroundColor: '#009B60', borderColor: '#009B60' }}
-                  onClick={handleChangeBookingInfo}
-                >
-                  xác nhận
-                </Button>
-              ]
+              <Button key="cancel-edit" onClick={handleCancelEditInfo}>
+                Hủy
+              </Button>,
+              <Button
+                key="save-info"
+                type="primary"
+                loading={isChangingInfo}
+                icon={<CheckCircleOutlined />}
+                style={{ backgroundColor: '#009B60', borderColor: '#009B60' }}
+                onClick={handleChangeBookingInfo}
+              >
+                xác nhận
+              </Button>
+            ]
             : [
+              <Button
+                key="back"
+                onClick={() => {
+                  setIsEditInfoMode(false);
+                  setIsDetailModalOpen(false);
+                }}
+              >
+                Đóng
+              </Button>,
+
+              // AF2: Từ chối yêu cầu đặt sân - Chỉ hiện khi đơn PENDING
+              selectedBooking?.status === 'PENDING' && (
                 <Button
-                  key="back"
-                  onClick={() => {
-                    setIsEditInfoMode(false);
-                    setIsDetailModalOpen(false);
-                  }}
+                  key="reject"
+                  danger
+                  icon={<StopOutlined />}
+                  onClick={() => setIsRejectModalOpen(true)}
                 >
-                  Đóng
-                </Button>,
+                  Từ chối
+                </Button>
+              ),
 
-                // AF2: Từ chối yêu cầu đặt sân - Chỉ hiện khi đơn PENDING
-                selectedBooking?.status === 'PENDING' && (
+              // AF1: Nút Thay Đổi Thông Tin Đặt Sân - Chỉ hiện khi đơn PENDING
+              selectedBooking?.status === 'PENDING' && (
+                <Button
+                  key="unlock-edit"
+                  icon={<EditOutlined />}
+                  style={{ borderColor: '#fa8c16', color: '#d46b08', fontWeight: 600 }}
+                  onClick={() => setIsEditInfoMode(true)}
+                >
+                  thay đổi thông tin
+                </Button>
+              ),
+
+              // Duyệt đơn đặt sân (Chỉ hiện khi PENDING)
+              selectedBooking?.status === 'PENDING' && (
+                <Popconfirm
+                  key="confirm"
+                  title="Xác nhận nhận và duyệt đơn này?"
+                  onConfirm={() => handleUpdateStatus(selectedBooking._id, 'CONFIRMED')}
+                  okText="Xác nhận"
+                  cancelText="Hủy"
+                >
                   <Button
-                    key="reject"
-                    danger
-                    icon={<StopOutlined />}
-                    onClick={() => setIsRejectModalOpen(true)}
+                    type="primary"
+                    style={{ backgroundColor: '#009B60', borderColor: '#009B60' }}
+                    icon={<CheckOutlined />}
                   >
-                    Từ chối
+                    xác nhận
                   </Button>
-                ),
-
-                // AF1: Nút Thay Đổi Thông Tin Đặt Sân - Chỉ hiện khi đơn PENDING
-                selectedBooking?.status === 'PENDING' && (
-                  <Button
-                    key="unlock-edit"
-                    icon={<EditOutlined />}
-                    style={{ borderColor: '#fa8c16', color: '#d46b08', fontWeight: 600 }}
-                    onClick={() => setIsEditInfoMode(true)}
-                  >
-                    thay đổi thông tin
-                  </Button>
-                ),
-
-                // Duyệt đơn đặt sân (Chỉ hiện khi PENDING)
-                selectedBooking?.status === 'PENDING' && (
-                  <Popconfirm
-                    key="confirm"
-                    title="Xác nhận nhận và duyệt đơn này?"
-                    onConfirm={() => handleUpdateStatus(selectedBooking._id, 'CONFIRMED')}
-                    okText="Xác nhận"
-                    cancelText="Hủy"
-                  >
-                    <Button
-                      type="primary"
-                      style={{ backgroundColor: '#009B60', borderColor: '#009B60' }}
-                      icon={<CheckOutlined />}
-                    >
-                      xác nhận
-                    </Button>
-                  </Popconfirm>
-                )
-              ].filter(Boolean)
+                </Popconfirm>
+              )
+            ].filter(Boolean)
         }
       >
         {selectedBooking && (
@@ -1334,23 +1337,23 @@ export default function AdminBookingListPage() {
                   >
                     {availableSlots.length > 0
                       ? availableSlots.map((slot) => {
-                          const slotVal = `${slot.startTime} - ${slot.endTime}`;
-                          const isCurrentBookingSlot =
-                            selectedBooking?.startTime === slot.startTime &&
-                            (selectedBooking?.courtId?._id || selectedBooking?.courtId) === editCourtId;
-                          const isBooked = slot.isBooked && !isCurrentBookingSlot;
-                          return (
-                            <Option key={slotVal} value={slotVal} disabled={isBooked}>
-                              ⏰ {slotVal} — {(slot.price || 0).toLocaleString('vi-VN')} đ
-                              {isBooked ? ' (Đã có người đặt)' : ''}
-                            </Option>
-                          );
-                        })
-                      : timeSlots.map((ts) => (
-                          <Option key={`${ts.startTime} - ${ts.endTime}`} value={`${ts.startTime} - ${ts.endTime}`}>
-                            ⏰ {ts.startTime} - {ts.endTime}
+                        const slotVal = `${slot.startTime} - ${slot.endTime}`;
+                        const isCurrentBookingSlot =
+                          selectedBooking?.startTime === slot.startTime &&
+                          (selectedBooking?.courtId?._id || selectedBooking?.courtId) === editCourtId;
+                        const isBooked = slot.isBooked && !isCurrentBookingSlot;
+                        return (
+                          <Option key={slotVal} value={slotVal} disabled={isBooked}>
+                            ⏰ {slotVal} — {(slot.price || 0).toLocaleString('vi-VN')} đ
+                            {isBooked ? ' (Đã có người đặt)' : ''}
                           </Option>
-                        ))}
+                        );
+                      })
+                      : timeSlots.map((ts) => (
+                        <Option key={`${ts.startTime} - ${ts.endTime}`} value={`${ts.startTime} - ${ts.endTime}`}>
+                          ⏰ {ts.startTime} - {ts.endTime}
+                        </Option>
+                      ))}
                   </Select>
                 ) : (
                   <Tag color="geekblue" style={{ fontSize: 13, padding: '2px 8px' }}>
@@ -1404,14 +1407,11 @@ export default function AdminBookingListPage() {
                     placeholder="Phương thức thanh toán"
                   >
                     <Option value="CASH">Tiền mặt</Option>
-                    <Option value="VIETQR">VietQR</Option>
                     <Option value="TRANSFER">Chuyển khoản</Option>
                   </Select>
                 ) : (
                   <Tag color="blue">
-                    {selectedBooking.paymentMethod === 'VIETQR'
-                      ? 'VietQR'
-                      : selectedBooking.paymentMethod === 'TRANSFER'
+                    {selectedBooking.paymentMethod === 'TRANSFER'
                       ? 'Chuyển khoản'
                       : 'Tiền mặt'}
                   </Tag>
@@ -1738,6 +1738,21 @@ export default function AdminBookingListPage() {
               </Col>
 
 
+
+              <Col xs={24} sm={8}>
+                <Text strong style={{ display: 'block', marginBottom: 4 }}>
+                  Phương thức thanh toán
+                </Text>
+                <Select
+                  style={{ width: '100%' }}
+                  value={createPaymentMethod}
+                  onChange={setCreatePaymentMethod}
+                >
+                  <Option value="CASH">Tiền mặt (Mặc định)</Option>
+                  <Option value="VIETQR">VietQR</Option>
+                  <Option value="TRANSFER">Chuyển khoản</Option>
+                </Select>
+              </Col>
 
               <Col xs={24}>
                 <Text strong style={{ display: 'block', marginBottom: 4 }}>
