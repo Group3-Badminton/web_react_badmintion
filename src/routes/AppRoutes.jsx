@@ -14,6 +14,7 @@ import ProductManagementPage from "../pages/product/ProductManagementPage";
 import VoucherManagementPage from "../pages/voucher/VoucherManagementPage";
 import AdminBookingListPage from "../pages/admin/AdminBookingListPage";
 import CustomerBookingPage from "../pages/customer/CustomerBookingPage";
+import CustomerMyBookingsPage from "../pages/customer/CustomerMyBookingsPage";
 import ResetPasswordPage from "../pages/auth/ResetPasswordPage";
 import ProfilePage from "../pages/profile/ProfilePage";
 import PricingManagementPage from "../pages/admin/PricingManagementPage";
@@ -45,6 +46,16 @@ export default function AppRoutes() {
               allowedRoles={[ROLES.CUSTOMER, ROLES.ADMIN, ROLES.STAFF]}
             >
               <CustomerBookingPage />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/customer/my-bookings"
+          element={
+            <ProtectedRoute
+              allowedRoles={[ROLES.CUSTOMER, ROLES.ADMIN, ROLES.STAFF]}
+            >
+              <CustomerMyBookingsPage />
             </ProtectedRoute>
           }
         />

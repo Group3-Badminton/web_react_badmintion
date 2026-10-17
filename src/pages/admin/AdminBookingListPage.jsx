@@ -42,7 +42,8 @@ import {
   EnvironmentOutlined,
   ExclamationCircleOutlined,
   StopOutlined,
-  PlusOutlined
+  PlusOutlined,
+  PlayCircleOutlined
 } from '@ant-design/icons';
 import dayjs from 'dayjs';
 import { bookingService } from '../../services/bookingService';
@@ -60,6 +61,16 @@ const STATUS_CONFIG = {
   CONFIRMED: {
     color: 'green',
     label: 'Đã xác nhận',
+    icon: <CheckCircleOutlined />
+  },
+  CHECKED_IN: {
+    color: 'blue',
+    label: 'Đang chơi / Nhận sân',
+    icon: <PlayCircleOutlined />
+  },
+  COMPLETED: {
+    color: 'cyan',
+    label: 'Hoàn thành',
     icon: <CheckCircleOutlined />
   },
   CANCELLED: {
@@ -581,12 +592,21 @@ export default function AdminBookingListPage() {
   };
 
   // Thao tác duyệt / xác nhận hoặc từ chối đơn
-  const handleUpdateStatus = async (bookingId, newStatus) => {
+  const handleUpdateStatus = async (bookingId, newStatus, newPaymentStatus) => {
     try {
       setLoading(true);
-      const res = await bookingService.updateBookingStatus(bookingId, { status: newStatus });
+      const payload = {};
+      if (newStatus) payload.status = newStatus;
+      if (newPaymentStatus) payload.paymentStatus = newPaymentStatus;
+
+      const res = await bookingService.updateBookingStatus(bookingId, payload);
       if (res.success) {
-        const actionText = newStatus === 'CONFIRMED' ? 'xác nhận duyệt đơn' : 'hủy đơn';
+        let actionText = 'cập nhật trạng thái';
+        if (newStatus === 'CONFIRMED') actionText = 'xác nhận duyệt đơn';
+        else if (newStatus === 'CHECKED_IN') actionText = 'check-in nhận sân';
+        else if (newStatus === 'COMPLETED') actionText = 'hoàn thành ca chơi';
+        else if (newStatus === 'CANCELLED') actionText = 'hủy đơn';
+        else if (newPaymentStatus === 'PAID') actionText = 'xác nhận thanh toán';
         message.success(`Đã ${actionText} thành công!`);
         fetchBookings();
         if (isDetailModalOpen) {
@@ -882,6 +902,62 @@ export default function AdminBookingListPage() {
                   style={{ backgroundColor: '#009B60', borderColor: '#009B60' }}
                 >
                   Xác nhận
+                </Button>
+              </Popconfirm>
+            )}
+
+            {/* CONFIRMED -> CHECKED_IN */}
+            {record.status === 'CONFIRMED' && (
+              <Popconfirm
+                title="Xác nhận khách đã đến nhận sân thi đấu?"
+                onConfirm={() => handleUpdateStatus(record._id, 'CHECKED_IN')}
+                okText="Nhận sân"
+                cancelText="Hủy"
+              >
+                <Button
+                  size="small"
+                  type="primary"
+                  icon={<PlayCircleOutlined />}
+                  style={{ backgroundColor: '#0284c7', borderColor: '#0284c7' }}
+                >
+                  Nhận sân
+                </Button>
+              </Popconfirm>
+            )}
+
+            {/* CHECKED_IN -> COMPLETED */}
+            {record.status === 'CHECKED_IN' && (
+              <Popconfirm
+                title="Xác nhận khách đã chơi xong và trả sân?"
+                onConfirm={() => handleUpdateStatus(record._id, 'COMPLETED')}
+                okText="Hoàn thành"
+                cancelText="Hủy"
+              >
+                <Button
+                  size="small"
+                  type="primary"
+                  icon={<CheckCircleOutlined />}
+                  style={{ backgroundColor: '#10b981', borderColor: '#10b981' }}
+                >
+                  Hoàn thành
+                </Button>
+              </Popconfirm>
+            )}
+
+            {/* Thu tiền nếu UNPAID */}
+            {record.paymentStatus === 'UNPAID' && ['CONFIRMED', 'CHECKED_IN', 'COMPLETED'].includes(record.status) && (
+              <Popconfirm
+                title="Xác nhận khách đã thanh toán đơn này?"
+                onConfirm={() => handleUpdateStatus(record._id, undefined, 'PAID')}
+                okText="Đã thanh toán"
+                cancelText="Hủy"
+              >
+                <Button
+                  size="small"
+                  icon={<DollarOutlined />}
+                  style={{ borderColor: '#faad14', color: '#d48806' }}
+                >
+                  Thu tiền
                 </Button>
               </Popconfirm>
             )}
@@ -1227,6 +1303,62 @@ export default function AdminBookingListPage() {
                     xác nhận
                   </Button>
                 </Popconfirm>
+              ),
+
+              // Nhận sân (Khi CONFIRMED)
+              selectedBooking?.status === 'CONFIRMED' && (
+                <Popconfirm
+                  key="check-in"
+                  title="Xác nhận khách đã đến nhận sân thi đấu?"
+                  onConfirm={() => handleUpdateStatus(selectedBooking._id, 'CHECKED_IN')}
+                  okText="Nhận sân"
+                  cancelText="Hủy"
+                >
+                  <Button
+                    type="primary"
+                    style={{ backgroundColor: '#0284c7', borderColor: '#0284c7' }}
+                    icon={<PlayCircleOutlined />}
+                  >
+                    Nhận sân (Check-in)
+                  </Button>
+                </Popconfirm>
+              ),
+
+              // Hoàn thành ca chơi (Khi CHECKED_IN)
+              selectedBooking?.status === 'CHECKED_IN' && (
+                <Popconfirm
+                  key="complete"
+                  title="Xác nhận khách đã chơi xong và trả sân?"
+                  onConfirm={() => handleUpdateStatus(selectedBooking._id, 'COMPLETED')}
+                  okText="Hoàn thành"
+                  cancelText="Hủy"
+                >
+                  <Button
+                    type="primary"
+                    style={{ backgroundColor: '#10b981', borderColor: '#10b981' }}
+                    icon={<CheckCircleOutlined />}
+                  >
+                    Hoàn thành ca chơi
+                  </Button>
+                </Popconfirm>
+              ),
+
+              // Thu tiền nếu UNPAID
+              selectedBooking?.paymentStatus === 'UNPAID' && ['CONFIRMED', 'CHECKED_IN', 'COMPLETED'].includes(selectedBooking?.status) && (
+                <Popconfirm
+                  key="pay"
+                  title="Xác nhận khách đã thanh toán đơn này?"
+                  onConfirm={() => handleUpdateStatus(selectedBooking._id, undefined, 'PAID')}
+                  okText="Đã thanh toán"
+                  cancelText="Hủy"
+                >
+                  <Button
+                    icon={<DollarOutlined />}
+                    style={{ borderColor: '#faad14', color: '#d48806', fontWeight: 600 }}
+                  >
+                    Xác nhận thu tiền
+                  </Button>
+                </Popconfirm>
               )
             ].filter(Boolean)
         }
@@ -1338,9 +1470,11 @@ export default function AdminBookingListPage() {
                     {availableSlots.length > 0
                       ? availableSlots.map((slot) => {
                         const slotVal = `${slot.startTime} - ${slot.endTime}`;
+                        const isSameDate = selectedBooking?.bookingDate && dayjs(selectedBooking.bookingDate).format('YYYY-MM-DD') === dayjs(editBookingDate).format('YYYY-MM-DD');
                         const isCurrentBookingSlot =
+                          isSameDate &&
                           selectedBooking?.startTime === slot.startTime &&
-                          (selectedBooking?.courtId?._id || selectedBooking?.courtId) === editCourtId;
+                          (selectedBooking?.courtId?._id || selectedBooking?.courtId)?.toString() === editCourtId?.toString();
                         const isBooked = slot.isBooked && !isCurrentBookingSlot;
                         return (
                           <Option key={slotVal} value={slotVal} disabled={isBooked}>
