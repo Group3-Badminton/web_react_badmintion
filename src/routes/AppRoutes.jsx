@@ -16,6 +16,7 @@ import AdminBookingListPage from "../pages/admin/AdminBookingListPage";
 import CustomerBookingPage from "../pages/customer/CustomerBookingPage";
 import ResetPasswordPage from "../pages/auth/ResetPasswordPage";
 import ProfilePage from "../pages/profile/ProfilePage";
+import PricingManagementPage from "../pages/admin/PricingManagementPage";
 import StaffManagementPage from "../pages/admin/StaffManagementPage";
 import CourtManagementPage from "../pages/admin/CourtManagementPage";
 import { ROLES } from "../utils/constants";
@@ -71,6 +72,15 @@ export default function AppRoutes() {
           element={
             <ProtectedRoute allowedRoles={[ROLES.ADMIN, ROLES.STAFF]}>
               <AdminDashboardPage />
+            </ProtectedRoute>
+          }
+        />
+        {/* Pricing Management (Admin & Staff - UC-16) */}
+        <Route
+          path="/admin/prices"
+          element={
+            <ProtectedRoute allowedRoles={[ROLES.ADMIN, ROLES.STAFF]}>
+              <PricingManagementPage />
             </ProtectedRoute>
           }
         />
