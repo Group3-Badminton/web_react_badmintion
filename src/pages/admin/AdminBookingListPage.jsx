@@ -221,7 +221,7 @@ export default function AdminBookingListPage() {
   };
 
   // Tải khung giờ trống cho form tạo đơn
-  const fetchCreateSlotAvailability = async (courtId, date) => {
+  const fetchCreateSlotAvailability = async (courtId, date, preferredSlot = null) => {
     if (!courtId || !date) return;
     try {
       setLoadingCreateSlots(true);
@@ -229,6 +229,27 @@ export default function AdminBookingListPage() {
       const res = await bookingService.getCourtAvailability(courtId, dateStr);
       if (res.success && res.data && res.data.slots) {
         setCreateAvailableSlots(res.data.slots);
+
+        // Khung giờ chọn: ưu tiên preferredSlot hoặc createTimeSlot, nếu chưa có hoặc đã bị đặt thì chọn khung giờ trống đầu tiên
+        const targetSlotStr = preferredSlot || createTimeSlot;
+        let matchedSlot = null;
+        if (targetSlotStr) {
+          const start = targetSlotStr.split(' - ')[0]?.trim();
+          matchedSlot = res.data.slots.find((s) => s.startTime === start && !s.isBooked);
+        }
+
+        if (!matchedSlot) {
+          matchedSlot = res.data.slots.find((s) => !s.isBooked) || res.data.slots[0];
+        }
+
+        if (matchedSlot) {
+          const slotVal = `${matchedSlot.startTime} - ${matchedSlot.endTime}`;
+          setCreateTimeSlot(slotVal);
+          recalculateCreateAmounts(matchedSlot.price || 0);
+        } else {
+          setCreateTimeSlot('');
+          recalculateCreateAmounts(0);
+        }
       }
     } catch (err) {
       console.error('Lỗi tải khung giờ trống:', err);
@@ -263,24 +284,16 @@ export default function AdminBookingListPage() {
     }
   };
 
-  // Khi đổi Sân ở form tạo đơn
+  // Khi đổi Sân ở form tạo đơn -> cập nhật ngay khung giờ và đơn giá theo thời gian chọn
   const handleCreateCourtChange = (newCourtId) => {
     setCreateCourtId(newCourtId);
-    setCreateTimeSlot('');
-    setCreatePrice(0);
-    setCreateDiscount(0);
-    setCreateTotalAmount(0);
-    fetchCreateSlotAvailability(newCourtId, createBookingDate);
+    fetchCreateSlotAvailability(newCourtId, createBookingDate, createTimeSlot);
   };
 
-  // Khi đổi Ngày ở form tạo đơn
+  // Khi đổi Ngày ở form tạo đơn -> cập nhật ngay khung giờ và đơn giá theo thời gian chọn
   const handleCreateDateChange = (newDate) => {
     setCreateBookingDate(newDate);
-    setCreateTimeSlot('');
-    setCreatePrice(0);
-    setCreateDiscount(0);
-    setCreateTotalAmount(0);
-    fetchCreateSlotAvailability(createCourtId, newDate);
+    fetchCreateSlotAvailability(createCourtId, newDate, createTimeSlot);
   };
 
   // Tính lại tổng tiền form tạo
@@ -523,6 +536,11 @@ export default function AdminBookingListPage() {
 
         if (found) {
           recalculateAmounts(found.price || 0);
+        } else if (res.data.slots.length > 0) {
+          // Nếu khung giờ không tồn tại ở ngày/sân mới, tự động chọn khung giờ còn trống đầu tiên
+          const firstAvailable = res.data.slots.find((s) => !s.isBooked) || res.data.slots[0];
+          setEditTimeSlot(`${firstAvailable.startTime} - ${firstAvailable.endTime}`);
+          recalculateAmounts(firstAvailable.price || 0);
         }
       }
     } catch (err) {
@@ -1496,7 +1514,7 @@ export default function AdminBookingListPage() {
                 )}
               </Descriptions.Item>
 
-              {/* Đơn Giá Sân: Cho phép nhập hoặc tự động đổi theo giờ và sân */}
+              {/* Đơn Giá Sân: Đồng bộ tự động theo khung giờ chọn và cho phép chỉnh sửa */}
               <Descriptions.Item label="Đơn Giá Sân">
                 {isEditInfoMode ? (
                   <InputNumber
@@ -1871,8 +1889,6 @@ export default function AdminBookingListPage() {
                 </div>
               </Col>
 
-
-
               <Col xs={24} sm={8}>
                 <Text strong style={{ display: 'block', marginBottom: 4 }}>
                   Phương thức thanh toán
@@ -1883,7 +1899,6 @@ export default function AdminBookingListPage() {
                   onChange={setCreatePaymentMethod}
                 >
                   <Option value="CASH">Tiền mặt (Mặc định)</Option>
-                  <Option value="VIETQR">VietQR</Option>
                   <Option value="TRANSFER">Chuyển khoản</Option>
                 </Select>
               </Col>
