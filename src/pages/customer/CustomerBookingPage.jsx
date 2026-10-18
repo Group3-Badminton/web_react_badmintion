@@ -209,6 +209,9 @@ export default function CustomerBookingPage() {
     try {
       setSubmittingBooking(true);
       const bookingPayload = {
+        customerName: customerName.trim(),
+        customerPhone: customerPhone.trim(),
+        customerEmail: customerEmail?.trim() || undefined,
         courtId: selectedCourt._id,
         bookingDate: selectedDate.format('YYYY-MM-DD'),
         startTime: selectedSlot.startTime,
@@ -706,10 +709,10 @@ export default function CustomerBookingPage() {
 
                   <Col xs={24} sm={12}>
                     <Text strong style={{ display: 'block', marginBottom: 6 }}>
-                      Email nhận xác nhận
+                      Email nhận xác nhận <span style={{ color: '#888', fontWeight: 'normal' }}>(không bắt buộc)</span>
                     </Text>
                     <Input
-                      placeholder="email@gmail.com"
+                      placeholder="email@gmail.com (tùy chọn)"
                       value={customerEmail}
                       onChange={(e) => setCustomerEmail(e.target.value)}
                       style={{ height: 40, borderRadius: 8 }}
