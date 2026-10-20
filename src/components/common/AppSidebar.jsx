@@ -154,7 +154,7 @@ export default function AppSidebar({ collapsed }) {
     }
 
     // Customer Management
-    if (isAdmin || hasPermission(STAFF_PERMISSIONS.VIEW_CUSTOMERS)) {
+    if (isAdmin || isStaff || hasPermission(STAFF_PERMISSIONS.VIEW_CUSTOMERS)) {
       items.push({
         key: '/admin/customers',
         icon: <TeamOutlined />,

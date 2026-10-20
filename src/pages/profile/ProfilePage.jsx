@@ -32,7 +32,7 @@ export default function ProfilePage() {
   const [saving, setSaving] = useState(false);
   const [profileData, setProfileData] = useState(null);
 
-  // 1. Tải thông tin cá nhân mới nhất từ Backend
+  // 1. Tải thông tin cá nhân mới nhất từ Backend (UC-5.1 & UC-5.3)
   useEffect(() => {
     fetchProfile();
   }, []);
@@ -58,13 +58,14 @@ export default function ProfilePage() {
     }
   };
 
-  // 2. Cập nhật thông tin (Họ tên & Số điện thoại)
+  // 2. Cập nhật thông tin: Họ tên và Email (UC-5.2 & UC-5.4)
+  // Quy tắc BR-04 & BR-05: Số điện thoại là định danh duy nhất (read-only), không được sửa.
   const onFinishUpdate = async (values) => {
     setSaving(true);
     try {
       const res = await userService.updateProfile({
         fullName: values.fullName,
-        phone: values.phone,
+        email: values.email,
       });
 
       if (res.success && res.data) {
@@ -125,7 +126,7 @@ export default function ProfilePage() {
           Hồ Sơ Cá Nhân
         </Title>
         <Text type="secondary" style={{ fontSize: 13 }}>
-          Quản lý và cập nhật thông tin tài khoản cá nhân của bạn
+          Quản lý và cập nhật thông tin tài khoản cá nhân của bạn (UC-05)
         </Text>
       </div>
 
@@ -137,7 +138,7 @@ export default function ProfilePage() {
           boxShadow: "0 2px 12px rgba(0,0,0,0.04)",
           border: "1px solid #f0f0f0",
         }}
-        bodyStyle={{ padding: "20px 28px" }}
+        styles={{ body: { padding: "20px 28px" } }}
       >
         {/* Phần Avatar & Tên tóm tắt */}
         <div style={{ textAlign: "center", marginBottom: 6 }}>
@@ -166,7 +167,7 @@ export default function ProfilePage() {
 
         <Divider style={{ margin: "16px 0" }} />
 
-        {/* Form nhập liệu tinh gọn */}
+        {/* Form nhập liệu tuân thủ chuẩn UC-05: Số điện thoại là READ-ONLY, Email & Họ tên cho phép sửa */}
         <Form
           form={form}
           layout="vertical"
@@ -175,7 +176,7 @@ export default function ProfilePage() {
           requiredMark={false}
         >
           <Row gutter={[20, 0]}>
-            {/* Họ và tên */}
+            {/* Họ và tên (Cho phép sửa) */}
             <Col xs={24} md={12}>
               <Form.Item
                 name="fullName"
@@ -191,37 +192,37 @@ export default function ProfilePage() {
               </Form.Item>
             </Col>
 
-            {/* Số điện thoại */}
+            {/* Email (Cho phép sửa) */}
             <Col xs={24} md={12}>
               <Form.Item
-                name="phone"
-                label={<strong>Số điện thoại liên hệ</strong>}
+                name="email"
+                label={<strong>Địa chỉ Email liên hệ</strong>}
                 rules={[
-                  {
-                    pattern: /(0[3|5|7|8|9])+([0-9]{8})\b/,
-                    message: "Số điện thoại phải gồm 10 chữ số hợp lệ!",
-                  },
+                  { required: true, message: "Vui lòng nhập Email!" },
+                  { type: "email", message: "Định dạng Email không hợp lệ!" }
                 ]}
+                extra="Dùng để nhận mã xác thực OTP và thông báo hệ thống."
                 style={{ marginBottom: 14 }}
               >
                 <Input
-                  prefix={<PhoneOutlined style={{ color: "#94a3b8" }} />}
-                  placeholder="VD: 0912345678"
+                  prefix={<MailOutlined style={{ color: "#94a3b8" }} />}
+                  placeholder="VD: user@gmail.com"
                   style={{ borderRadius: 6, height: 40 }}
                 />
               </Form.Item>
             </Col>
 
-            {/* Email (Chỉ đọc) */}
+            {/* Số điện thoại (READ-ONLY theo đúng BR-04 & UC-5.2) */}
             <Col xs={24}>
               <Form.Item
-                name="email"
-                label={<strong>Địa chỉ Email (Định danh tài khoản)</strong>}
+                name="phone"
+                label={<strong>Số điện thoại (Định danh tài khoản - Chỉ đọc)</strong>}
+                extra="Theo quy tắc BR-04, số điện thoại là định danh duy nhất của tài khoản và không thể thay đổi."
                 style={{ marginBottom: 14 }}
               >
                 <Input
                   disabled
-                  prefix={<MailOutlined style={{ color: "#94a3b8" }} />}
+                  prefix={<PhoneOutlined style={{ color: "#94a3b8" }} />}
                   style={{ borderRadius: 6, background: "#f8fafc", height: 40 }}
                 />
               </Form.Item>

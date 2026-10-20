@@ -19,6 +19,7 @@ import ProfilePage from "../pages/profile/ProfilePage";
 import PricingManagementPage from "../pages/admin/PricingManagementPage";
 import StaffManagementPage from "../pages/admin/StaffManagementPage";
 import CourtManagementPage from "../pages/admin/CourtManagementPage";
+import CustomerManagementPage from "../pages/admin/CustomerManagementPage";
 import { ROLES } from "../utils/constants";
 import { Result, Button } from "antd";
 
@@ -32,6 +33,7 @@ export default function AppRoutes() {
       <Route element={<AuthLayout />}>
         <Route path="/login" element={<LoginPage />} />
         <Route path="/register" element={<RegisterPage />} />
+        <Route path="/reset-password" element={<ResetPasswordPage />} />
         <Route path="/reset-Password" element={<ResetPasswordPage />} />
       </Route>
 
@@ -117,6 +119,15 @@ export default function AppRoutes() {
           element={
             <ProtectedRoute allowedRoles={[ROLES.ADMIN]}>
               <StaffManagementPage />
+            </ProtectedRoute>
+          }
+        />
+        {/* Customer Management (Staff & Admin - UC-06) */}
+        <Route
+          path="/admin/customers"
+          element={
+            <ProtectedRoute allowedRoles={[ROLES.ADMIN, ROLES.STAFF]}>
+              <CustomerManagementPage />
             </ProtectedRoute>
           }
         />
