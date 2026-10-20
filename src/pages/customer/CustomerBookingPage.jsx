@@ -36,7 +36,8 @@ import {
   ArrowRightOutlined,
   SafetyCertificateOutlined,
   SmileOutlined,
-  CopyOutlined
+  CopyOutlined,
+  BankOutlined
 } from '@ant-design/icons';
 import dayjs from 'dayjs';
 import { useNavigate } from 'react-router-dom';
@@ -133,6 +134,11 @@ export default function CustomerBookingPage() {
         const res = await bookingService.getCourtAvailability(selectedCourt._id, dateStr);
         if (res.success && res.data) {
           setAvailabilityData(res.data);
+          // Tự động chọn khung giờ còn trống đầu tiên để đơn giá sân lập tức hiển thị theo thời gian chọn
+          const firstAvailable = res.data.slots?.find((s) => !s.isBooked);
+          if (firstAvailable) {
+            setSelectedSlot(firstAvailable);
+          }
         }
       } catch (err) {
         message.error(err?.response?.data?.message || 'Lỗi tải lịch khung giờ!');
@@ -203,6 +209,9 @@ export default function CustomerBookingPage() {
     try {
       setSubmittingBooking(true);
       const bookingPayload = {
+        customerName: customerName.trim(),
+        customerPhone: customerPhone.trim(),
+        customerEmail: customerEmail?.trim() || undefined,
         courtId: selectedCourt._id,
         bookingDate: selectedDate.format('YYYY-MM-DD'),
         startTime: selectedSlot.startTime,
@@ -234,6 +243,7 @@ export default function CustomerBookingPage() {
     setSelectedSlot(null);
     setAppliedVoucher(null);
     setVoucherCodeInput('');
+    setPaymentMethod('CASH');
     setNote('');
     setCurrentStep(1);
   };
@@ -569,13 +579,13 @@ export default function CustomerBookingPage() {
                           border: isSelected
                             ? '2px solid #009B60'
                             : isBooked
-                            ? '1px dashed #cbd5e1'
-                            : '1px solid #e2e8f0',
+                              ? '1px dashed #cbd5e1'
+                              : '1px solid #e2e8f0',
                           backgroundColor: isSelected
                             ? '#f0fdf4'
                             : isBooked
-                            ? '#f8fafc'
-                            : '#ffffff',
+                              ? '#f8fafc'
+                              : '#ffffff',
                           borderRadius: 12,
                           padding: '14px 16px',
                           cursor: isBooked ? 'not-allowed' : 'pointer',
@@ -699,10 +709,10 @@ export default function CustomerBookingPage() {
 
                   <Col xs={24} sm={12}>
                     <Text strong style={{ display: 'block', marginBottom: 6 }}>
-                      Email nhận xác nhận
+                      Email nhận xác nhận <span style={{ color: '#888', fontWeight: 'normal' }}>(không bắt buộc)</span>
                     </Text>
                     <Input
-                      placeholder="email@gmail.com"
+                      placeholder="email@gmail.com (tùy chọn)"
                       value={customerEmail}
                       onChange={(e) => setCustomerEmail(e.target.value)}
                       style={{ height: 40, borderRadius: 8 }}
@@ -820,29 +830,75 @@ export default function CustomerBookingPage() {
                 }
                 style={{ borderRadius: 14, marginBottom: 20 }}
               >
-                <div
-                  style={{
-                    padding: '16px',
-                    borderRadius: 10,
-                    border: '2px solid #009B60',
-                    backgroundColor: '#f0fdf4',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'space-between'
-                  }}
+                <Radio.Group
+                  value={paymentMethod}
+                  onChange={(e) => setPaymentMethod(e.target.value)}
+                  style={{ width: '100%', display: 'flex', flexDirection: 'column', gap: 12 }}
                 >
-                  <Space>
-                    <DollarOutlined style={{ fontSize: 22, color: '#009B60' }} />
-                    <div>
-                      <Text strong style={{ display: 'block', fontSize: 14 }}>
-                        Thanh toán tiền mặt tại quầy khi nhận sân
-                      </Text>
-                      <Text type="secondary" style={{ fontSize: 12 }}>
-                        Không thanh toán lúc đặt sân • Trạng thái đơn: Chưa thanh toán
-                      </Text>
-                    </div>
-                  </Space>
-                  <Tag color="green">Mặc định</Tag>
+                  <div
+                    onClick={() => setPaymentMethod('CASH')}
+                    style={{
+                      padding: '14px 16px',
+                      borderRadius: 10,
+                      border: paymentMethod === 'CASH' ? '2px solid #009B60' : '1px solid #e2e8f0',
+                      backgroundColor: paymentMethod === 'CASH' ? '#f0fdf4' : '#ffffff',
+                      cursor: 'pointer',
+                      transition: 'all 0.2s',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'space-between'
+                    }}
+                  >
+                    <Radio value="CASH">
+                      <Space align="center" style={{ marginLeft: 6 }}>
+                        <DollarOutlined style={{ fontSize: 20, color: '#009B60' }} />
+                        <div>
+                          <Text strong style={{ fontSize: 14, display: 'block' }}>
+                            Tiền mặt tại quầy khi nhận sân
+                          </Text>
+                          <Text type="secondary" style={{ fontSize: 12 }}>
+                            Thanh toán trực tiếp tại quầy lễ tân khi đến nhận sân chơi
+                          </Text>
+                        </div>
+                      </Space>
+                    </Radio>
+                    <Tag color="green">Mặc định</Tag>
+                  </div>
+
+                  <div
+                    onClick={() => setPaymentMethod('TRANSFER')}
+                    style={{
+                      padding: '14px 16px',
+                      borderRadius: 10,
+                      border: paymentMethod === 'TRANSFER' ? '2px solid #009B60' : '1px solid #e2e8f0',
+                      backgroundColor: paymentMethod === 'TRANSFER' ? '#f0fdf4' : '#ffffff',
+                      cursor: 'pointer',
+                      transition: 'all 0.2s',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'space-between'
+                    }}
+                  >
+                    <Radio value="TRANSFER">
+                      <Space align="center" style={{ marginLeft: 6 }}>
+                        <BankOutlined style={{ fontSize: 20, color: '#7c3aed' }} />
+                        <div>
+                          <Text strong style={{ fontSize: 14, display: 'block' }}>
+                            Chuyển khoản ngân hàng trực tiếp
+                          </Text>
+                          <Text type="secondary" style={{ fontSize: 12 }}>
+                            Chuyển tiền vào tài khoản ngân hàng của sân
+                          </Text>
+                        </div>
+                      </Space>
+                    </Radio>
+                  </div>
+                </Radio.Group>
+
+                <div style={{ marginTop: 12, padding: '10px 14px', background: '#fffbe6', border: '1px solid #ffe58f', borderRadius: 8 }}>
+                  <Text style={{ fontSize: 13, color: '#d46b08' }}>
+                    ⚠️ <strong>Lưu ý:</strong> Hệ thống hiện tại chưa hỗ trợ cổng thanh toán VietQR. Quý khách vui lòng chọn <strong>Tiền mặt tại quầy</strong> hoặc <strong>Chuyển khoản trực tiếp</strong>.
+                  </Text>
                 </div>
               </Card>
             </Col>
@@ -1018,14 +1074,22 @@ export default function CustomerBookingPage() {
                   <Tag color="red">Chưa thanh toán</Tag>
                 </Descriptions.Item>
                 <Descriptions.Item label="Hình Thức" span={2}>
-                  <Tag color="blue">Tiền mặt tại quầy khi nhận sân</Tag>
+                  <Tag color="blue">
+                    {createdBooking.paymentMethod === 'TRANSFER'
+                      ? 'Chuyển khoản ngân hàng'
+                      : 'Tiền mặt tại quầy khi nhận sân (Mặc định)'}
+                  </Tag>
                 </Descriptions.Item>
               </Descriptions>
             </Card>
 
             <Alert
               message="Đơn đặt sân chưa thanh toán"
-              description="Hệ thống không thu tiền lúc đặt sân. Quý khách vui lòng thanh toán trực tiếp tại quầy lễ tân khi đến nhận sân chơi."
+              description={
+                createdBooking.paymentMethod === 'TRANSFER'
+                  ? 'Quý khách vui lòng chuyển khoản ngân hàng hoặc thanh toán tại quầy lễ tân khi đến nhận sân chơi.'
+                  : 'Hệ thống không thu tiền lúc đặt sân. Quý khách vui lòng thanh toán tiền mặt trực tiếp tại quầy lễ tân khi đến nhận sân chơi.'
+              }
               type="info"
               showIcon
               style={{ borderRadius: 12, marginBottom: 20 }}

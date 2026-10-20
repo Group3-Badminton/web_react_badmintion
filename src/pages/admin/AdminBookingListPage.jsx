@@ -11,6 +11,7 @@ import {
   InputNumber,
   Select,
   DatePicker,
+  TimePicker,
   Space,
   Modal,
   Descriptions,
@@ -42,7 +43,8 @@ import {
   EnvironmentOutlined,
   ExclamationCircleOutlined,
   StopOutlined,
-  PlusOutlined
+  PlusOutlined,
+  PlayCircleOutlined
 } from '@ant-design/icons';
 import dayjs from 'dayjs';
 import { bookingService } from '../../services/bookingService';
@@ -60,6 +62,16 @@ const STATUS_CONFIG = {
   CONFIRMED: {
     color: 'green',
     label: 'Đã xác nhận',
+    icon: <CheckCircleOutlined />
+  },
+  CHECKED_IN: {
+    color: 'blue',
+    label: 'Đang chơi / Nhận sân',
+    icon: <PlayCircleOutlined />
+  },
+  COMPLETED: {
+    color: 'cyan',
+    label: 'Hoàn thành',
     icon: <CheckCircleOutlined />
   },
   CANCELLED: {
@@ -145,7 +157,8 @@ export default function AdminBookingListPage() {
   // AF1: Thay đổi thông tin đặt sân (Change Booking Information)
   const [editCourtId, setEditCourtId] = useState('');
   const [editBookingDate, setEditBookingDate] = useState(null);
-  const [editTimeSlot, setEditTimeSlot] = useState('');
+  const [editStartTime, setEditStartTime] = useState(dayjs('08:00', 'HH:mm'));
+  const [editEndTime, setEditEndTime] = useState(dayjs('09:00', 'HH:mm'));
   const [editPrice, setEditPrice] = useState(0);
   const [editDiscount, setEditDiscount] = useState(0);
   const [editTotalAmount, setEditTotalAmount] = useState(0);
@@ -172,11 +185,13 @@ export default function AdminBookingListPage() {
   const [newCustomerEmail, setNewCustomerEmail] = useState('');
   const [createCourtId, setCreateCourtId] = useState('');
   const [createBookingDate, setCreateBookingDate] = useState(dayjs());
-  const [createTimeSlot, setCreateTimeSlot] = useState('');
-  const [createPrice, setCreatePrice] = useState(0);
+  const [createStartTime, setCreateStartTime] = useState(dayjs('08:00', 'HH:mm'));
+  const [createEndTime, setCreateEndTime] = useState(dayjs('09:00', 'HH:mm'));
+  const [createPrice, setCreatePrice] = useState(100000);
   const [createVoucherCode, setCreateVoucherCode] = useState('');
   const [createDiscount, setCreateDiscount] = useState(0);
-  const [createTotalAmount, setCreateTotalAmount] = useState(0);
+  const [createTotalAmount, setCreateTotalAmount] = useState(100000);
+  const [createPaymentMethod, setCreatePaymentMethod] = useState('CASH');
   const [createNote, setCreateNote] = useState('');
   const [createStatus, setCreateStatus] = useState('CONFIRMED');
   const [createAvailableSlots, setCreateAvailableSlots] = useState([]);
@@ -208,6 +223,29 @@ export default function AdminBookingListPage() {
     }
   };
 
+  // Hàm tính toán giá dựa theo thời gian bắt đầu và kết thúc (VNĐ)
+  const getCalculatedPrice = (startTimeDayjs, endTimeDayjs, dateDayjs, slots = []) => {
+    if (!startTimeDayjs || !endTimeDayjs) return 100000;
+    const diffMinutes = endTimeDayjs.diff(startTimeDayjs, 'minute');
+    if (diffMinutes <= 0) return 0;
+    const hours = diffMinutes / 60;
+
+    const isWeekend = dateDayjs ? (dateDayjs.day() === 0 || dateDayjs.day() === 6) : false;
+    let hourlyRate = isWeekend ? 140000 : 100000;
+
+    if (slots && slots.length > 0) {
+      const sStr = startTimeDayjs.format('HH:mm');
+      const found = slots.find((s) => s.startTime === sStr);
+      if (found && found.price) {
+        hourlyRate = found.price;
+      } else if (slots[0]?.price) {
+        hourlyRate = slots[0].price;
+      }
+    }
+
+    return Math.round(hourlyRate * hours);
+  };
+
   // Tải khung giờ trống cho form tạo đơn
   const fetchCreateSlotAvailability = async (courtId, date) => {
     if (!courtId || !date) return;
@@ -217,6 +255,8 @@ export default function AdminBookingListPage() {
       const res = await bookingService.getCourtAvailability(courtId, dateStr);
       if (res.success && res.data && res.data.slots) {
         setCreateAvailableSlots(res.data.slots);
+        const price = getCalculatedPrice(createStartTime, createEndTime, date, res.data.slots);
+        recalculateCreateAmounts(price);
       }
     } catch (err) {
       console.error('Lỗi tải khung giờ trống:', err);
@@ -236,11 +276,15 @@ export default function AdminBookingListPage() {
     setNewCustomerEmail('');
     setCreateCourtId(defaultCourt);
     setCreateBookingDate(dayjs());
-    setCreateTimeSlot('');
-    setCreatePrice(0);
+    const initStart = dayjs('08:00', 'HH:mm');
+    const initEnd = dayjs('09:00', 'HH:mm');
+    setCreateStartTime(initStart);
+    setCreateEndTime(initEnd);
+    setCreatePrice(100000);
     setCreateVoucherCode('');
     setCreateDiscount(0);
-    setCreateTotalAmount(0);
+    setCreateTotalAmount(100000);
+    setCreatePaymentMethod('CASH');
     setCreateNote('Khách đặt tại quầy');
     setCreateStatus('CONFIRMED');
     setAppliedCreateVoucher(null);
@@ -250,23 +294,15 @@ export default function AdminBookingListPage() {
     }
   };
 
-  // Khi đổi Sân ở form tạo đơn
+  // Khi đổi Sân ở form tạo đơn -> cập nhật ngay khung giờ và đơn giá theo thời gian chọn
   const handleCreateCourtChange = (newCourtId) => {
     setCreateCourtId(newCourtId);
-    setCreateTimeSlot('');
-    setCreatePrice(0);
-    setCreateDiscount(0);
-    setCreateTotalAmount(0);
     fetchCreateSlotAvailability(newCourtId, createBookingDate);
   };
 
-  // Khi đổi Ngày ở form tạo đơn
+  // Khi đổi Ngày ở form tạo đơn -> cập nhật ngay khung giờ và đơn giá theo thời gian chọn
   const handleCreateDateChange = (newDate) => {
     setCreateBookingDate(newDate);
-    setCreateTimeSlot('');
-    setCreatePrice(0);
-    setCreateDiscount(0);
-    setCreateTotalAmount(0);
     fetchCreateSlotAvailability(createCourtId, newDate);
   };
 
@@ -290,14 +326,25 @@ export default function AdminBookingListPage() {
     setCreateTotalAmount(Math.max(0, base - disc));
   };
 
-  // Khi đổi Khung giờ ở form tạo đơn
-  const handleCreateTimeSlotChange = (slotVal) => {
-    setCreateTimeSlot(slotVal);
-    const start = slotVal.split(' - ')[0]?.trim();
-    const found = createAvailableSlots.find((s) => s.startTime === start);
-    if (found) {
-      recalculateCreateAmounts(found.price || 0);
+  // Khi đổi Thời gian bắt đầu ở form tạo đơn
+  const handleCreateStartTimeChange = (newStartTime) => {
+    if (!newStartTime) return;
+    setCreateStartTime(newStartTime);
+    let end = createEndTime;
+    if (!end || !end.isAfter(newStartTime)) {
+      end = newStartTime.add(1, 'hour');
+      setCreateEndTime(end);
     }
+    const price = getCalculatedPrice(newStartTime, end, createBookingDate, createAvailableSlots);
+    recalculateCreateAmounts(price);
+  };
+
+  // Khi đổi Thời gian kết thúc ở form tạo đơn
+  const handleCreateEndTimeChange = (newEndTime) => {
+    if (!newEndTime) return;
+    setCreateEndTime(newEndTime);
+    const price = getCalculatedPrice(createStartTime, newEndTime, createBookingDate, createAvailableSlots);
+    recalculateCreateAmounts(price);
   };
 
   // Áp dụng voucher ở form tạo đơn
@@ -348,12 +395,17 @@ export default function AdminBookingListPage() {
       message.warning('Vui lòng chọn ngày đặt sân!');
       return;
     }
-    if (!createTimeSlot) {
-      message.warning('Vui lòng chọn khung giờ chơi!');
+    if (!createStartTime || !createEndTime) {
+      message.warning('Vui lòng chọn đầy đủ thời gian bắt đầu và kết thúc!');
+      return;
+    }
+    if (!createStartTime.isBefore(createEndTime)) {
+      message.warning('Thời gian kết thúc phải sau thời gian bắt đầu!');
       return;
     }
 
-    const [startTime, endTime] = createTimeSlot.split(' - ').map((s) => s.trim());
+    const startTime = createStartTime.format('HH:mm');
+    const endTime = createEndTime.format('HH:mm');
 
     try {
       setCreatingBooking(true);
@@ -361,7 +413,7 @@ export default function AdminBookingListPage() {
         customerId: customerMode === 'EXISTING' ? selectedCustomerId : undefined,
         customerName: customerMode === 'WALK_IN' ? newCustomerName.trim() : undefined,
         customerPhone: customerMode === 'WALK_IN' ? newCustomerPhone.trim() : undefined,
-        customerEmail: customerMode === 'WALK_IN' ? newCustomerEmail.trim() : undefined,
+        customerEmail: customerMode === 'WALK_IN' && newCustomerEmail.trim() ? newCustomerEmail.trim() : undefined,
         courtId: createCourtId,
         bookingDate: createBookingDate.format('YYYY-MM-DD'),
         startTime,
@@ -370,7 +422,7 @@ export default function AdminBookingListPage() {
         voucherCode: appliedCreateVoucher ? appliedCreateVoucher.voucherCode : undefined,
         discount: createDiscount,
         totalAmount: createTotalAmount,
-        paymentMethod: 'CASH',
+        paymentMethod: createPaymentMethod || 'CASH',
         paymentStatus: 'UNPAID',
         status: createStatus,
         note: createNote.trim()
@@ -494,7 +546,7 @@ export default function AdminBookingListPage() {
   };
 
   // Tải tình trạng khung giờ và giá tiền tương ứng theo Sân và Ngày chơi
-  const fetchCourtAvailabilityForModal = async (courtId, bookingDate, currentBooking, targetSlotStr) => {
+  const fetchCourtAvailabilityForModal = async (courtId, bookingDate) => {
     if (!courtId || !bookingDate) return;
     try {
       setLoadingSlots(true);
@@ -502,15 +554,6 @@ export default function AdminBookingListPage() {
       const res = await bookingService.getCourtAvailability(courtId, dateStr);
       if (res.success && res.data && res.data.slots) {
         setAvailableSlots(res.data.slots);
-
-        // Khung giờ đang chọn
-        const slotStr = targetSlotStr || `${currentBooking?.startTime} - ${currentBooking?.endTime}`;
-        const start = slotStr ? slotStr.split(' - ')[0]?.trim() : '';
-        const found = res.data.slots.find((s) => s.startTime === start);
-
-        if (found) {
-          recalculateAmounts(found.price || 0);
-        }
       }
     } catch (err) {
       console.error('Lỗi tải bảng giá và khung giờ sân:', err);
@@ -522,23 +565,38 @@ export default function AdminBookingListPage() {
   // Đổi sân thi đấu -> Tải lại danh sách giờ và giá của sân đó
   const handleCourtChange = (newCourtId) => {
     setEditCourtId(newCourtId);
-    fetchCourtAvailabilityForModal(newCourtId, editBookingDate, selectedBooking, editTimeSlot);
+    fetchCourtAvailabilityForModal(newCourtId, editBookingDate);
+    const price = getCalculatedPrice(editStartTime, editEndTime, editBookingDate, availableSlots);
+    recalculateAmounts(price);
   };
 
   // Đổi ngày chơi -> Tải lại danh sách giờ và giá (ngày thường / cuối tuần)
   const handleBookingDateChange = (newDate) => {
     setEditBookingDate(newDate);
-    fetchCourtAvailabilityForModal(editCourtId, newDate, selectedBooking, editTimeSlot);
+    fetchCourtAvailabilityForModal(editCourtId, newDate);
+    const price = getCalculatedPrice(editStartTime, editEndTime, newDate, availableSlots);
+    recalculateAmounts(price);
   };
 
-  // Đổi giờ đặt -> Cập nhật ngay giá đi kèm với giờ và sân đó
-  const handleTimeSlotChange = (newSlotStr) => {
-    setEditTimeSlot(newSlotStr);
-    const start = newSlotStr.split(' - ')[0]?.trim();
-    const found = availableSlots.find((s) => s.startTime === start);
-    if (found) {
-      recalculateAmounts(found.price || 0);
+  // Đổi Thời gian bắt đầu ở form sửa
+  const handleEditStartTimeChange = (newStartTime) => {
+    if (!newStartTime) return;
+    setEditStartTime(newStartTime);
+    let end = editEndTime;
+    if (!end || !end.isAfter(newStartTime)) {
+      end = newStartTime.add(1, 'hour');
+      setEditEndTime(end);
     }
+    const price = getCalculatedPrice(newStartTime, end, editBookingDate, availableSlots);
+    recalculateAmounts(price);
+  };
+
+  // Đổi Thời gian kết thúc ở form sửa
+  const handleEditEndTimeChange = (newEndTime) => {
+    if (!newEndTime) return;
+    setEditEndTime(newEndTime);
+    const price = getCalculatedPrice(editStartTime, newEndTime, editBookingDate, availableSlots);
+    recalculateAmounts(price);
   };
 
   // Mở modal xem chi tiết
@@ -549,10 +607,12 @@ export default function AdminBookingListPage() {
     setEditNote(record.note || '');
     const courtId = record.courtId?._id || record.courtId || '';
     const date = record.bookingDate ? dayjs(record.bookingDate) : dayjs();
-    const slotStr = `${record.startTime} - ${record.endTime}`;
+    const startDj = record.startTime ? dayjs(record.startTime, 'HH:mm') : dayjs('08:00', 'HH:mm');
+    const endDj = record.endTime ? dayjs(record.endTime, 'HH:mm') : dayjs('09:00', 'HH:mm');
     setEditCourtId(courtId);
     setEditBookingDate(date);
-    setEditTimeSlot(slotStr);
+    setEditStartTime(startDj);
+    setEditEndTime(endDj);
     setEditPrice(record.price || 0);
     setEditDiscount(record.discount || 0);
     setEditTotalAmount(record.totalAmount || 0);
@@ -560,7 +620,7 @@ export default function AdminBookingListPage() {
     setRejectReason('');
     setIsEditInfoMode(false); // Khóa các ô input như xem chi tiết bình thường
     setIsDetailModalOpen(true);
-    fetchCourtAvailabilityForModal(courtId, date, record, slotStr);
+    fetchCourtAvailabilityForModal(courtId, date);
   };
 
   // Hủy sửa thông tin đặt sân (khóa lại)
@@ -568,7 +628,8 @@ export default function AdminBookingListPage() {
     if (selectedBooking) {
       setEditCourtId(selectedBooking.courtId?._id || selectedBooking.courtId || '');
       setEditBookingDate(selectedBooking.bookingDate ? dayjs(selectedBooking.bookingDate) : dayjs());
-      setEditTimeSlot(`${selectedBooking.startTime} - ${selectedBooking.endTime}`);
+      setEditStartTime(selectedBooking.startTime ? dayjs(selectedBooking.startTime, 'HH:mm') : dayjs('08:00', 'HH:mm'));
+      setEditEndTime(selectedBooking.endTime ? dayjs(selectedBooking.endTime, 'HH:mm') : dayjs('09:00', 'HH:mm'));
       setEditPrice(selectedBooking.price || 0);
       setEditDiscount(selectedBooking.discount || 0);
       setEditTotalAmount(selectedBooking.totalAmount || 0);
@@ -579,12 +640,21 @@ export default function AdminBookingListPage() {
   };
 
   // Thao tác duyệt / xác nhận hoặc từ chối đơn
-  const handleUpdateStatus = async (bookingId, newStatus) => {
+  const handleUpdateStatus = async (bookingId, newStatus, newPaymentStatus) => {
     try {
       setLoading(true);
-      const res = await bookingService.updateBookingStatus(bookingId, { status: newStatus });
+      const payload = {};
+      if (newStatus) payload.status = newStatus;
+      if (newPaymentStatus) payload.paymentStatus = newPaymentStatus;
+
+      const res = await bookingService.updateBookingStatus(bookingId, payload);
       if (res.success) {
-        const actionText = newStatus === 'CONFIRMED' ? 'xác nhận duyệt đơn' : 'hủy đơn';
+        let actionText = 'cập nhật trạng thái';
+        if (newStatus === 'CONFIRMED') actionText = 'xác nhận duyệt đơn';
+        else if (newStatus === 'CHECKED_IN') actionText = 'check-in nhận sân';
+        else if (newStatus === 'COMPLETED') actionText = 'hoàn thành ca chơi';
+        else if (newStatus === 'CANCELLED') actionText = 'hủy đơn';
+        else if (newPaymentStatus === 'PAID') actionText = 'xác nhận thanh toán';
         message.success(`Đã ${actionText} thành công!`);
         fetchBookings();
         if (isDetailModalOpen) {
@@ -601,16 +671,19 @@ export default function AdminBookingListPage() {
   // AF1: Xử lý thay đổi thông tin đặt sân (Change Booking Information)
   const handleChangeBookingInfo = async () => {
     if (!selectedBooking) return;
+    if (!editStartTime || !editEndTime) {
+      message.warning('Vui lòng chọn đầy đủ thời gian bắt đầu và kết thúc!');
+      return;
+    }
+    if (!editStartTime.isBefore(editEndTime)) {
+      message.warning('Thời gian kết thúc phải sau thời gian bắt đầu!');
+      return;
+    }
+
     try {
       setIsChangingInfo(true);
-      let startTime = selectedBooking.startTime;
-      let endTime = selectedBooking.endTime;
-
-      if (editTimeSlot && editTimeSlot.includes(' - ')) {
-        const parts = editTimeSlot.split(' - ');
-        startTime = parts[0].trim();
-        endTime = parts[1].trim();
-      }
+      const startTime = editStartTime.format('HH:mm');
+      const endTime = editEndTime.format('HH:mm');
 
       const res = await bookingService.changeBookingInfo(selectedBooking._id, {
         courtId: editCourtId,
@@ -621,14 +694,15 @@ export default function AdminBookingListPage() {
         discount: editDiscount,
         totalAmount: editTotalAmount,
         paymentMethod: editPaymentMethod || 'CASH',
-        note: editNote
+        note: editNote,
+        status: 'CONFIRMED'
       });
 
       if (res.success) {
         if (res.message && res.message.includes('không thể gửi thông báo')) {
           message.warning(res.message); // E4
         } else {
-          message.success('Thay đổi thông tin đặt sân thành công!');
+          message.success('Thay đổi thông tin và xác nhận đặt sân thành công!');
         }
         setIsEditInfoMode(false);
         setIsDetailModalOpen(false);
@@ -824,6 +898,24 @@ export default function AdminBookingListPage() {
       }
     },
     {
+      title: 'Tổng Tiền',
+      dataIndex: 'totalAmount',
+      key: 'totalAmount',
+      width: 140,
+      render: (amount, record) => (
+        <div>
+          <Text strong style={{ color: '#009B60', fontSize: 14 }}>
+            {(amount || 0).toLocaleString('vi-VN')} đ
+          </Text>
+          {record.discount > 0 && (
+            <div style={{ fontSize: 11, color: '#16a34a' }}>
+              Giảm: -{record.discount.toLocaleString('vi-VN')} đ
+            </div>
+          )}
+        </div>
+      )
+    },
+    {
       title: 'Thanh Toán',
       dataIndex: 'paymentStatus',
       key: 'paymentStatus',
@@ -879,6 +971,62 @@ export default function AdminBookingListPage() {
                   style={{ backgroundColor: '#009B60', borderColor: '#009B60' }}
                 >
                   Xác nhận
+                </Button>
+              </Popconfirm>
+            )}
+
+            {/* CONFIRMED -> CHECKED_IN */}
+            {record.status === 'CONFIRMED' && (
+              <Popconfirm
+                title="Xác nhận khách đã đến nhận sân thi đấu?"
+                onConfirm={() => handleUpdateStatus(record._id, 'CHECKED_IN')}
+                okText="Nhận sân"
+                cancelText="Hủy"
+              >
+                <Button
+                  size="small"
+                  type="primary"
+                  icon={<PlayCircleOutlined />}
+                  style={{ backgroundColor: '#0284c7', borderColor: '#0284c7' }}
+                >
+                  Nhận sân
+                </Button>
+              </Popconfirm>
+            )}
+
+            {/* CHECKED_IN -> COMPLETED */}
+            {record.status === 'CHECKED_IN' && (
+              <Popconfirm
+                title="Xác nhận khách đã chơi xong và trả sân?"
+                onConfirm={() => handleUpdateStatus(record._id, 'COMPLETED')}
+                okText="Hoàn thành"
+                cancelText="Hủy"
+              >
+                <Button
+                  size="small"
+                  type="primary"
+                  icon={<CheckCircleOutlined />}
+                  style={{ backgroundColor: '#10b981', borderColor: '#10b981' }}
+                >
+                  Hoàn thành
+                </Button>
+              </Popconfirm>
+            )}
+
+            {/* Thu tiền nếu UNPAID */}
+            {record.paymentStatus === 'UNPAID' && ['CONFIRMED', 'CHECKED_IN', 'COMPLETED'].includes(record.status) && (
+              <Popconfirm
+                title="Xác nhận khách đã thanh toán đơn này?"
+                onConfirm={() => handleUpdateStatus(record._id, undefined, 'PAID')}
+                okText="Đã thanh toán"
+                cancelText="Hủy"
+              >
+                <Button
+                  size="small"
+                  icon={<DollarOutlined />}
+                  style={{ borderColor: '#faad14', color: '#d48806' }}
+                >
+                  Thu tiền
                 </Button>
               </Popconfirm>
             )}
@@ -1062,6 +1210,8 @@ export default function AdminBookingListPage() {
               <Option value="ALL">Tất cả trạng thái</Option>
               <Option value="PENDING">Chờ duyệt (PENDING)</Option>
               <Option value="CONFIRMED">Đã xác nhận (CONFIRMED)</Option>
+              <Option value="CHECKED_IN">Đang chơi / Nhận sân (CHECKED_IN)</Option>
+              <Option value="COMPLETED">Hoàn thành (COMPLETED)</Option>
               <Option value="CANCELLED">Đã hủy (CANCELLED)</Option>
               <Option value="REJECTED">Từ chối (REJECTED)</Option>
             </Select>
@@ -1158,74 +1308,130 @@ export default function AdminBookingListPage() {
         footer={
           isEditInfoMode
             ? [
-                <Button key="cancel-edit" onClick={handleCancelEditInfo}>
-                  Hủy
-                </Button>,
-                <Button
-                  key="save-info"
-                  type="primary"
-                  loading={isChangingInfo}
-                  icon={<CheckCircleOutlined />}
-                  style={{ backgroundColor: '#009B60', borderColor: '#009B60' }}
-                  onClick={handleChangeBookingInfo}
-                >
-                  xác nhận
-                </Button>
-              ]
+              <Button key="cancel-edit" onClick={handleCancelEditInfo}>
+                Hủy
+              </Button>,
+              <Button
+                key="save-info"
+                type="primary"
+                loading={isChangingInfo}
+                icon={<CheckCircleOutlined />}
+                style={{ backgroundColor: '#009B60', borderColor: '#009B60' }}
+                onClick={handleChangeBookingInfo}
+              >
+                xác nhận
+              </Button>
+            ]
             : [
+              <Button
+                key="back"
+                onClick={() => {
+                  setIsEditInfoMode(false);
+                  setIsDetailModalOpen(false);
+                }}
+              >
+                Đóng
+              </Button>,
+
+              // AF2: Từ chối yêu cầu đặt sân - Chỉ hiện khi đơn PENDING
+              selectedBooking?.status === 'PENDING' && (
                 <Button
-                  key="back"
-                  onClick={() => {
-                    setIsEditInfoMode(false);
-                    setIsDetailModalOpen(false);
-                  }}
+                  key="reject"
+                  danger
+                  icon={<StopOutlined />}
+                  onClick={() => setIsRejectModalOpen(true)}
                 >
-                  Đóng
-                </Button>,
+                  Từ chối
+                </Button>
+              ),
 
-                // AF2: Từ chối yêu cầu đặt sân - Chỉ hiện khi đơn PENDING
-                selectedBooking?.status === 'PENDING' && (
+              // AF1: Nút Thay Đổi Thông Tin Đặt Sân - Chỉ hiện khi đơn PENDING
+              selectedBooking?.status === 'PENDING' && (
+                <Button
+                  key="unlock-edit"
+                  icon={<EditOutlined />}
+                  style={{ borderColor: '#fa8c16', color: '#d46b08', fontWeight: 600 }}
+                  onClick={() => setIsEditInfoMode(true)}
+                >
+                  thay đổi thông tin
+                </Button>
+              ),
+
+              // Duyệt đơn đặt sân (Chỉ hiện khi PENDING)
+              selectedBooking?.status === 'PENDING' && (
+                <Popconfirm
+                  key="confirm"
+                  title="Xác nhận nhận và duyệt đơn này?"
+                  onConfirm={() => handleUpdateStatus(selectedBooking._id, 'CONFIRMED')}
+                  okText="Xác nhận"
+                  cancelText="Hủy"
+                >
                   <Button
-                    key="reject"
-                    danger
-                    icon={<StopOutlined />}
-                    onClick={() => setIsRejectModalOpen(true)}
+                    type="primary"
+                    style={{ backgroundColor: '#009B60', borderColor: '#009B60' }}
+                    icon={<CheckOutlined />}
                   >
-                    Từ chối
+                    xác nhận
                   </Button>
-                ),
+                </Popconfirm>
+              ),
 
-                // AF1: Nút Thay Đổi Thông Tin Đặt Sân - Chỉ hiện khi đơn PENDING
-                selectedBooking?.status === 'PENDING' && (
+              // Nhận sân (Khi CONFIRMED)
+              selectedBooking?.status === 'CONFIRMED' && (
+                <Popconfirm
+                  key="check-in"
+                  title="Xác nhận khách đã đến nhận sân thi đấu?"
+                  onConfirm={() => handleUpdateStatus(selectedBooking._id, 'CHECKED_IN')}
+                  okText="Nhận sân"
+                  cancelText="Hủy"
+                >
                   <Button
-                    key="unlock-edit"
-                    icon={<EditOutlined />}
-                    style={{ borderColor: '#fa8c16', color: '#d46b08', fontWeight: 600 }}
-                    onClick={() => setIsEditInfoMode(true)}
+                    type="primary"
+                    style={{ backgroundColor: '#0284c7', borderColor: '#0284c7' }}
+                    icon={<PlayCircleOutlined />}
                   >
-                    thay đổi thông tin
+                    Nhận sân (Check-in)
                   </Button>
-                ),
+                </Popconfirm>
+              ),
 
-                // Duyệt đơn đặt sân (Chỉ hiện khi PENDING)
-                selectedBooking?.status === 'PENDING' && (
-                  <Popconfirm
-                    key="confirm"
-                    title="Xác nhận nhận và duyệt đơn này?"
-                    onConfirm={() => handleUpdateStatus(selectedBooking._id, 'CONFIRMED')}
-                    okText="Xác nhận"
-                    cancelText="Hủy"
+              // Hoàn thành ca chơi (Khi CHECKED_IN)
+              selectedBooking?.status === 'CHECKED_IN' && (
+                <Popconfirm
+                  key="complete"
+                  title="Xác nhận khách đã chơi xong và trả sân?"
+                  onConfirm={() => handleUpdateStatus(selectedBooking._id, 'COMPLETED')}
+                  okText="Hoàn thành"
+                  cancelText="Hủy"
+                >
+                  <Button
+                    type="primary"
+                    style={{ backgroundColor: '#10b981', borderColor: '#10b981' }}
+                    icon={<CheckCircleOutlined />}
                   >
-                    <Button
-                      type="primary"
-                      style={{ backgroundColor: '#009B60', borderColor: '#009B60' }}
-                      icon={<CheckOutlined />}
-                    >
-                      xác nhận
-                    </Button>
-                  </Popconfirm>
-                )
-              ].filter(Boolean)
+                    Hoàn thành ca chơi
+                  </Button>
+                </Popconfirm>
+              ),
+
+              // Thu tiền nếu UNPAID
+              selectedBooking?.paymentStatus === 'UNPAID' && ['CONFIRMED', 'CHECKED_IN', 'COMPLETED'].includes(selectedBooking?.status) && (
+                <Popconfirm
+                  key="pay"
+                  title="Xác nhận khách đã thanh toán đơn này?"
+                  onConfirm={() => handleUpdateStatus(selectedBooking._id, undefined, 'PAID')}
+                  okText="Đã thanh toán"
+                  cancelText="Hủy"
+                >
+                  <Button
+                    icon={<DollarOutlined />}
+                    style={{ borderColor: '#faad14', color: '#d48806', fontWeight: 600 }}
+                  >
+                    Xác nhận thu tiền
+                  </Button>
+                </Popconfirm>
+              )
+            ].filter(Boolean)
         }
       >
         {selectedBooking && (
@@ -1322,36 +1528,47 @@ export default function AdminBookingListPage() {
                 )}
               </Descriptions.Item>
 
-              {/* Khung Giờ & Giá đi kèm: Mở khóa khi isEditInfoMode = true */}
-              <Descriptions.Item label="Khung Giờ">
+              {/* Thời Gian Chơi: Mở khóa khi isEditInfoMode = true */}
+              <Descriptions.Item label="Thời Gian Chơi">
                 {isEditInfoMode ? (
-                  <Select
-                    style={{ width: '100%' }}
-                    value={editTimeSlot}
-                    onChange={handleTimeSlotChange}
-                    loading={loadingSlots}
-                    placeholder="Chọn khung giờ"
-                  >
-                    {availableSlots.length > 0
-                      ? availableSlots.map((slot) => {
-                          const slotVal = `${slot.startTime} - ${slot.endTime}`;
-                          const isCurrentBookingSlot =
-                            selectedBooking?.startTime === slot.startTime &&
-                            (selectedBooking?.courtId?._id || selectedBooking?.courtId) === editCourtId;
-                          const isBooked = slot.isBooked && !isCurrentBookingSlot;
-                          return (
-                            <Option key={slotVal} value={slotVal} disabled={isBooked}>
-                              ⏰ {slotVal} — {(slot.price || 0).toLocaleString('vi-VN')} đ
-                              {isBooked ? ' (Đã có người đặt)' : ''}
-                            </Option>
-                          );
-                        })
-                      : timeSlots.map((ts) => (
-                          <Option key={`${ts.startTime} - ${ts.endTime}`} value={`${ts.startTime} - ${ts.endTime}`}>
-                            ⏰ {ts.startTime} - {ts.endTime}
-                          </Option>
-                        ))}
-                  </Select>
+                  <div>
+                    <Row gutter={[8, 8]}>
+                      <Col xs={24} sm={12}>
+                        <Text type="secondary" style={{ fontSize: 11, display: 'block', marginBottom: 2 }}>
+                          Giờ bắt đầu:
+                        </Text>
+                        <TimePicker
+                          format="HH:mm"
+                          minuteStep={15}
+                          style={{ width: '100%' }}
+                          value={editStartTime}
+                          onChange={handleEditStartTimeChange}
+                          placeholder="Bắt đầu"
+                          allowClear={false}
+                        />
+                      </Col>
+                      <Col xs={24} sm={12}>
+                        <Text type="secondary" style={{ fontSize: 11, display: 'block', marginBottom: 2 }}>
+                          Giờ kết thúc:
+                        </Text>
+                        <TimePicker
+                          format="HH:mm"
+                          minuteStep={15}
+                          style={{ width: '100%' }}
+                          value={editEndTime}
+                          onChange={handleEditEndTimeChange}
+                          placeholder="Kết thúc"
+                          allowClear={false}
+                        />
+                      </Col>
+                    </Row>
+                    {editStartTime && editEndTime && (
+                      <div style={{ marginTop: 6, fontSize: 12, color: '#009B60', fontWeight: 500 }}>
+                        ⏱️ {editStartTime.format('HH:mm')} - {editEndTime.format('HH:mm')}
+                        {editEndTime.isAfter(editStartTime) && ` (${(editEndTime.diff(editStartTime, 'minute') / 60).toFixed(1)} tiếng)`}
+                      </div>
+                    )}
+                  </div>
                 ) : (
                   <Tag color="geekblue" style={{ fontSize: 13, padding: '2px 8px' }}>
                     ⏰ {selectedBooking.startTime} - {selectedBooking.endTime}
@@ -1359,7 +1576,7 @@ export default function AdminBookingListPage() {
                 )}
               </Descriptions.Item>
 
-              {/* Đơn Giá Sân: Cho phép nhập hoặc tự động đổi theo giờ và sân */}
+              {/* Đơn Giá Sân: Đồng bộ tự động theo khung giờ chọn và cho phép chỉnh sửa */}
               <Descriptions.Item label="Đơn Giá Sân">
                 {isEditInfoMode ? (
                   <InputNumber
@@ -1404,14 +1621,11 @@ export default function AdminBookingListPage() {
                     placeholder="Phương thức thanh toán"
                   >
                     <Option value="CASH">Tiền mặt</Option>
-                    <Option value="VIETQR">VietQR</Option>
                     <Option value="TRANSFER">Chuyển khoản</Option>
                   </Select>
                 ) : (
                   <Tag color="blue">
-                    {selectedBooking.paymentMethod === 'VIETQR'
-                      ? 'VietQR'
-                      : selectedBooking.paymentMethod === 'TRANSFER'
+                    {selectedBooking.paymentMethod === 'TRANSFER'
                       ? 'Chuyển khoản'
                       : 'Tiền mặt'}
                   </Tag>
@@ -1637,27 +1851,63 @@ export default function AdminBookingListPage() {
                 />
               </Col>
 
-              <Col xs={24}>
+              <Col xs={24} sm={12}>
                 <Text strong style={{ display: 'block', marginBottom: 4 }}>
-                  Khung giờ chơi <span style={{ color: 'red' }}>*</span>
+                  Thời gian bắt đầu <span style={{ color: 'red' }}>*</span>
                 </Text>
-                <Select
-                  style={{ width: '100%' }}
-                  value={createTimeSlot || undefined}
-                  onChange={handleCreateTimeSlotChange}
-                  loading={loadingCreateSlots}
-                  placeholder="Chọn khung giờ khả dụng"
-                >
-                  {createAvailableSlots.map((slot) => {
-                    const slotVal = `${slot.startTime} - ${slot.endTime}`;
-                    return (
-                      <Option key={slotVal} value={slotVal} disabled={slot.isBooked}>
-                        ⏰ {slotVal} — {(slot.price || 0).toLocaleString('vi-VN')} đ
-                        {slot.isBooked ? ' (Đã có người đặt)' : ' (Còn trống)'}
-                      </Option>
-                    );
-                  })}
-                </Select>
+                <TimePicker
+                  format="HH:mm"
+                  minuteStep={15}
+                  style={{ width: '100%', height: 38 }}
+                  value={createStartTime}
+                  onChange={handleCreateStartTimeChange}
+                  placeholder="Giờ bắt đầu (VD: 08:00)"
+                  allowClear={false}
+                />
+              </Col>
+
+              <Col xs={24} sm={12}>
+                <Text strong style={{ display: 'block', marginBottom: 4 }}>
+                  Thời gian kết thúc <span style={{ color: 'red' }}>*</span>
+                </Text>
+                <TimePicker
+                  format="HH:mm"
+                  minuteStep={15}
+                  style={{ width: '100%', height: 38 }}
+                  value={createEndTime}
+                  onChange={handleCreateEndTimeChange}
+                  placeholder="Giờ kết thúc (VD: 10:00)"
+                  allowClear={false}
+                />
+              </Col>
+
+              <Col xs={24}>
+                <div style={{ background: '#f8fafc', padding: '10px 14px', borderRadius: 8, border: '1px solid #e2e8f0' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <Text strong style={{ color: '#009B60', fontSize: 13 }}>
+                      ⏱️ Thời lượng đặt: {createStartTime && createEndTime && createEndTime.isAfter(createStartTime)
+                        ? `${Math.floor(createEndTime.diff(createStartTime, 'minute') / 60)} giờ ${createEndTime.diff(createStartTime, 'minute') % 60} phút (${(createEndTime.diff(createStartTime, 'minute') / 60).toFixed(1)} tiếng)`
+                        : 'Vui lòng chọn giờ kết thúc sau giờ bắt đầu'}
+                    </Text>
+                    <Text type="secondary" style={{ fontSize: 12 }}>
+                      Khung giờ: {createStartTime ? createStartTime.format('HH:mm') : ''} - {createEndTime ? createEndTime.format('HH:mm') : ''}
+                    </Text>
+                  </div>
+                  {createAvailableSlots && createAvailableSlots.some(s => s.isBooked) && (
+                    <div style={{ marginTop: 8, fontSize: 12 }}>
+                      <Text type="secondary" style={{ display: 'block', marginBottom: 4 }}>
+                        ⚠️ Các giờ đã có khách đặt trước trên sân này trong ngày:
+                      </Text>
+                      <Space wrap size={[4, 4]}>
+                        {createAvailableSlots.filter(s => s.isBooked).map(s => (
+                          <Tag key={s.startTime} color="error" style={{ fontSize: 11, borderRadius: 4 }}>
+                            {s.startTime} - {s.endTime}
+                          </Tag>
+                        ))}
+                      </Space>
+                    </div>
+                  )}
+                </div>
               </Col>
             </Row>
           </Card>
@@ -1737,7 +1987,19 @@ export default function AdminBookingListPage() {
                 </div>
               </Col>
 
-
+              <Col xs={24} sm={8}>
+                <Text strong style={{ display: 'block', marginBottom: 4 }}>
+                  Phương thức thanh toán
+                </Text>
+                <Select
+                  style={{ width: '100%' }}
+                  value={createPaymentMethod}
+                  onChange={setCreatePaymentMethod}
+                >
+                  <Option value="CASH">Tiền mặt (Mặc định)</Option>
+                  <Option value="TRANSFER">Chuyển khoản</Option>
+                </Select>
+              </Col>
 
               <Col xs={24}>
                 <Text strong style={{ display: 'block', marginBottom: 4 }}>

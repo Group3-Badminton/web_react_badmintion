@@ -88,7 +88,7 @@ export default function AppSidebar({ collapsed }) {
     }
 
     // Bookings
-    if (isAdmin || hasPermission(STAFF_PERMISSIONS.MANAGE_BOOKINGS)) {
+    if (isAdmin || isStaff || hasPermission(STAFF_PERMISSIONS.MANAGE_BOOKINGS)) {
       items.push({
         key: '/admin/bookings',
         icon: <CalendarOutlined />,
