@@ -20,6 +20,9 @@ import ProfilePage from "../pages/profile/ProfilePage";
 import PricingManagementPage from "../pages/admin/PricingManagementPage";
 import StaffManagementPage from "../pages/admin/StaffManagementPage";
 import CourtManagementPage from "../pages/admin/CourtManagementPage";
+import PlayingSessionPage from "../pages/admin/PlayingSessionPage";
+import PosPaymentPage from "../pages/pos/PosPaymentPage";
+import PaymentHistoryPage from "../pages/invoice/PaymentHistoryPage";
 import { ROLES } from "../utils/constants";
 import { Result, Button } from "antd";
 
@@ -83,6 +86,40 @@ export default function AppRoutes() {
           element={
             <ProtectedRoute allowedRoles={[ROLES.ADMIN, ROLES.STAFF]}>
               <AdminDashboardPage />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/admin/monitor"
+          element={
+            <ProtectedRoute allowedRoles={[ROLES.ADMIN, ROLES.STAFF]}>
+              <PlayingSessionPage />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/staff/monitor"
+          element={
+            <ProtectedRoute allowedRoles={[ROLES.ADMIN, ROLES.STAFF]}>
+              <PlayingSessionPage />
+            </ProtectedRoute>
+          }
+        />
+        {/* Point of Sale Payment */}
+        <Route
+          path="/admin/pos"
+          element={
+            <ProtectedRoute allowedRoles={[ROLES.ADMIN, ROLES.STAFF]}>
+              <PosPaymentPage />
+            </ProtectedRoute>
+          }
+        />
+        {/* Payment History & Invoice Management */}
+        <Route
+          path="/admin/invoices"
+          element={
+            <ProtectedRoute allowedRoles={[ROLES.ADMIN, ROLES.STAFF]}>
+              <PaymentHistoryPage />
             </ProtectedRoute>
           }
         />

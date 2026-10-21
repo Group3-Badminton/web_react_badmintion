@@ -60,21 +60,20 @@ export default function AppSidebar({ collapsed }) {
       });
     }
 
-    // Live Court Board Monitor
-    if (isAdmin || hasPermission(STAFF_PERMISSIONS.CHECKIN_CHECKOUT)) {
+    if (isAdmin || isStaff || hasPermission(STAFF_PERMISSIONS.CHECKIN_CHECKOUT)) {
       items.push({
-        key: '/admin/monitor',
+        key: isStaff ? '/staff/monitor' : '/admin/monitor',
         icon: <PlayCircleOutlined style={{ color: '#1890ff' }} />,
         label: 'Bảng ca đấu trực tiếp'
       });
     }
 
     // POS & Inventory
-    if (isAdmin || hasPermission(STAFF_PERMISSIONS.POS_SALES)) {
+    if (isAdmin || isStaff || hasPermission(STAFF_PERMISSIONS.POS_SALES)) {
       items.push({
         key: '/admin/pos',
         icon: <ShoppingCartOutlined />,
-        label: 'Bán hàng POS & Kho'
+        label: 'Bán hàng POS'
       });
     }
 
