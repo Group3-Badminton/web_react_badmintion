@@ -34,7 +34,6 @@ export default function AppRoutes() {
       <Route element={<AuthLayout />}>
         <Route path="/login" element={<LoginPage />} />
         <Route path="/register" element={<RegisterPage />} />
-        <Route path="/reset-password" element={<ResetPasswordPage />} />
         <Route path="/reset-Password" element={<ResetPasswordPage />} />
       </Route>
 
@@ -133,7 +132,6 @@ export default function AppRoutes() {
             </ProtectedRoute>
           }
         />
-        {/* Customer Management (Staff & Admin - UC-06) */}
         <Route
           path="/admin/customers"
           element={
