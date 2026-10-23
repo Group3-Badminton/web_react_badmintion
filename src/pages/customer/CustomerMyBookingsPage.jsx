@@ -8,7 +8,6 @@ import {
   Typography,
   Modal,
   Descriptions,
-  Popconfirm,
   message,
   Tooltip,
   Select,
@@ -17,7 +16,11 @@ import {
   Col,
   Empty,
   Statistic,
-  Alert
+  Alert,
+  Divider,
+  Spin,
+  DatePicker,
+  TimePicker
 } from 'antd';
 import {
   CalendarOutlined,
@@ -32,19 +35,56 @@ import {
   SearchOutlined,
   StopOutlined,
   PlayCircleOutlined,
-  ExclamationCircleOutlined
+  ExclamationCircleOutlined,
+  UserOutlined,
+  PhoneOutlined,
+  EnvironmentOutlined,
+  EditOutlined,
+  PlusOutlined
 } from '@ant-design/icons';
 import { useNavigate } from 'react-router-dom';
 import dayjs from 'dayjs';
+import customParseFormat from 'dayjs/plugin/customParseFormat';
 import { bookingService } from '../../services/bookingService';
+import { useAuth } from '../../context/AuthContext';
+
+dayjs.extend(customParseFormat);
 
 const { Title, Text } = Typography;
 const { Option } = Select;
+
+const getBusinessDateParts = (value) => {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return null;
+  const parts = new Intl.DateTimeFormat('en-US', {
+    timeZone: 'Asia/Ho_Chi_Minh',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit'
+  }).formatToParts(date);
+  return Object.fromEntries(parts.map((part) => [part.type, part.value]));
+};
+
+const getBusinessStartDate = (dateValue, time) => {
+  const parts = getBusinessDateParts(dateValue);
+  if (!parts || !/^(?:[01]\d|2[0-3]):[0-5]\d$/.test(time || '')) return null;
+  return new Date(`${parts.year}-${parts.month}-${parts.day}T${time}:00+07:00`);
+};
+
+const formatBusinessDate = (dateValue) => {
+  const parts = getBusinessDateParts(dateValue);
+  return parts ? `${parts.day}/${parts.month}/${parts.year}` : 'Chưa có ngày';
+};
 
 const STATUS_CONFIG = {
   PENDING: {
     color: 'gold',
     label: 'Chờ duyệt',
+    icon: <ClockCircleOutlined />
+  },
+  PENDING_APPROVAL: {
+    color: 'gold',
+    label: 'Chờ Admin/Staff duyệt',
     icon: <ClockCircleOutlined />
   },
   CONFIRMED: {
@@ -76,6 +116,7 @@ const STATUS_CONFIG = {
 
 export default function CustomerMyBookingsPage() {
   const navigate = useNavigate();
+  const { logout, isCustomer } = useAuth();
   const [loading, setLoading] = useState(false);
   const [bookings, setBookings] = useState([]);
   const [pagination, setPagination] = useState({ current: 1, pageSize: 10, total: 0 });
@@ -92,7 +133,105 @@ export default function CustomerMyBookingsPage() {
   // Modal chi tiết
   const [selectedBooking, setSelectedBooking] = useState(null);
   const [isDetailModalOpen, setIsDetailModalOpen] = useState(false);
+  const [detailLoading, setDetailLoading] = useState(false);
   const [cancellingId, setCancellingId] = useState(null);
+  const [availableCourts, setAvailableCourts] = useState([]);
+  const [isEditingBooking, setIsEditingBooking] = useState(false);
+  const [savingEdit, setSavingEdit] = useState(false);
+  const [editOrders, setEditOrders] = useState([]);
+
+  const isPending = (status) => status === 'PENDING' || status === 'PENDING_APPROVAL';
+  const canCancelBooking = (booking) => {
+    if (!booking) {
+      return false;
+    }
+    if (!isCustomer) return isPending(booking.status);
+    if (!['PENDING', 'PENDING_APPROVAL', 'CONFIRMED'].includes(booking.status)) return false;
+    const items = booking.items?.length
+      ? booking.items.filter((item) => item.status !== 'CANCELLED')
+      : [booking];
+    if (items.length === 0) return false;
+    return items.every((item) => {
+      const startsAt = getBusinessStartDate(
+        item.bookingDate || booking.bookingDate,
+        item.startTime || booking.startTime
+      );
+      return startsAt && startsAt.getTime() > Date.now();
+    });
+  };
+
+  const canCancelBookingItem = (booking, item) => {
+    if (
+      !isCustomer ||
+      !item?._id ||
+      item.status === 'CANCELLED' ||
+      !['PENDING', 'PENDING_APPROVAL', 'CONFIRMED'].includes(booking?.status)
+    ) {
+      return false;
+    }
+    const startsAt = getBusinessStartDate(
+      item.bookingDate || booking.bookingDate,
+      item.startTime || booking.startTime
+    );
+    return startsAt && startsAt.getTime() > Date.now();
+  };
+
+  const getCancellationItems = (booking) => booking.items?.length
+    ? booking.items.filter((item) => item.status !== 'CANCELLED')
+    : [booking];
+
+  const confirmCancelBooking = (booking, targetItem = null) => {
+    const items = targetItem ? [targetItem] : getCancellationItems(booking);
+    const isWholeOrder = !targetItem;
+    Modal.confirm({
+      title: isWholeOrder ? 'Xác nhận hủy đơn đặt sân' : 'Xác nhận hủy lịch sân',
+      content: (
+        <div>
+          <div><strong>Mã đơn:</strong> {booking.bookingCode}</div>
+          <div><strong>Phạm vi:</strong> {isWholeOrder
+            ? `Hủy toàn bộ lịch chưa hủy (${items.length} lịch sân)`
+            : 'Chỉ hủy lịch sân được chọn'}</div>
+          {items.map((item, index) => {
+            const courtName = item.courtId?.courtName || item.courtName || 'Sân';
+            return (
+              <div key={item._id || `${courtName}-${index}`} style={{ marginTop: 8 }}>
+                {courtName} — {formatBusinessDate(item.bookingDate || booking.bookingDate)} — {item.startTime || booking.startTime}–{item.endTime || booking.endTime}
+              </div>
+            );
+          })}
+          <div style={{ marginTop: 12 }}>
+            {isWholeOrder
+              ? 'Bạn có chắc chắn muốn hủy toàn bộ lịch sân còn lại trong đơn này?'
+              : 'Các lịch sân khác trong đơn sẽ được giữ nguyên.'}
+          </div>
+        </div>
+      ),
+      okText: 'Xác nhận hủy',
+      cancelText: 'Quay lại',
+      okButtonProps: { danger: true },
+      onOk: () => handleCancelBooking(booking._id, targetItem?._id)
+    });
+  };
+
+  // Mở modal và nạp chi tiết đơn từ database
+  const handleOpenDetailModal = async (record) => {
+    setIsEditingBooking(false);
+    setSelectedBooking(record);
+    setIsDetailModalOpen(true);
+    if (record?._id) {
+      try {
+        setDetailLoading(true);
+        const res = await bookingService.getBookingById(record._id);
+        if (res.success && res.data) {
+          setSelectedBooking(res.data);
+        }
+      } catch (err) {
+        console.warn('Lỗi tải dữ liệu chi tiết booking:', err);
+      } finally {
+        setDetailLoading(false);
+      }
+    }
+  };
 
   // Tải danh sách đơn đặt sân của khách hàng
   const fetchMyBookings = useCallback(
@@ -132,21 +271,98 @@ export default function CustomerMyBookingsPage() {
   }, [statusFilter]);
 
   // Hủy đơn đặt sân (chỉ khả dụng khi PENDING)
-  const handleCancelBooking = async (bookingId) => {
+  const handleCancelBooking = async (bookingId, itemId = null) => {
     try {
       setCancellingId(bookingId);
-      const res = await bookingService.updateBookingStatus(bookingId, { status: 'CANCELLED' });
+      const res = await bookingService.updateBookingStatus(bookingId, {
+        status: 'CANCELLED',
+        ...(itemId ? { itemId } : {})
+      });
       if (res.success) {
-        message.success('Đã hủy đơn đặt sân thành công!');
-        fetchMyBookings();
-        if (isDetailModalOpen) {
+        if (res.data?.cancellationResult?.accountLocked) {
+          message.warning(res.message || res.data.cancellationResult.lockReason);
           setIsDetailModalOpen(false);
+          await logout();
+          navigate('/login', { replace: true });
+          return;
+        }
+        message.success(res.message || 'Đã hủy đơn đặt sân thành công!');
+        await fetchMyBookings();
+        if (res.data.status === 'CANCELLED' && isDetailModalOpen) {
+          setIsDetailModalOpen(false);
+        } else if (isDetailModalOpen) {
+          setSelectedBooking(res.data);
         }
       }
     } catch (err) {
       message.error(err?.response?.data?.message || 'Không thể hủy đơn đặt sân!');
     } finally {
       setCancellingId(null);
+    }
+  };
+
+  const handleStartEditBooking = async () => {
+    if (!selectedBooking || !isPending(selectedBooking.status)) return;
+    try {
+      const res = await bookingService.getCourts();
+      if (res.success) setAvailableCourts(res.data || []);
+      const items = selectedBooking.items?.length
+        ? selectedBooking.items
+        : [{
+            itemIndex: 0,
+            courtId: selectedBooking.courtId?._id || selectedBooking.courtId,
+            bookingDate: selectedBooking.bookingDate,
+            startTime: selectedBooking.startTime,
+            endTime: selectedBooking.endTime,
+            price: selectedBooking.price
+          }];
+      setEditOrders(items.map((item, itemIndex) => ({
+        itemId: item._id || null,
+        itemIndex,
+        status: item.status || 'ACTIVE',
+        courtId: item.courtId?._id || item.courtId,
+        bookingDate: dayjs(item.bookingDate || selectedBooking.bookingDate),
+        startTime: dayjs(item.startTime, 'HH:mm'),
+        endTime: dayjs(item.endTime, 'HH:mm'),
+        price: item.price ?? selectedBooking.price ?? 0
+      })));
+      setIsEditingBooking(true);
+    } catch (err) {
+      message.error(err?.response?.data?.message || 'Không thể tải dữ liệu để sửa đơn.');
+    }
+  };
+
+  const handleSaveBookingEdit = async () => {
+    if (!selectedBooking || editOrders.length === 0 ||
+      editOrders.some((order) => !order.courtId || !order.bookingDate?.isValid() ||
+        !order.startTime?.isValid() || !order.endTime?.isValid() ||
+        !order.startTime.isBefore(order.endTime))) {
+      message.warning('Vui lòng chọn ngày, sân và khung giờ hợp lệ cho tất cả các mục.');
+      return;
+    }
+
+    try {
+      setSavingEdit(true);
+      const res = await bookingService.changeBookingInfo(selectedBooking._id, {
+        courtOrders: editOrders.map((order) => ({
+          ...(order.itemId ? { itemId: order.itemId } : {}),
+          ...(Number.isInteger(order.itemIndex) ? { itemIndex: order.itemIndex } : {}),
+          courtId: order.courtId,
+          bookingDate: order.bookingDate.format('YYYY-MM-DD'),
+          startTime: order.startTime.format('HH:mm'),
+          endTime: order.endTime.format('HH:mm')
+        }))
+      });
+      if (res.success) {
+        message.success('Đã cập nhật đơn. Đơn tiếp tục ở trạng thái chờ duyệt.');
+        setIsEditingBooking(false);
+        setSelectedBooking(res.data || selectedBooking);
+        await fetchMyBookings();
+      }
+    } catch (err) {
+      message.error(err?.response?.data?.message || 'Không thể cập nhật đơn đặt sân.');
+    } finally {
+      setSavingEdit(false);
     }
   };
 
@@ -160,10 +376,7 @@ export default function CustomerMyBookingsPage() {
         <Button
           type="link"
           style={{ padding: 0, fontWeight: 700, color: '#009B60' }}
-          onClick={() => {
-            setSelectedBooking(record);
-            setIsDetailModalOpen(true);
-          }}
+          onClick={() => handleOpenDetailModal(record)}
         >
           #{code}
         </Button>
@@ -171,28 +384,69 @@ export default function CustomerMyBookingsPage() {
     },
     {
       title: 'Sân Thi Đấu',
-      dataIndex: 'courtId',
       key: 'court',
-      render: (court) => (
-        <div>
-          <Text strong>{court?.courtName || 'Sân cầu lông'}</Text>
-          <div style={{ fontSize: 12, color: '#64748b' }}>{court?.courtType || court?.location || ''}</div>
-        </div>
-      )
+      render: (_, record) => {
+        const items = record.items || [];
+        if (items.length > 1) {
+          return (
+            <div>
+              <Space wrap size={[4, 4]}>
+                {items.map((it, idx) => {
+                  const cName = it.courtName || it.courtId?.courtName || `Sân #${idx + 1}`;
+                  return (
+                    <Tag key={it._id || idx} color="success" style={{ fontWeight: 600, borderRadius: 6, margin: 0 }}>
+                      🏸 {cName}
+                    </Tag>
+                  );
+                })}
+              </Space>
+              <div style={{ fontSize: 11, color: '#64748b', marginTop: 4 }}>
+                Đơn gồm {items.length} sân thi đấu
+              </div>
+            </div>
+          );
+        }
+        const singleCourt = record.courtId || (items[0]?.courtId) || items[0];
+        return (
+          <div>
+            <Text strong>🏸 {singleCourt?.courtName || items[0]?.courtName || 'Sân cầu lông'}</Text>
+            <div style={{ fontSize: 12, color: '#64748b' }}>
+              {singleCourt?.courtType || items[0]?.courtType || singleCourt?.location || ''}
+            </div>
+          </div>
+        );
+      }
     },
     {
       title: 'Ngày & Giờ Chơi',
       key: 'schedule',
-      render: (_, record) => (
-        <div>
-          <div style={{ fontWeight: 600, color: '#0f172a' }}>
-            📅 {dayjs(record.bookingDate).format('DD/MM/YYYY')}
+      render: (_, record) => {
+        const items = record.items || [];
+        return (
+          <div>
+            <div style={{ fontWeight: 600, color: '#0f172a', marginBottom: items.length > 1 ? 4 : 2 }}>
+              📅 {dayjs(record.bookingDate).format('DD/MM/YYYY')}
+            </div>
+            {items.length > 1 ? (
+              <Space direction="vertical" size={2}>
+                {items.map((it, idx) => {
+                  const cName = it.courtName || it.courtId?.courtName || `Sân ${idx + 1}`;
+                  return (
+                    <Tag key={it._id || idx} color="geekblue" style={{ fontSize: 11, borderRadius: 4, margin: 0 }}>
+                      <ClockCircleOutlined style={{ marginRight: 3 }} />
+                      {cName}: {dayjs(it.bookingDate || record.bookingDate).format('DD/MM')} {it.startTime} - {it.endTime}
+                    </Tag>
+                  );
+                })}
+              </Space>
+            ) : (
+              <Tag color="geekblue" style={{ marginTop: 2 }}>
+                <ClockCircleOutlined /> {record.startTime} - {record.endTime}
+              </Tag>
+            )}
           </div>
-          <Tag color="geekblue" style={{ marginTop: 4 }}>
-            <ClockCircleOutlined /> {record.startTime} - {record.endTime}
-          </Tag>
-        </div>
-      )
+        );
+      }
     },
     {
       title: 'Tổng Tiền',
@@ -254,31 +508,21 @@ export default function CustomerMyBookingsPage() {
             <Button
               size="small"
               icon={<EyeOutlined />}
-              onClick={() => {
-                setSelectedBooking(record);
-                setIsDetailModalOpen(true);
-              }}
+              onClick={() => handleOpenDetailModal(record)}
             >
               Xem
             </Button>
           </Tooltip>
 
-          {record.status === 'PENDING' && (
-            <Popconfirm
-              title="Bạn có chắc chắn muốn hủy đơn đặt sân này?"
-              onConfirm={() => handleCancelBooking(record._id)}
-              okText="Hủy đơn"
-              cancelText="Quay lại"
-              okButtonProps={{ danger: true }}
-            >
+          {canCancelBooking(record) && (
               <Button
                 size="small"
                 danger
                 loading={cancellingId === record._id}
+                onClick={() => confirmCancelBooking(record)}
               >
                 Hủy
               </Button>
-            </Popconfirm>
           )}
         </Space>
       )
@@ -389,7 +633,7 @@ export default function CustomerMyBookingsPage() {
               placeholder="Lọc theo trạng thái"
             >
               <Option value="ALL">Tất cả trạng thái</Option>
-              <Option value="PENDING">Chờ duyệt (PENDING)</Option>
+              <Option value="PENDING_APPROVAL">Chờ duyệt (PENDING_APPROVAL)</Option>
               <Option value="CONFIRMED">Đã xác nhận (CONFIRMED)</Option>
               <Option value="CHECKED_IN">Đã nhận sân (CHECKED_IN)</Option>
               <Option value="COMPLETED">Hoàn thành (COMPLETED)</Option>
@@ -458,123 +702,343 @@ export default function CustomerMyBookingsPage() {
         open={isDetailModalOpen}
         onCancel={() => setIsDetailModalOpen(false)}
         footer={[
-          selectedBooking?.status === 'PENDING' && (
-            <Popconfirm
+          canCancelBooking(selectedBooking) && (
+            <Button
               key="cancel-modal"
-              title="Bạn có chắc chắn muốn hủy đơn đặt sân này?"
-              onConfirm={() => handleCancelBooking(selectedBooking._id)}
-              okText="Hủy đơn"
-              cancelText="Quay lại"
-              okButtonProps={{ danger: true }}
+              danger
+              onClick={() => confirmCancelBooking(selectedBooking)}
+              loading={cancellingId === selectedBooking._id}
             >
-              <Button danger loading={cancellingId === selectedBooking._id}>
-                Hủy Đơn Này
-              </Button>
-            </Popconfirm>
+              Hủy Đơn Này
+            </Button>
           ),
           <Button key="close" type="primary" onClick={() => setIsDetailModalOpen(false)} style={{ backgroundColor: '#009B60', borderColor: '#009B60' }}>
             Đóng
           </Button>
         ].filter(Boolean)}
-        width={650}
+        width={720}
       >
         {selectedBooking && (
-          <div style={{ marginTop: 12 }}>
-            {selectedBooking.status === 'PENDING' && (
-              <Alert
-                message="Đơn đặt sân đang chờ duyệt"
-                description="Nhân viên sân sẽ sớm kiểm tra và xác nhận giữ sân cho bạn. Bạn có thể hủy đơn nếu thay đổi kế hoạch."
-                type="warning"
-                showIcon
-                style={{ marginBottom: 16 }}
-              />
-            )}
+          <Spin spinning={detailLoading}>
+            <div style={{ marginTop: 12 }}>
+              {isPending(selectedBooking.status) && (
+                <Alert
+                  message="Đơn đặt sân đang chờ duyệt"
+                  description="Nhân viên sân sẽ sớm kiểm tra và xác nhận giữ sân cho bạn. Bạn có thể hủy đơn nếu thay đổi kế hoạch."
+                  type="warning"
+                  showIcon
+                  style={{ marginBottom: 16 }}
+                />
+              )}
 
-            <Descriptions bordered size="small" column={{ xs: 1, sm: 2 }}>
-              <Descriptions.Item label="Mã Đơn">
-                <Text strong style={{ color: '#009B60' }}>
-                  #{selectedBooking.bookingCode}
-                </Text>
-              </Descriptions.Item>
+              {isPending(selectedBooking.status) && !isEditingBooking && (
+                <Button
+                  icon={<EditOutlined />}
+                  onClick={handleStartEditBooking}
+                  style={{ marginBottom: 16 }}
+                >
+                  Chỉnh sửa đơn
+                </Button>
+              )}
 
-              <Descriptions.Item label="Ngày Tạo Đơn">
-                {dayjs(selectedBooking.createdAt).format('HH:mm DD/MM/YYYY')}
-              </Descriptions.Item>
+              {isEditingBooking && (
+                <Card size="small" title="Chỉnh sửa yêu cầu đặt sân" style={{ marginBottom: 16 }}>
+                  <Space direction="vertical" style={{ width: '100%' }}>
+                    {editOrders.map((order, index) => (
+                      <Row gutter={[8, 8]} align="middle" key={order.itemId || `new-${index}`}>
+                        <Col xs={24} md={6}>
+                          <Select
+                            style={{ width: '100%' }}
+                            value={order.courtId}
+                            disabled={order.status === 'CANCELLED'}
+                            options={availableCourts.map((court) => ({
+                              value: court._id,
+                              label: court.courtName
+                            }))}
+                            onChange={(courtId) => setEditOrders((orders) =>
+                              orders.map((item, itemIndex) => itemIndex === index ? { ...item, courtId } : item)
+                            )}
+                            placeholder="Chọn sân"
+                          />
+                        </Col>
+                        <Col xs={24} md={5}>
+                          <DatePicker
+                            style={{ width: '100%' }}
+                            value={order.bookingDate}
+                            disabled={order.status === 'CANCELLED'}
+                            format="DD/MM/YYYY"
+                            disabledDate={(date) => date && date < dayjs().startOf('day')}
+                            onChange={(bookingDate) => setEditOrders((orders) =>
+                              orders.map((item, itemIndex) => itemIndex === index ? { ...item, bookingDate } : item)
+                            )}
+                          />
+                        </Col>
+                        <Col xs={12} md={4}>
+                          <TimePicker
+                            style={{ width: '100%' }}
+                            format="HH:mm"
+                            value={order.startTime}
+                            disabled={order.status === 'CANCELLED'}
+                            minuteStep={15}
+                            onChange={(startTime) => setEditOrders((orders) =>
+                              orders.map((item, itemIndex) => itemIndex === index ? { ...item, startTime } : item)
+                            )}
+                          />
+                        </Col>
+                        <Col xs={12} md={4}>
+                          <TimePicker
+                            style={{ width: '100%' }}
+                            format="HH:mm"
+                            value={order.endTime}
+                            disabled={order.status === 'CANCELLED'}
+                            minuteStep={15}
+                            onChange={(endTime) => setEditOrders((orders) =>
+                              orders.map((item, itemIndex) => itemIndex === index ? { ...item, endTime } : item)
+                            )}
+                          />
+                        </Col>
+                        <Col xs={24} md={5}>
+                          <Button
+                            danger
+                            disabled={editOrders.length === 1 || order.status === 'CANCELLED'}
+                            onClick={() => setEditOrders((orders) => orders.filter((_, itemIndex) => itemIndex !== index))}
+                          >
+                            Xóa
+                          </Button>
+                        </Col>
+                      </Row>
+                    ))}
+                    <Space>
+                      <Button
+                        icon={<PlusOutlined />}
+                        onClick={() => setEditOrders((orders) => [
+                          ...orders,
+                          {
+                            courtId: availableCourts[0]?._id || '',
+                            bookingDate: dayjs(selectedBooking.bookingDate),
+                            startTime: dayjs('08:00', 'HH:mm'),
+                            endTime: dayjs('09:00', 'HH:mm')
+                          }
+                        ])}
+                      >
+                        Thêm sân/khung giờ
+                      </Button>
+                      <Button onClick={() => setIsEditingBooking(false)}>Hủy sửa</Button>
+                      <Button type="primary" loading={savingEdit} onClick={handleSaveBookingEdit}>
+                        Lưu thay đổi
+                      </Button>
+                    </Space>
+                  </Space>
+                </Card>
+              )}
 
-              <Descriptions.Item label="Sân Đặt">
-                <Text strong>🏸 {selectedBooking.courtId?.courtName || 'Sân cầu lông'}</Text>
-                <div style={{ fontSize: 12, color: '#64748b' }}>{selectedBooking.courtId?.courtType}</div>
-              </Descriptions.Item>
+              {/* Thông tin đơn hàng chung */}
+              <Descriptions bordered size="small" column={{ xs: 1, sm: 2 }} style={{ marginBottom: 16 }}>
+                <Descriptions.Item label="Mã Đơn">
+                  <Text strong style={{ color: '#009B60' }}>
+                    #{selectedBooking.bookingCode}
+                  </Text>
+                </Descriptions.Item>
 
-              <Descriptions.Item label="Địa Điểm">
-                <Text type="secondary">{selectedBooking.courtId?.location || 'Cần Thơ'}</Text>
-              </Descriptions.Item>
+                <Descriptions.Item label="Ngày Tạo Đơn">
+                  {dayjs(selectedBooking.createdAt).format('HH:mm DD/MM/YYYY')}
+                </Descriptions.Item>
 
-              <Descriptions.Item label="Ngày Chơi">
-                <Text strong style={{ color: '#009B60' }}>
-                  {dayjs(selectedBooking.bookingDate).format('DD/MM/YYYY')}
-                </Text>
-              </Descriptions.Item>
+                <Descriptions.Item label="Khách Hàng">
+                  <Text strong>{selectedBooking.customerId?.fullName || 'Khách hàng'}</Text>
+                </Descriptions.Item>
 
-              <Descriptions.Item label="Khung Giờ">
-                <Tag color="geekblue">
-                  <ClockCircleOutlined /> {selectedBooking.startTime} - {selectedBooking.endTime}
-                </Tag>
-              </Descriptions.Item>
+                <Descriptions.Item label="Số Điện Thoại">
+                  <Text>{selectedBooking.customerId?.phone || 'Chưa cập nhật'}</Text>
+                </Descriptions.Item>
 
-              <Descriptions.Item label="Tiền Sân">
-                {(selectedBooking.price || 0).toLocaleString('vi-VN')} đ
-              </Descriptions.Item>
+                <Descriptions.Item label="Ngày Chơi">
+                  <Text strong style={{ color: '#009B60' }}>
+                    📅 {dayjs(selectedBooking.bookingDate).format('DD/MM/YYYY')}
+                  </Text>
+                </Descriptions.Item>
 
-              <Descriptions.Item label="Giảm Giá">
-                <Text style={{ color: selectedBooking.discount > 0 ? '#16a34a' : undefined }}>
-                  -{(selectedBooking.discount || 0).toLocaleString('vi-VN')} đ
-                </Text>
-              </Descriptions.Item>
-
-              <Descriptions.Item label="Tổng Thanh Toán">
-                <Text strong style={{ fontSize: 16, color: '#d4380d' }}>
-                  {(selectedBooking.totalAmount || 0).toLocaleString('vi-VN')} đ
-                </Text>
-              </Descriptions.Item>
-
-              <Descriptions.Item label="Hình Thức">
-                <Tag color="blue">
-                  {selectedBooking.paymentMethod === 'VIETQR'
-                    ? 'Chuyển khoản VietQR'
-                    : selectedBooking.paymentMethod === 'TRANSFER'
-                    ? 'Chuyển khoản ngân hàng'
-                    : 'Tiền mặt tại quầy (Mặc định)'}
-                </Tag>
-              </Descriptions.Item>
-
-              <Descriptions.Item label="Thanh Toán">
-                <Tag color={selectedBooking.paymentStatus === 'PAID' ? 'green' : 'red'}>
-                  {selectedBooking.paymentStatus === 'PAID' ? 'Đã thanh toán' : 'Chưa thanh toán'}
-                </Tag>
-              </Descriptions.Item>
-
-              <Descriptions.Item label="Trạng Thái Đơn">
-                <Tag color={STATUS_CONFIG[selectedBooking.status]?.color || 'default'}>
-                  {STATUS_CONFIG[selectedBooking.status]?.label || selectedBooking.status}
-                </Tag>
-              </Descriptions.Item>
-
-              {selectedBooking.voucherId && (
-                <Descriptions.Item label="Mã Khuyến Mãi" span={2}>
-                  <Tag color="magenta">
-                    🏷️ {selectedBooking.voucherId.voucherCode} - {selectedBooking.voucherId.voucherName}
+                <Descriptions.Item label="Trạng Thái Đơn">
+                  <Tag color={STATUS_CONFIG[selectedBooking.status]?.color || 'default'}>
+                    {STATUS_CONFIG[selectedBooking.status]?.label || selectedBooking.status}
                   </Tag>
                 </Descriptions.Item>
-              )}
 
-              {selectedBooking.note && (
-                <Descriptions.Item label="Ghi Chú" span={2}>
-                  <Text>{selectedBooking.note}</Text>
+                <Descriptions.Item label="Hình Thức">
+                  <Tag color="blue">
+                    {selectedBooking.paymentMethod === 'VIETQR'
+                      ? 'Chuyển khoản VietQR'
+                      : selectedBooking.paymentMethod === 'TRANSFER'
+                      ? 'Chuyển khoản ngân hàng'
+                      : 'Tiền mặt tại quầy (Mặc định)'}
+                  </Tag>
                 </Descriptions.Item>
-              )}
+
+                <Descriptions.Item label="Thanh Toán">
+                  <Tag color={selectedBooking.paymentStatus === 'PAID' ? 'green' : 'red'}>
+                    {selectedBooking.paymentStatus === 'PAID' ? 'Đã thanh toán' : 'Chưa thanh toán'}
+                  </Tag>
+                </Descriptions.Item>
+
+                {selectedBooking.voucherId && (
+                  <Descriptions.Item label="Mã Khuyến Mãi" span={2}>
+                    <Tag color="magenta">
+                      🏷️ {selectedBooking.voucherId.voucherCode} - {selectedBooking.voucherId.voucherName}
+                    </Tag>
+                  </Descriptions.Item>
+                )}
+
+                {selectedBooking.note && (
+                  <Descriptions.Item label="Ghi Chú" span={2}>
+                    <Text>{selectedBooking.note}</Text>
+                  </Descriptions.Item>
+                )}
             </Descriptions>
+
+            {/* Danh sách tất cả các sân và khung giờ thuộc đơn đặt này */}
+            <div style={{ marginBottom: 16 }}>
+              <div style={{ fontWeight: 600, fontSize: 14, color: '#092615', marginBottom: 8, display: 'flex', alignItems: 'center', gap: 6 }}>
+                <span>🏸</span>
+                <span>Danh Sách Sân & Khung Giờ Thi Đấu:</span>
+                <Tag color="green" style={{ borderRadius: 8 }}>
+                  {selectedBooking.items?.length || 1} sân
+                </Tag>
+              </div>
+
+              {selectedBooking.items && selectedBooking.items.length > 0 ? (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                  {selectedBooking.items.map((item, idx) => {
+                    const cName = item.courtName || item.courtId?.courtName || `Sân #${idx + 1}`;
+                    const cType = item.courtType || item.courtId?.courtType || 'Tiêu chuẩn';
+                    const cLoc = item.location || item.courtId?.location || '';
+
+                    return (
+                      <Card
+                        key={item._id || idx}
+                        size="small"
+                        style={{
+                          borderRadius: 8,
+                          backgroundColor: '#f8fafc',
+                          border: '1px solid #e2e8f0'
+                        }}
+                      >
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: 8 }}>
+                          <div>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                              <Text strong style={{ fontSize: 14, color: '#009B60' }}>
+                                🏸 {cName}
+                              </Text>
+                              <Tag color="cyan" style={{ fontSize: 11, borderRadius: 4 }}>
+                                {cType}
+                              </Tag>
+                              {item.status === 'CANCELLED' && <Tag color="red">Đã hủy</Tag>}
+                              {cLoc && (
+                                <Text type="secondary" style={{ fontSize: 12 }}>
+                                  📍 {cLoc}
+                                </Text>
+                              )}
+                            </div>
+                            <div style={{ marginTop: 6, display: 'flex', alignItems: 'center', gap: 8 }}>
+                              <Tag color="purple">
+                                {dayjs(item.bookingDate || selectedBooking.bookingDate).format('DD/MM/YYYY')}
+                              </Tag>
+                              <Tag color="geekblue" style={{ fontSize: 12, borderRadius: 4 }}>
+                                <ClockCircleOutlined /> {item.startTime} - {item.endTime}
+                              </Tag>
+                              <Text type="secondary" style={{ fontSize: 12 }}>
+                                ({(item.durationHours || 1)} tiếng)
+                              </Text>
+                            </div>
+                          </div>
+
+                          <div style={{ textAlign: 'right' }}>
+                            <div style={{ fontSize: 11, color: '#64748b' }}>Thành tiền sân:</div>
+                            <Text strong style={{ fontSize: 15, color: '#0f172a' }}>
+                              {(item.price || 0).toLocaleString('vi-VN')} đ
+                            </Text>
+                            {canCancelBookingItem(selectedBooking, item) && (
+                              <div style={{ marginTop: 8 }}>
+                                <Button
+                                  size="small"
+                                  danger
+                                  loading={cancellingId === selectedBooking._id}
+                                  onClick={() => confirmCancelBooking(selectedBooking, item)}
+                                >
+                                  Hủy lịch này
+                                </Button>
+                              </div>
+                            )}
+                          </div>
+                        </div>
+
+                        {/* Chi tiết các khoảng giờ phân bổ (nếu có) */}
+                        {item.intervals && item.intervals.length > 0 && (
+                          <div style={{ marginTop: 8, paddingTop: 6, borderTop: '1px dashed #cbd5e1' }}>
+                            <Text type="secondary" style={{ fontSize: 11, display: 'block', marginBottom: 4 }}>
+                              Chi tiết các khoảng giá:
+                            </Text>
+                            <Space wrap size={[6, 4]}>
+                              {item.intervals.map((inv, iIdx) => (
+                                <Tag key={iIdx} color={inv.priceType?.includes('cao điểm') ? 'volcano' : 'blue'} style={{ fontSize: 11, borderRadius: 4 }}>
+                                  {inv.startTime}-{inv.endTime} ({inv.priceType}): {(inv.amount || 0).toLocaleString('vi-VN')}đ
+                                </Tag>
+                              ))}
+                            </Space>
+                          </div>
+                        )}
+                      </Card>
+                    );
+                  })}
+                </div>
+              ) : (
+                /* Fallback cho dữ liệu cũ */
+                <Card size="small" style={{ borderRadius: 8, backgroundColor: '#f8fafc' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <div>
+                      <Text strong style={{ color: '#009B60' }}>
+                        🏸 {selectedBooking.courtId?.courtName || 'Sân cầu lông'}
+                      </Text>
+                      <Tag color="cyan" style={{ marginLeft: 6 }}>
+                        {selectedBooking.courtId?.courtType}
+                      </Tag>
+                      <div style={{ marginTop: 4 }}>
+                        <Tag color="geekblue">
+                          <ClockCircleOutlined /> {selectedBooking.startTime} - {selectedBooking.endTime}
+                        </Tag>
+                      </div>
+                    </div>
+                    <Text strong style={{ fontSize: 15 }}>
+                      {(selectedBooking.price || 0).toLocaleString('vi-VN')} đ
+                    </Text>
+                  </div>
+                </Card>
+              )}
+            </div>
+
+            {/* Bảng tổng kết thanh toán */}
+            <Card size="small" style={{ borderRadius: 8, backgroundColor: '#f0fdf4', border: '1px solid #bbf7d0' }}>
+              <Row justify="space-between" style={{ marginBottom: 4 }}>
+                <Col><Text type="secondary">Tổng tiền sân:</Text></Col>
+                <Col><Text strong>{(selectedBooking.price || 0).toLocaleString('vi-VN')} đ</Text></Col>
+              </Row>
+              {selectedBooking.discount > 0 && (
+                <Row justify="space-between" style={{ marginBottom: 4 }}>
+                  <Col><Text style={{ color: '#16a34a' }}>Giảm giá (Voucher):</Text></Col>
+                  <Col><Text style={{ color: '#16a34a', fontWeight: 600 }}>-{(selectedBooking.discount || 0).toLocaleString('vi-VN')} đ</Text></Col>
+                </Row>
+              )}
+              <Divider style={{ margin: '6px 0' }} />
+              <Row justify="space-between" align="middle">
+                <Col><Text strong style={{ fontSize: 14 }}>Tổng thanh toán:</Text></Col>
+                <Col>
+                  <Text strong style={{ fontSize: 18, color: '#d4380d' }}>
+                    {(selectedBooking.totalAmount || 0).toLocaleString('vi-VN')} đ
+                  </Text>
+                </Col>
+              </Row>
+            </Card>
           </div>
+        </Spin>
         )}
       </Modal>
     </div>

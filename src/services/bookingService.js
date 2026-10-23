@@ -48,6 +48,12 @@ export const bookingService = {
     return response.data;
   },
 
+  // 7.5. Tính giá chi tiết cho từng sân và từng khung giờ (tách cao điểm / thấp điểm)
+  calculateBookingPrice: async (data) => {
+    const response = await api.post('/bookings/calculate-price', data);
+    return response.data;
+  },
+
   // 8. Tạo đơn đặt sân mới
   createBooking: async (bookingData) => {
     const response = await api.post('/bookings', bookingData);

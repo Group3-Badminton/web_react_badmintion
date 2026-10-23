@@ -10,5 +10,13 @@ export const userService = {
     updateProfile: async (data) => {
         const response = await api.put('/users/profile', data);
         return response.data;
+    },
+    getCustomers: async () => {
+        const response = await api.get('/users/customers');
+        return response.data;
+    },
+    unlockCustomer: async (id) => {
+        const response = await api.patch(`/users/customers/${id}/unlock`);
+        return response.data;
     }
 };

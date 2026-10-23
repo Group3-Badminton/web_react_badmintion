@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import {
   Card,
   Row,
@@ -6,9 +6,9 @@ import {
   Typography,
   Button,
   DatePicker,
+  TimePicker,
   Tag,
   Space,
-  Steps,
   Divider,
   Input,
   Radio,
@@ -17,29 +17,27 @@ import {
   Modal,
   Result,
   Descriptions,
-  message,
-  Tooltip,
-  Badge
+  Table,
+  message
 } from 'antd';
 import {
   CalendarOutlined,
   ClockCircleOutlined,
   CheckCircleOutlined,
   EnvironmentOutlined,
-  ThunderboltOutlined,
   TagOutlined,
   DollarOutlined,
   UserOutlined,
-  PhoneOutlined,
-  QrcodeOutlined,
-  ArrowLeftOutlined,
-  ArrowRightOutlined,
   SafetyCertificateOutlined,
-  SmileOutlined,
   CopyOutlined,
-  BankOutlined
+  BankOutlined,
+  FileTextOutlined,
+  ThunderboltOutlined
 } from '@ant-design/icons';
 import dayjs from 'dayjs';
+import customParseFormat from 'dayjs/plugin/customParseFormat';
+dayjs.extend(customParseFormat);
+
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 import { bookingService } from '../../services/bookingService';
@@ -51,47 +49,68 @@ const { Title, Text, Paragraph } = Typography;
 
 const COURT_IMAGES = [san1, san2, san3, san1];
 
+// Chuyển đổi giờ HH:mm sang phút
+const parseTimeToMinutes = (timeStr) => {
+  if (!timeStr || typeof timeStr !== 'string' || !timeStr.includes(':')) return 0;
+  const [h, m] = timeStr.split(':').map(Number);
+  return (h || 0) * 60 + (m || 0);
+};
+
+// Chuyển đổi phút sang giờ HH:mm
+const formatMinutesToTime = (totalMinutes) => {
+  const clamped = Math.max(0, Math.min(23 * 60 + 59, totalMinutes));
+  const h = Math.floor(clamped / 60);
+  const m = clamped % 60;
+  return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
+};
+
 export default function CustomerBookingPage() {
   const { user } = useAuth();
   const navigate = useNavigate();
 
-  // Các bước đặt sân
-  const [currentStep, setCurrentStep] = useState(0);
-
-  // Dữ liệu ban đầu
+  // Dữ liệu sân
   const [loadingCourts, setLoadingCourts] = useState(false);
   const [courts, setCourts] = useState([]);
 
-  // Bước 1: Sân được chọn
-  const [selectedCourt, setSelectedCourt] = useState(null);
+  // 1. Sân được chọn (hỗ trợ nhiều sân)
+  const [selectedCourts, setSelectedCourts] = useState([]);
 
-  // Bước 2: Ngày & Khung giờ
+  // 2. Ngày & Khung giờ
   const [selectedDate, setSelectedDate] = useState(dayjs());
-  const [loadingSlots, setLoadingSlots] = useState(false);
-  const [availabilityData, setAvailabilityData] = useState(null);
-  const [selectedSlot, setSelectedSlot] = useState(null);
+  // 2. Thời gian chơi: Hỗ trợ cả khung giờ chung lẫn từng sân riêng biệt
+  const [commonStartTime, setCommonStartTime] = useState('08:00');
+  const [commonEndTime, setCommonEndTime] = useState('10:00');
+  // courtSchedules: { [courtId]: { startTime: '08:00', endTime: '10:00' } }
+  const [courtSchedules, setCourtSchedules] = useState({});
 
-  // Bước 3: Thông tin khách hàng & Mã giảm giá
-  const [customerName, setCustomerName] = useState(user?.fullName || '');
-  const [customerPhone, setCustomerPhone] = useState(user?.phone || '');
-  const [customerEmail, setCustomerEmail] = useState(user?.email || '');
-  const [customerAddress, setCustomerAddress] = useState(user?.address || '');
+  // 3. Ghi chú (Thông tin khách hàng lấy tự động từ user)
   const [note, setNote] = useState('');
 
-  // Voucher
+  // 4. Voucher & Thanh toán
   const [voucherCodeInput, setVoucherCodeInput] = useState('');
   const [validatingVoucher, setValidatingVoucher] = useState(false);
   const [appliedVoucher, setAppliedVoucher] = useState(null);
-
-  // Phương thức thanh toán
   const [paymentMethod, setPaymentMethod] = useState('CASH');
 
-  // Đặt sân
+  // Chi tiết tính giá theo từng sân và từng khoảng thời gian (lấy từ backend)
+  const [loadingPrice, setLoadingPrice] = useState(false);
+  const [priceCalculation, setPriceCalculation] = useState({
+    courtBreakdowns: [],
+    totalBasePrice: 0,
+    discount: 0,
+    finalTotalAmount: 0,
+    appliedVoucher: null
+  });
+
+  // Modal Khóa Đơn / Xác Nhận Đặt Sân (Review chi tiết từng khoảng giờ trước khi lưu)
+  const [isConfirmLockModalOpen, setIsConfirmLockModalOpen] = useState(false);
+
+  // Modal Thành Công
   const [submittingBooking, setSubmittingBooking] = useState(false);
   const [createdBooking, setCreatedBooking] = useState(null);
   const [isSuccessModalOpen, setIsSuccessModalOpen] = useState(false);
 
-  // Tải danh sách sân
+  // Tải danh sách sân ban đầu
   useEffect(() => {
     const fetchCourts = async () => {
       try {
@@ -100,7 +119,10 @@ export default function CustomerBookingPage() {
         if (res.success && res.data) {
           setCourts(res.data);
           if (res.data.length > 0) {
-            setSelectedCourt(res.data[0]);
+            setSelectedCourts([res.data[0]]);
+            setCourtSchedules({
+              [res.data[0]._id]: { startTime: '08:00', endTime: '10:00' }
+            });
           }
         }
       } catch (err) {
@@ -112,45 +134,177 @@ export default function CustomerBookingPage() {
     fetchCourts();
   }, []);
 
-  // Cập nhật thông tin khách khi user context có dữ liệu
-  useEffect(() => {
-    if (user) {
-      if (!customerName) setCustomerName(user.fullName || '');
-      if (!customerPhone) setCustomerPhone(user.phone || '');
-      if (!customerEmail) setCustomerEmail(user.email || '');
-      if (!customerAddress) setCustomerAddress(user.address || '');
+  // Lấy lịch đặt của 1 sân (nếu chưa có thì lấy theo khung giờ chung)
+  const getCourtSchedule = useCallback((courtId) => {
+    if (courtSchedules[courtId]) {
+      return courtSchedules[courtId];
     }
-  }, [user]);
+    return { startTime: commonStartTime, endTime: commonEndTime };
+  }, [courtSchedules, commonStartTime, commonEndTime]);
 
-  // Tải tình trạng khung giờ của Sân theo Ngày được chọn
-  useEffect(() => {
-    if (!selectedCourt || !selectedDate) return;
-
-    const fetchAvailability = async () => {
-      try {
-        setLoadingSlots(true);
-        setSelectedSlot(null);
-        const dateStr = selectedDate.format('YYYY-MM-DD');
-        const res = await bookingService.getCourtAvailability(selectedCourt._id, dateStr);
-        if (res.success && res.data) {
-          setAvailabilityData(res.data);
-          // Tự động chọn khung giờ còn trống đầu tiên để đơn giá sân lập tức hiển thị theo thời gian chọn
-          const firstAvailable = res.data.slots?.find((s) => !s.isBooked);
-          if (firstAvailable) {
-            setSelectedSlot(firstAvailable);
-          }
-        }
-      } catch (err) {
-        message.error(err?.response?.data?.message || 'Lỗi tải lịch khung giờ!');
-      } finally {
-        setLoadingSlots(false);
+  // Kiểm tra tính hợp lệ của tất cả các sân được chọn
+  const areAllCourtsValid = useMemo(() => {
+    if (selectedCourts.length === 0) return false;
+    for (const c of selectedCourts) {
+      const sch = getCourtSchedule(c._id);
+      const sMin = parseTimeToMinutes(sch.startTime);
+      const eMin = parseTimeToMinutes(sch.endTime);
+      if (eMin <= sMin || (eMin - sMin) < 30) {
+        return false;
       }
-    };
+    }
+    return true;
+  }, [selectedCourts, getCourtSchedule]);
 
-    fetchAvailability();
-  }, [selectedCourt, selectedDate]);
+  // Tính lại toàn bộ bảng giá từ Backend mỗi khi thay đổi sân, ngày, giờ từng sân, hoặc voucher
+  const fetchPriceCalculation = useCallback(async () => {
+    if (selectedCourts.length === 0 || !areAllCourtsValid) {
+      setPriceCalculation({
+        courtBreakdowns: [],
+        totalBasePrice: 0,
+        discount: 0,
+        finalTotalAmount: 0,
+        appliedVoucher: null
+      });
+      return;
+    }
 
-  // Áp dụng mã Voucher
+    const courtOrders = selectedCourts.map((c) => {
+      const sch = getCourtSchedule(c._id);
+      return {
+        courtId: c._id,
+        startTime: sch.startTime,
+        endTime: sch.endTime
+      };
+    });
+
+    try {
+      setLoadingPrice(true);
+      const res = await bookingService.calculateBookingPrice({
+        courtOrders,
+        bookingDate: selectedDate.format('YYYY-MM-DD'),
+        voucherCode: appliedVoucher ? appliedVoucher.voucherCode : undefined
+      });
+
+      if (res.success && res.data) {
+        setPriceCalculation(res.data);
+      }
+    } catch (err) {
+      console.error('Lỗi tính giá chi tiết:', err);
+    } finally {
+      setLoadingPrice(false);
+    }
+  }, [selectedCourts, selectedDate, getCourtSchedule, appliedVoucher, areAllCourtsValid]);
+
+  useEffect(() => {
+    fetchPriceCalculation();
+  }, [fetchPriceCalculation]);
+
+  // Xử lý chọn / bỏ chọn nhiều sân
+  const handleToggleCourt = (court) => {
+    const isSelected = selectedCourts.some((selectedCourt) => selectedCourt._id === court._id);
+
+    if (isSelected) {
+      if (selectedCourts.length === 1) {
+        message.warning('Vui lòng chọn ít nhất 1 sân thi đấu!');
+        return;
+      }
+
+      setSelectedCourts((prev) => prev.filter((selectedCourt) => selectedCourt._id !== court._id));
+      return;
+    }
+
+    setCourtSchedules((schedules) => ({
+      ...schedules,
+      [court._id]: schedules[court._id] || { startTime: commonStartTime, endTime: commonEndTime }
+    }));
+    setSelectedCourts((prev) => (
+      prev.some((selectedCourt) => selectedCourt._id === court._id) ? prev : [...prev, court]
+    ));
+  };
+
+  // Chọn tất cả hoặc bỏ bớt
+  const handleSelectAllCourts = () => {
+    if (selectedCourts.length === courts.length) {
+      if (courts.length > 0) setSelectedCourts([courts[0]]);
+    } else {
+      const newSchedules = { ...courtSchedules };
+      courts.forEach((c) => {
+        if (!newSchedules[c._id]) {
+          newSchedules[c._id] = { startTime: commonStartTime, endTime: commonEndTime };
+        }
+      });
+      setCourtSchedules(newSchedules);
+      setSelectedCourts([...courts]);
+    }
+  };
+
+  // Đổi giờ chung
+  const handleCommonStartTimeChange = (val, timeStr) => {
+    const chosen = timeStr || (val ? val.format('HH:mm') : '');
+    if (!chosen) return;
+    setCommonStartTime(chosen);
+    const newStartMin = parseTimeToMinutes(chosen);
+    const curEndMin = parseTimeToMinutes(commonEndTime);
+    const currentDur = curEndMin > newStartMin ? curEndMin - newStartMin : 60;
+    const targetDur = Math.max(30, currentDur);
+    setCommonEndTime(formatMinutesToTime(newStartMin + targetDur));
+  };
+
+  const handleCommonEndTimeChange = (val, timeStr) => {
+    const chosen = timeStr || (val ? val.format('HH:mm') : '');
+    if (!chosen) return;
+    setCommonEndTime(chosen);
+  };
+
+  // Áp dụng khung giờ chung cho tất cả các sân
+  const handleApplyCommonTimeToAllCourts = () => {
+    const updated = {};
+    selectedCourts.forEach((c) => {
+      updated[c._id] = { startTime: commonStartTime, endTime: commonEndTime };
+    });
+    setCourtSchedules((prev) => ({ ...prev, ...updated }));
+    message.success(`Đã áp dụng khung giờ ${commonStartTime} - ${commonEndTime} cho tất cả ${selectedCourts.length} sân!`);
+  };
+
+  // Đổi giờ bắt đầu cho 1 sân cụ thể
+  const handleCourtStartTimeChange = (courtId, val, timeStr) => {
+    const chosen = timeStr || (val ? val.format('HH:mm') : '');
+    if (!chosen) return;
+    setCourtSchedules((prev) => {
+      const cur = prev[courtId] || { startTime: commonStartTime, endTime: commonEndTime };
+      const newStartMin = parseTimeToMinutes(chosen);
+      const curEndMin = parseTimeToMinutes(cur.endTime);
+      const currentDur = curEndMin > newStartMin ? curEndMin - newStartMin : 60;
+      const targetDur = Math.max(30, currentDur);
+      const newEnd = formatMinutesToTime(newStartMin + targetDur);
+      return {
+        ...prev,
+        [courtId]: {
+          startTime: chosen,
+          endTime: newEnd
+        }
+      };
+    });
+  };
+
+  // Đổi giờ kết thúc cho 1 sân cụ thể
+  const handleCourtEndTimeChange = (courtId, val, timeStr) => {
+    const chosen = timeStr || (val ? val.format('HH:mm') : '');
+    if (!chosen) return;
+    setCourtSchedules((prev) => {
+      const cur = prev[courtId] || { startTime: commonStartTime, endTime: commonEndTime };
+      return {
+        ...prev,
+        [courtId]: {
+          ...cur,
+          endTime: chosen
+        }
+      };
+    });
+  };
+
+  // Áp dụng voucher
   const handleApplyVoucher = async (codeToApply) => {
     const code = (codeToApply || voucherCodeInput).trim().toUpperCase();
     if (!code) {
@@ -158,7 +312,7 @@ export default function CustomerBookingPage() {
       return;
     }
 
-    const currentPrice = selectedSlot ? selectedSlot.price : 100000;
+    const currentPrice = priceCalculation.totalBasePrice > 0 ? priceCalculation.totalBasePrice : 100000;
     try {
       setValidatingVoucher(true);
       const res = await bookingService.validateVoucher(code, currentPrice);
@@ -182,50 +336,52 @@ export default function CustomerBookingPage() {
     message.info('Đã hủy áp dụng mã giảm giá');
   };
 
-  // Tính toán số tiền
-  const basePrice = selectedSlot ? selectedSlot.price : 0;
-  const discountAmount = appliedVoucher ? appliedVoucher.discount : 0;
-  const finalTotalAmount = Math.max(0, basePrice - discountAmount);
-
-  // Xử lý gửi đơn đặt sân
-  const handleConfirmBooking = async () => {
-    if (!selectedCourt) {
-      message.error('Vui lòng chọn sân thi đấu!');
-      setCurrentStep(0);
+  // Mở modal khóa đơn và kiểm tra chi tiết giá từng khoảng giờ
+  const handleOpenLockModal = () => {
+    if (selectedCourts.length === 0) {
+      message.error('Vui lòng chọn ít nhất 1 sân thi đấu!');
       return;
     }
 
-    if (!selectedSlot) {
-      message.error('Vui lòng chọn khung giờ muốn chơi!');
-      setCurrentStep(1);
+    if (!areAllCourtsValid) {
+      message.error('Vui lòng kiểm tra lại khung giờ của các sân (tối thiểu 30 phút và giờ kết thúc sau giờ bắt đầu)!');
       return;
     }
 
-    if (!customerName.trim() || !customerPhone.trim()) {
-      message.warning('Vui lòng cung cấp Họ tên và Số điện thoại liên hệ!');
-      return;
-    }
+    setIsConfirmLockModalOpen(true);
+  };
 
+  // Thực hiện khóa đơn và gửi đơn đặt sân lên Backend
+  const handleExecuteBooking = async () => {
     try {
       setSubmittingBooking(true);
+      const courtOrders = selectedCourts.map((c) => {
+        const sch = getCourtSchedule(c._id);
+        return {
+          courtId: c._id,
+          startTime: sch.startTime,
+          endTime: sch.endTime
+        };
+      });
+
       const bookingPayload = {
-        customerName: customerName.trim(),
-        customerPhone: customerPhone.trim(),
-        customerEmail: customerEmail?.trim() || undefined,
-        courtId: selectedCourt._id,
+        customerId: user?._id || user?.userId || user?.id,
+        customerName: (user?.fullName || 'Khách hàng').trim(),
+        customerPhone: (user?.phone || '').trim(),
+        customerEmail: user?.email?.trim() || undefined,
+        customerAddress: user?.address?.trim() || undefined,
+        courtOrders,
+        courtIds: selectedCourts.map((c) => c._id),
+        courtId: selectedCourts[0]?._id,
         bookingDate: selectedDate.format('YYYY-MM-DD'),
-        startTime: selectedSlot.startTime,
-        endTime: selectedSlot.endTime,
         voucherCode: appliedVoucher ? appliedVoucher.voucherCode : undefined,
-        price: basePrice,
-        discount: discountAmount,
-        totalAmount: finalTotalAmount,
         paymentMethod,
         note: note.trim()
       };
 
       const res = await bookingService.createBooking(bookingPayload);
       if (res.success && res.data) {
+        setIsConfirmLockModalOpen(false);
         setCreatedBooking(res.data);
         setIsSuccessModalOpen(true);
       }
@@ -236,783 +392,1053 @@ export default function CustomerBookingPage() {
     }
   };
 
-  // Reset form để đặt thêm đơn mới
+  // Đặt thêm đơn mới
   const handleResetAndBookAgain = () => {
     setIsSuccessModalOpen(false);
     setCreatedBooking(null);
-    setSelectedSlot(null);
+    if (courts.length > 0) {
+      setSelectedCourts([courts[0]]);
+      setCourtSchedules({
+        [courts[0]._id]: { startTime: '08:00', endTime: '10:00' }
+      });
+    }
+    setCommonStartTime('08:00');
+    setCommonEndTime('10:00');
     setAppliedVoucher(null);
     setVoucherCodeInput('');
     setPaymentMethod('CASH');
     setNote('');
-    setCurrentStep(1);
   };
 
-  // Sao chép mã đơn
+
   const copyCode = (code) => {
     navigator.clipboard.writeText(code);
     message.success(`Đã sao chép mã đơn: ${code}`);
   };
 
+  // Dữ liệu bảng chi tiết cho từng khoảng giờ
+  const breakdownTableData = [];
+  (priceCalculation.courtBreakdowns || []).forEach((cb) => {
+    (cb.intervals || []).forEach((inv, idx) => {
+      breakdownTableData.push({
+        key: `${cb.courtId}-${idx}`,
+        courtName: cb.courtName,
+        courtType: cb.courtType,
+        courtSchedule: `${cb.startTime} - ${cb.endTime}`,
+        timeRange: `${inv.startTime} - ${inv.endTime}`,
+        durationHours: `${inv.durationHours} tiếng`,
+        priceType: inv.priceType,
+        hourlyRate: inv.hourlyRate,
+        amount: inv.amount
+      });
+    });
+  });
+
+  const breakdownColumns = [
+    {
+      title: 'Sân Thi Đấu',
+      dataIndex: 'courtName',
+      key: 'courtName',
+      render: (text, record) => (
+        <div>
+          <Text strong style={{ color: '#009B60' }}>🏸 {text}</Text>
+          <div style={{ fontSize: 11, color: '#64748b' }}>
+            {record.courtType} <Tag color="blue" style={{ fontSize: 10, padding: '0 4px', margin: '0 0 0 4px' }}>Giờ đặt: {record.courtSchedule}</Tag>
+          </div>
+        </div>
+      )
+    },
+    {
+      title: 'Khoảng Giờ',
+      dataIndex: 'timeRange',
+      key: 'timeRange',
+      render: (text, record) => (
+        <Space direction="vertical" size={0}>
+          <Text strong>{text}</Text>
+          <Text orientation="vertical" type="secondary" style={{ fontSize: 11 }}>
+            ({record.durationHours})
+          </Text>
+        </Space>
+      )
+    },
+
+    {
+      title: 'Loại Giá',
+      dataIndex: 'priceType',
+      key: 'priceType',
+      render: (type) => {
+        const isPeak = type.includes('cao điểm') || type.includes('vàng');
+        return (
+          <Tag color={isPeak ? 'volcano' : 'blue'} style={{ borderRadius: 4, fontWeight: 500 }}>
+            {type}
+          </Tag>
+        );
+      }
+    },
+    {
+      title: 'Đơn Giá / Giờ',
+      dataIndex: 'hourlyRate',
+      key: 'hourlyRate',
+      align: 'right',
+      render: (rate) => `${(rate || 0).toLocaleString('vi-VN')} đ/h`
+    },
+    {
+      title: 'Thành Tiền',
+      dataIndex: 'amount',
+      key: 'amount',
+      align: 'right',
+      render: (amt) => (
+        <Text strong style={{ color: '#009B60', fontSize: 14 }}>
+          {(amt || 0).toLocaleString('vi-VN')} đ
+        </Text>
+      )
+    }
+  ];
+
   return (
-    <div style={{ maxWidth: 1100, margin: '0 auto', padding: '16px 8px 48px' }}>
+    <div style={{ maxWidth: 1240, margin: '0 auto', padding: '16px 12px 48px' }}>
       {/* Tiêu đề & Giới thiệu */}
       <div style={{ textAlign: 'center', marginBottom: 28 }}>
-        <Tag color="#009B60" style={{ fontSize: 13, padding: '4px 12px', borderRadius: 16 }}>
+        <Tag color="#009B60" style={{ fontSize: 13, padding: '4px 14px', borderRadius: 16, fontWeight: 500 }}>
           ⚡ HỆ THỐNG ĐẶT SÂN CẦU LÔNG TRỰC TUYẾN 24/7
         </Tag>
         <Title level={2} style={{ marginTop: 12, marginBottom: 6, color: '#0f172a' }}>
-          Đặt Lịch Sân Cầu Lông Nhanh Chóng
+          Đặt Lịch Sân Cầu Lông Trực Tuyến
         </Title>
-        <Paragraph type="secondary" style={{ fontSize: 15 }}>
-          Chọn sân yêu thích, chọn khung giờ theo ngày và nhận xác nhận tức thì với giá ưu đãi.
+        <Paragraph type="secondary" style={{ fontSize: 15, maxWidth: 680, margin: '0 auto' }}>
+          Tính giá riêng cho từng sân và từng khung giờ (tách rõ cao điểm / thấp điểm). Đồng bộ và xác minh dữ liệu giá minh bạch 100%.
         </Paragraph>
       </div>
 
-      {/* Thanh tiến trình Steps */}
-      <Card
-        style={{
-          borderRadius: 16,
-          marginBottom: 24,
-          boxShadow: '0 4px 20px rgba(0,0,0,0.05)',
-          border: '1px solid #f0f0f0'
-        }}
-      >
-        <Steps
-          current={currentStep}
-          onChange={(step) => {
-            if (step === 1 && !selectedCourt) {
-              message.warning('Vui lòng chọn sân trước!');
-              return;
-            }
-            if (step === 2 && (!selectedCourt || !selectedSlot)) {
-              message.warning('Vui lòng chọn sân và khung giờ trước!');
-              return;
-            }
-            setCurrentStep(step);
-          }}
-          items={[
-            {
-              title: '1. Chọn Sân',
-              description: selectedCourt ? selectedCourt.courtName : 'Chọn sân phù hợp'
-            },
-            {
-              title: '2. Ngày & Khung Giờ',
-              description: selectedSlot ? `${selectedSlot.startTime} - ${selectedSlot.endTime}` : 'Chọn giờ chơi'
-            },
-            {
-              title: '3. Xác Nhận & Thanh Toán',
-              description: 'Voucher & Hoàn tất'
-            }
-          ]}
-        />
-      </Card>
-
-      {/* BƯỚC 1: CHỌN SÂN */}
-      {currentStep === 0 && (
-        <div>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
-            <Title level={4} style={{ margin: 0 }}>
-              🏸 Danh Sách Sân Cầu Lông Đang Mở
-            </Title>
-            <Text type="secondary">Vui lòng nhấp chọn một sân để tiếp tục</Text>
-          </div>
-
-          {loadingCourts ? (
-            <div style={{ textAlign: 'center', padding: '60px 0' }}>
-              <Spin size="large" />
-              <Paragraph style={{ marginTop: 12 }}>Đang tải danh sách sân...</Paragraph>
-            </div>
-          ) : (
-            <Row gutter={[20, 20]}>
-              {courts.map((court, index) => {
-                const isSelected = selectedCourt?._id === court._id;
-                const courtImg = COURT_IMAGES[index % COURT_IMAGES.length];
-
-                return (
-                  <Col xs={24} sm={12} md={12} lg={6} key={court._id}>
-                    <Card
-                      hoverable
-                      onClick={() => setSelectedCourt(court)}
-                      cover={
-                        <div style={{ position: 'relative', height: 160, overflow: 'hidden' }}>
-                          <img
-                            alt={court.courtName}
-                            src={courtImg}
-                            style={{ width: '100%', height: '100%', objectFit: 'cover' }}
-                          />
-                          {isSelected && (
-                            <div
-                              style={{
-                                position: 'absolute',
-                                top: 12,
-                                right: 12,
-                                background: '#009B60',
-                                color: '#fff',
-                                borderRadius: '50%',
-                                width: 28,
-                                height: 28,
-                                display: 'flex',
-                                alignItems: 'center',
-                                justifyContent: 'center',
-                                boxShadow: '0 2px 8px rgba(0,0,0,0.3)'
-                              }}
-                            >
-                              <CheckCircleOutlined style={{ fontSize: 16 }} />
-                            </div>
-                          )}
-                          <div
-                            style={{
-                              position: 'absolute',
-                              bottom: 8,
-                              left: 8,
-                              background: 'rgba(15, 23, 42, 0.75)',
-                              color: '#fff',
-                              padding: '2px 8px',
-                              borderRadius: 4,
-                              fontSize: 12
-                            }}
-                          >
-                            <EnvironmentOutlined style={{ marginRight: 4 }} />
-                            {court.location || 'Trong nhà'}
-                          </div>
-                        </div>
-                      }
-                      style={{
-                        borderRadius: 14,
-                        overflow: 'hidden',
-                        borderColor: isSelected ? '#009B60' : '#e2e8f0',
-                        borderWidth: isSelected ? 2 : 1,
-                        boxShadow: isSelected ? '0 8px 24px rgba(0, 155, 96, 0.18)' : '0 2px 10px rgba(0,0,0,0.04)',
-                        transition: 'all 0.25s ease'
-                      }}
-                      bodyStyle={{ padding: 16 }}
-                    >
-                      <Tag color={court.courtType?.includes('VIP') ? 'gold' : 'green'} style={{ marginBottom: 6 }}>
-                        {court.courtType}
-                      </Tag>
-                      <Title level={5} style={{ margin: '4px 0 6px', fontSize: 16 }}>
-                        {court.courtName}
-                      </Title>
-                      <Paragraph
-                        type="secondary"
-                        ellipsis={{ rows: 2 }}
-                        style={{ fontSize: 13, marginBottom: 16, minHeight: 40 }}
-                      >
-                        {court.description || 'Sân đạt tiêu chuẩn thi đấu, ánh sáng chống chói cao cấp.'}
-                      </Paragraph>
-
-                      <Button
-                        type={isSelected ? 'primary' : 'default'}
-                        block
-                        style={{
-                          backgroundColor: isSelected ? '#009B60' : undefined,
-                          borderColor: isSelected ? '#009B60' : undefined,
-                          borderRadius: 8,
-                          fontWeight: 500
-                        }}
-                      >
-                        {isSelected ? '✓ Đã Chọn Sân Này' : 'Chọn Sân'}
-                      </Button>
-                    </Card>
-                  </Col>
-                );
-              })}
-            </Row>
-          )}
-
-          <div style={{ marginTop: 28, display: 'flex', justifyContent: 'flex-end' }}>
-            <Button
-              type="primary"
-              size="large"
-              disabled={!selectedCourt}
-              onClick={() => setCurrentStep(1)}
-              style={{
-                backgroundColor: '#009B60',
-                borderColor: '#009B60',
-                borderRadius: 8,
-                padding: '0 32px'
-              }}
-              icon={<ArrowRightOutlined />}
-            >
-              Tiếp Tục Chọn Ngày & Khung Giờ
-            </Button>
-          </div>
-        </div>
-      )}
-
-      {/* BƯỚC 2: CHỌN NGÀY & KHUNG GIỜ */}
-      {currentStep === 1 && (
-        <div>
-          {/* Banner sân đang chọn */}
+      <Row gutter={[24, 24]}>
+        {/* CỘT TRÁI: FORM CHỌN SÂN, THỜI GIAN, THÔNG TIN & THANH TOÁN */}
+        <Col xs={24} lg={14} xl={15}>
+          {/* 1. CHỌN SÂN */}
           <Card
+            title={
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 8 }}>
+                <Space>
+                  <span style={{ fontSize: 18 }}>🏸</span>
+                  <span style={{ fontWeight: 600, fontSize: 16 }}>1. Chọn Sân Thi Đấu</span>
+                  <Tag color="green" style={{ borderRadius: 10, fontWeight: 600 }}>
+                    ✓ Đã chọn: {selectedCourts.length} sân
+                  </Tag>
+                </Space>
+                <Space size={8}>
+                  <Button size="small" onClick={handleSelectAllCourts} style={{ fontSize: 12, borderRadius: 6 }}>
+                    {selectedCourts.length === courts.length ? 'Bỏ chọn bớt' : 'Chọn tất cả'}
+                  </Button>
+                  <Tag color="cyan">{courts.length} Sân Đang Mở</Tag>
+                </Space>
+              </div>
+            }
             style={{
               borderRadius: 14,
               marginBottom: 20,
-              background: 'linear-gradient(135deg, #f0fdf4 0%, #e6fcf5 100%)',
-              borderColor: '#bbf7d0'
+              boxShadow: '0 2px 10px rgba(0,0,0,0.03)',
+              border: '1px solid #e2e8f0'
             }}
-            bodyStyle={{ padding: '16px 20px' }}
           >
-            <Row justify="space-between" align="middle" gutter={[12, 12]}>
-              <Col>
-                <Space size={12}>
-                  <div
-                    style={{
-                      background: '#009B60',
-                      color: '#fff',
-                      width: 44,
-                      height: 44,
-                      borderRadius: 10,
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      fontSize: 22
-                    }}
-                  >
-                    🏸
-                  </div>
-                  <div>
-                    <Text strong style={{ fontSize: 16, color: '#0f172a' }}>
-                      {selectedCourt?.courtName}
-                    </Text>
-                    <div>
-                      <Tag color="green">{selectedCourt?.courtType}</Tag>
-                      <Text type="secondary" style={{ fontSize: 13 }}>
-                        <EnvironmentOutlined /> {selectedCourt?.location}
-                      </Text>
-                    </div>
-                  </div>
-                </Space>
-              </Col>
-              <Col>
-                <Button size="small" onClick={() => setCurrentStep(0)}>
-                  Đổi sân khác
-                </Button>
-              </Col>
-            </Row>
-          </Card>
-
-          {/* Chọn ngày đặt sân */}
-          <Card
-            style={{ borderRadius: 14, marginBottom: 20 }}
-            bodyStyle={{ padding: 20 }}
-          >
-            <Row gutter={[20, 16]} align="middle">
-              <Col xs={24} sm={12} md={10}>
-                <Text strong style={{ display: 'block', marginBottom: 8, fontSize: 14 }}>
-                  <CalendarOutlined style={{ color: '#009B60', marginRight: 6 }} />
-                  Chọn Ngày Đặt Sân:
-                </Text>
-                <DatePicker
-                  value={selectedDate}
-                  onChange={(date) => setSelectedDate(date || dayjs())}
-                  disabledDate={(current) => current && current < dayjs().startOf('day')}
-                  format="DD/MM/YYYY"
-                  allowClear={false}
-                  style={{ width: '100%', height: 42, borderRadius: 8 }}
-                />
-              </Col>
-
-              <Col xs={24} sm={12} md={14}>
-                <div style={{ background: '#f8fafc', padding: 12, borderRadius: 8, border: '1px solid #e2e8f0' }}>
-                  <Space orientation="vertical" size={2}>
-                    <Text strong style={{ color: '#334155' }}>
-                      Ngày: {selectedDate.format('dddd, [ngày] DD/MM/YYYY')}
-                    </Text>
-                    <div>
-                      {selectedDate.day() === 0 || selectedDate.day() === 6 ? (
-                        <Tag color="orange" style={{ borderRadius: 4 }}>
-                          ⭐ Cuối Tuần (Áp dụng giá cuối tuần)
-                        </Tag>
-                      ) : (
-                        <Tag color="blue" style={{ borderRadius: 4 }}>
-                          📅 Ngày Trong Tuần (Giá tiêu chuẩn)
-                        </Tag>
-                      )}
-                      <Text type="secondary" style={{ fontSize: 12 }}>
-                        Bảng giá được cập nhật tự động theo loại ngày
-                      </Text>
-                    </div>
-                  </Space>
-                </div>
-              </Col>
-            </Row>
-          </Card>
-
-          {/* Danh sách khung giờ */}
-          <Card
-            style={{ borderRadius: 14, marginBottom: 24 }}
-            bodyStyle={{ padding: 20 }}
-          >
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
-              <Title level={4} style={{ margin: 0 }}>
-                <ClockCircleOutlined style={{ color: '#009B60', marginRight: 8 }} />
-                Danh Sách Khung Giờ Thi Đấu
-              </Title>
-              <Space>
-                <Badge status="success" text="Còn trống" />
-                <Badge status="error" text="Đã được đặt" />
-              </Space>
-            </div>
-
-            {loadingSlots ? (
-              <div style={{ textAlign: 'center', padding: '40px 0' }}>
+            {loadingCourts ? (
+              <div style={{ textAlign: 'center', padding: '36px 0' }}>
                 <Spin size="large" />
-                <Paragraph style={{ marginTop: 12 }}>Đang kiểm tra tình trạng khung giờ...</Paragraph>
+                <Paragraph style={{ marginTop: 10 }}>Đang tải danh sách sân...</Paragraph>
               </div>
-            ) : availabilityData && availabilityData.slots?.length > 0 ? (
+            ) : (
               <Row gutter={[16, 16]}>
-                {availabilityData.slots.map((slot) => {
-                  const isBooked = slot.isBooked;
-                  const isSelected = selectedSlot?.startTime === slot.startTime;
+                {courts.map((court, index) => {
+                  const isSelected = selectedCourts.some((c) => c._id === court._id);
+                  const courtImg = COURT_IMAGES[index % COURT_IMAGES.length];
 
                   return (
-                    <Col xs={24} sm={12} md={8} lg={6} key={slot.startTime}>
+                    <Col xs={24} sm={12} md={8} key={court._id}>
                       <div
-                        onClick={() => {
-                          if (!isBooked) {
-                            setSelectedSlot(slot);
-                          }
-                        }}
+                        onClick={() => handleToggleCourt(court)}
                         style={{
-                          border: isSelected
-                            ? '2px solid #009B60'
-                            : isBooked
-                              ? '1px dashed #cbd5e1'
-                              : '1px solid #e2e8f0',
-                          backgroundColor: isSelected
-                            ? '#f0fdf4'
-                            : isBooked
-                              ? '#f8fafc'
-                              : '#ffffff',
+                          border: isSelected ? '2px solid #009B60' : '1px solid #e2e8f0',
+                          backgroundColor: isSelected ? '#f0fdf4' : '#ffffff',
                           borderRadius: 12,
-                          padding: '14px 16px',
-                          cursor: isBooked ? 'not-allowed' : 'pointer',
-                          transition: 'all 0.2s ease',
-                          boxShadow: isSelected ? '0 4px 12px rgba(0, 155, 96, 0.15)' : 'none',
-                          opacity: isBooked ? 0.65 : 1,
-                          position: 'relative'
+                          overflow: 'hidden',
+                          cursor: 'pointer',
+                          transition: 'all 0.25s ease',
+                          boxShadow: isSelected
+                            ? '0 6px 18px rgba(0, 155, 96, 0.16)'
+                            : '0 1px 4px rgba(0,0,0,0.04)',
+                          position: 'relative',
+                          display: 'flex',
+                          flexDirection: 'column',
+                          height: '100%'
                         }}
                       >
-                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
-                          <Text strong style={{ fontSize: 15, color: isSelected ? '#009B60' : '#1e293b' }}>
-                            {slot.startTime} - {slot.endTime}
-                          </Text>
-                          {isSelected && <CheckCircleOutlined style={{ color: '#009B60', fontSize: 16 }} />}
+                        {isSelected && (
+                          <div
+                            style={{
+                              position: 'absolute',
+                              top: 8,
+                              right: 8,
+                              background: '#009B60',
+                              color: '#fff',
+                              borderRadius: '50%',
+                              width: 26,
+                              height: 26,
+                              display: 'flex',
+                              alignItems: 'center',
+                              justifyContent: 'center',
+                              boxShadow: '0 2px 6px rgba(0,0,0,0.2)',
+                              zIndex: 2
+                            }}
+                          >
+                            <CheckCircleOutlined style={{ fontSize: 15 }} />
+                          </div>
+                        )}
+                        <div style={{ height: 110, overflow: 'hidden', position: 'relative' }}>
+                          <img
+                            src={courtImg}
+                            alt={court.courtName}
+                            style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                          />
+                          <div
+                            style={{
+                              position: 'absolute',
+                              bottom: 6,
+                              left: 6,
+                              background: 'rgba(15, 23, 42, 0.75)',
+                              color: '#fff',
+                              padding: '2px 6px',
+                              borderRadius: 4,
+                              fontSize: 11
+                            }}
+                          >
+                            <EnvironmentOutlined style={{ marginRight: 3 }} />
+                            {court.location || 'Trong nhà'}
+                          </div>
                         </div>
 
-                        <div style={{ fontSize: 12, color: '#64748b', marginBottom: 8 }}>
-                          {slot.label}
-                        </div>
+                        <div style={{ padding: '12px', flex: 1, display: 'flex', flexDirection: 'column', justifyContent: 'space-between' }}>
+                          <div>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
+                              <Text strong style={{ fontSize: 14, color: isSelected ? '#009B60' : '#0f172a' }}>
+                                {court.courtName}
+                              </Text>
+                              <Tag color={court.courtType?.includes('VIP') ? 'gold' : 'green'} style={{ margin: 0, fontSize: 11 }}>
+                                {court.courtType}
+                              </Tag>
+                            </div>
+                            <Paragraph
+                              type="secondary"
+                              ellipsis={{ rows: 1 }}
+                              style={{ fontSize: 12, margin: '4px 0 10px' }}
+                            >
+                              {court.description || 'Sân đạt chuẩn thi đấu'}
+                            </Paragraph>
+                          </div>
 
-                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                          <Text strong style={{ color: isBooked ? '#94a3b8' : '#e11d48', fontSize: 14 }}>
-                            {slot.price.toLocaleString('vi-VN')} đ
-                          </Text>
-
-                          {isBooked ? (
-                            <Tag color="default" style={{ margin: 0, borderRadius: 4, fontSize: 11 }}>
-                              Đã đặt
-                            </Tag>
-                          ) : (
-                            <Tag color="green" style={{ margin: 0, borderRadius: 4, fontSize: 11 }}>
-                              Còn trống
-                            </Tag>
-                          )}
+                          <Button
+                            size="small"
+                            type={isSelected ? 'primary' : 'default'}
+                            block
+                            style={{
+                              backgroundColor: isSelected ? '#009B60' : undefined,
+                              borderColor: isSelected ? '#009B60' : undefined,
+                              borderRadius: 6,
+                              fontWeight: 500,
+                              fontSize: 12
+                            }}
+                          >
+                            {isSelected ? '✓ Đã Chọn' : '+ Chọn Sân Này'}
+                          </Button>
                         </div>
                       </div>
                     </Col>
                   );
                 })}
               </Row>
-            ) : (
-              <Alert
-                message="Không có khung giờ nào khả dụng"
-                description="Vui lòng thử chọn một ngày khác hoặc liên hệ bộ phận hỗ trợ."
-                type="info"
-                showIcon
-              />
             )}
           </Card>
 
-          {/* Thanh điều hướng */}
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-            <Button
-              size="large"
-              icon={<ArrowLeftOutlined />}
-              onClick={() => setCurrentStep(0)}
-              style={{ borderRadius: 8 }}
+          {/* 2. CHỌN NGÀY & GIỜ CHƠI */}
+          <Card
+            title={
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 8 }}>
+                <Space>
+                  <span style={{ fontSize: 18 }}>📅</span>
+                  <span style={{ fontWeight: 600, fontSize: 16 }}>2. Chọn Ngày & Khung Giờ Chơi Cho Từng Sân</span>
+                </Space>
+                <Tag color="purple" style={{ fontSize: 12, padding: '3px 8px', borderRadius: 6 }}>
+                  ⚡ Hỗ trợ mỗi sân một khung giờ khác nhau & tính giá độc lập
+                </Tag>
+              </div>
+            }
+            style={{
+              borderRadius: 14,
+              marginBottom: 20,
+              boxShadow: '0 2px 10px rgba(0,0,0,0.03)',
+              border: '1px solid #e2e8f0'
+            }}
+          >
+            {/* Hàng chọn ngày & Khung giờ mặc định chung */}
+            <div style={{ background: '#f8fafc', padding: '16px', borderRadius: 12, border: '1px solid #e2e8f0', marginBottom: 16 }}>
+              <Row gutter={[16, 16]} align="middle">
+                <Col xs={24} md={8}>
+                  <Text strong style={{ display: 'block', marginBottom: 6, fontSize: 13 }}>
+                    <CalendarOutlined style={{ color: '#009B60', marginRight: 6 }} />
+                    Ngày Đặt Sân:
+                  </Text>
+                  <DatePicker
+                    value={selectedDate}
+                    onChange={(date) => setSelectedDate(date || dayjs())}
+                    disabledDate={(current) => current && current < dayjs().startOf('day')}
+                    format="DD/MM/YYYY"
+                    allowClear={false}
+                    style={{ width: '100%', height: 40, borderRadius: 8 }}
+                  />
+                  <div style={{ marginTop: 6, fontSize: 12, color: '#64748b' }}>
+                    {selectedDate.format('dddd, [ngày] DD/MM/YYYY')}
+                  </div>
+                </Col>
+
+                <Col xs={24} md={16}>
+                  <div style={{ background: '#ffffff', padding: '12px 14px', borderRadius: 10, border: '1px dashed #94a3b8' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8, flexWrap: 'wrap', gap: 6 }}>
+                      <Text strong style={{ fontSize: 13, color: '#334155' }}>
+                        ⚡ Khung giờ chung (Áp dụng nhanh cho các sân):
+                      </Text>
+                      <Button
+                        size="small"
+                        type="primary"
+                        ghost
+                        icon={<CheckCircleOutlined />}
+                        onClick={handleApplyCommonTimeToAllCourts}
+                        style={{ borderRadius: 6, fontSize: 12 }}
+                      >
+                        Áp dụng cho tất cả {selectedCourts.length} sân
+                      </Button>
+                    </div>
+
+                    <Row gutter={[12, 8]}>
+                      <Col xs={12}>
+                        <TimePicker
+                          value={dayjs(commonStartTime, 'HH:mm')}
+                          onChange={handleCommonStartTimeChange}
+                          format="HH:mm"
+                          minuteStep={15}
+                          needConfirm={false}
+                          allowClear={false}
+                          style={{ width: '100%', height: 38, borderRadius: 6 }}
+                        />
+                      </Col>
+                      <Col xs={12}>
+                        <TimePicker
+                          value={dayjs(commonEndTime, 'HH:mm')}
+                          onChange={handleCommonEndTimeChange}
+                          format="HH:mm"
+                          minuteStep={15}
+                          needConfirm={false}
+                          allowClear={false}
+                          style={{ width: '100%', height: 38, borderRadius: 6 }}
+                        />
+                      </Col>
+                    </Row>
+                  </div>
+                </Col>
+              </Row>
+            </div>
+
+            {/* Danh sách khung giờ riêng của từng sân đã chọn */}
+            <div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12, flexWrap: 'wrap', gap: 6 }}>
+                <Text strong style={{ fontSize: 14, color: '#0f172a' }}>
+                  🏸 Tùy chỉnh khung giờ riêng cho từng sân ({selectedCourts.length} sân đã chọn):
+                </Text>
+                <Text type="secondary" style={{ fontSize: 12 }}>
+                  (Bạn có thể chỉnh giờ độc lập cho từng sân bên dưới)
+                </Text>
+              </div>
+
+              {selectedCourts.length === 0 ? (
+                <Alert
+                  type="info"
+                  message="Vui lòng chọn ít nhất 1 sân ở bước 1 để thiết lập khung giờ!"
+                  showIcon
+                  style={{ borderRadius: 8 }}
+                />
+              ) : (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                  {selectedCourts.map((c) => {
+                    const sch = getCourtSchedule(c._id);
+                    const sMin = parseTimeToMinutes(sch.startTime);
+                    const eMin = parseTimeToMinutes(sch.endTime);
+                    const durMin = Math.max(0, eMin - sMin);
+                    const durHours = durMin > 0 ? (durMin / 60).toFixed(1) : 0;
+                    const isValid = eMin > sMin && durMin >= 30;
+
+                    return (
+                      <div
+                        key={c._id}
+                        style={{
+                          background: '#ffffff',
+                          borderRadius: 10,
+                          border: isValid ? '1px solid #cbd5e1' : '1.5px solid #ef4444',
+                          padding: '12px 16px',
+                          boxShadow: '0 1px 3px rgba(0,0,0,0.03)'
+                        }}
+                      >
+                        <Row gutter={[16, 12]} align="middle">
+                          <Col xs={24} sm={8} md={7}>
+                            <Space size={6} wrap>
+                              <Text strong style={{ fontSize: 15, color: '#009B60' }}>
+                                🏸 {c.courtName}
+                              </Text>
+                              <Tag color={c.courtType?.includes('VIP') ? 'gold' : 'green'} style={{ margin: 0, fontSize: 11 }}>
+                                {c.courtType}
+                              </Tag>
+                            </Space>
+                            <div style={{ fontSize: 12, color: '#64748b', marginTop: 3 }}>
+                              {c.location || 'Sân tiêu chuẩn'}
+                            </div>
+                          </Col>
+
+                          <Col xs={12} sm={7} md={6}>
+                            <Text type="secondary" style={{ fontSize: 11, display: 'block', marginBottom: 4 }}>
+                              <ClockCircleOutlined style={{ color: '#009B60', marginRight: 4 }} />
+                              Giờ bắt đầu:
+                            </Text>
+                            <TimePicker
+                              value={dayjs(sch.startTime, 'HH:mm')}
+                              onChange={(val, str) => handleCourtStartTimeChange(c._id, val, str)}
+                              format="HH:mm"
+                              minuteStep={15}
+                              needConfirm={false}
+                              allowClear={false}
+                              style={{ width: '100%', height: 38, borderRadius: 6 }}
+                            />
+                          </Col>
+
+                          <Col xs={12} sm={7} md={6}>
+                            <Text type="secondary" style={{ fontSize: 11, display: 'block', marginBottom: 4 }}>
+                              <ClockCircleOutlined style={{ color: '#e11d48', marginRight: 4 }} />
+                              Giờ kết thúc:
+                            </Text>
+                            <TimePicker
+                              value={dayjs(sch.endTime, 'HH:mm')}
+                              onChange={(val, str) => handleCourtEndTimeChange(c._id, val, str)}
+                              format="HH:mm"
+                              minuteStep={15}
+                              needConfirm={false}
+                              allowClear={false}
+                              style={{ width: '100%', height: 38, borderRadius: 6 }}
+                            />
+                          </Col>
+
+                          <Col xs={24} sm={2} md={5} style={{ textAlign: 'right' }}>
+                            {isValid ? (
+                              <Tag color="green" style={{ fontSize: 12, padding: '4px 10px', borderRadius: 6, margin: 0 }}>
+                                ✓ {durHours} tiếng ({durMin}p)
+                              </Tag>
+                            ) : (
+                              <Tag color="error" style={{ fontSize: 12, padding: '4px 10px', borderRadius: 6, margin: 0 }}>
+                                ⚠️ Cần tối thiểu 30p
+                              </Tag>
+                            )}
+                          </Col>
+                        </Row>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+
+              {!areAllCourtsValid && (
+                <Alert
+                  style={{ marginTop: 14, borderRadius: 8 }}
+                  type="warning"
+                  showIcon
+                  message="Một số sân có khung giờ chưa hợp lệ: Giờ kết thúc phải sau giờ bắt đầu và thời lượng chơi tối thiểu là 30 phút!"
+                />
+              )}
+            </div>
+          </Card>
+
+          {/* 3. THÔNG TIN KHÁCH HÀNG (TỰ ĐỘNG TỪ TÀI KHOẢN) */}
+          <Card
+            title={
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <Space>
+                  <UserOutlined style={{ color: '#009B60', fontSize: 18 }} />
+                  <span style={{ fontWeight: 600, fontSize: 16 }}>3. Thông Tin Khách Hàng Đặt Sân</span>
+                </Space>
+                <Tag color="green" icon={<CheckCircleOutlined />}>Tự Động Từ Tài Khoản</Tag>
+              </div>
+            }
+            style={{
+              borderRadius: 14,
+              marginBottom: 20,
+              boxShadow: '0 2px 10px rgba(0,0,0,0.03)',
+              border: '1px solid #e2e8f0'
+            }}
+          >
+            <div
+              style={{
+                background: 'linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%)',
+                borderRadius: 12,
+                padding: '16px 20px',
+                border: '1px solid #e2e8f0',
+                marginBottom: 16
+              }}
             >
-              Quay lại chọn sân
-            </Button>
+              <Row gutter={[16, 16]} align="middle">
+                <Col xs={24} sm={12}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
+                    <div
+                      style={{
+                        width: 48,
+                        height: 48,
+                        borderRadius: '50%',
+                        backgroundColor: '#009B60',
+                        color: '#fff',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        fontSize: 20,
+                        fontWeight: 600,
+                        boxShadow: '0 2px 8px rgba(0, 155, 96, 0.25)'
+                      }}
+                    >
+                      {user?.fullName ? user.fullName.charAt(0).toUpperCase() : <UserOutlined />}
+                    </div>
+                    <div>
+                      <Text type="secondary" style={{ fontSize: 12, display: 'block' }}>Họ và tên khách hàng</Text>
+                      <Text strong style={{ fontSize: 16, color: '#0f172a' }}>
+                        {user?.fullName || 'Khách hàng'}
+                      </Text>
+                    </div>
+                  </div>
+                </Col>
+
+                <Col xs={24} sm={12}>
+                  <div style={{ background: '#fff', padding: '8px 14px', borderRadius: 8, border: '1px solid #e2e8f0' }}>
+                    <Text type="secondary" style={{ fontSize: 12, display: 'block' }}>Số điện thoại liên hệ</Text>
+                    <Text strong style={{ fontSize: 14, color: '#0f172a' }}>
+                      📞 {user?.phone || 'Chưa cập nhật SĐT'}
+                    </Text>
+                  </div>
+                </Col>
+
+                <Col xs={24} sm={12}>
+                  <div style={{ background: '#fff', padding: '8px 14px', borderRadius: 8, border: '1px solid #e2e8f0' }}>
+                    <Text type="secondary" style={{ fontSize: 12, display: 'block' }}>Email tài khoản</Text>
+                    <Text strong style={{ fontSize: 14, color: '#0f172a' }}>
+                      ✉️ {user?.email || 'Chưa cập nhật email'}
+                    </Text>
+                  </div>
+                </Col>
+
+                <Col xs={24} sm={12}>
+                  <div style={{ background: '#fff', padding: '8px 14px', borderRadius: 8, border: '1px solid #e2e8f0' }}>
+                    <Text type="secondary" style={{ fontSize: 12, display: 'block' }}>Địa chỉ</Text>
+                    <Text strong style={{ fontSize: 14, color: '#0f172a' }}>
+                      📍 {user?.address || 'Cần Thơ'}
+                    </Text>
+                  </div>
+                </Col>
+              </Row>
+
+              <div
+                style={{
+                  marginTop: 14,
+                  paddingTop: 10,
+                  borderTop: '1px dashed #cbd5e1',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                  flexWrap: 'wrap',
+                  gap: 8
+                }}
+              >
+                <div style={{ fontSize: 12, color: '#64748b' }}>
+                  🔒 Thông tin người đặt sân được tự động liên kết từ tài khoản để Ban Quản Trị (Admin) tiếp nhận. Bạn không cần phải điền lại.
+                </div>
+                <Button
+                  type="link"
+                  size="small"
+                  onClick={() => navigate('/customer/profile')}
+                  style={{ padding: 0, fontSize: 12, color: '#009B60' }}
+                >
+                  Cập nhật hồ sơ ↗
+                </Button>
+              </div>
+            </div>
+
+            <div>
+              <Text strong style={{ display: 'block', marginBottom: 6, fontSize: 13 }}>
+                Ghi chú thêm cho ban quản lý sân (tùy chọn):
+              </Text>
+              <Input.TextArea
+                rows={2}
+                placeholder="Ví dụ: Cần mượn thêm vợt, mua thêm nước khoáng, yêu cầu chuẩn bị lưới..."
+                value={note}
+                onChange={(e) => setNote(e.target.value)}
+                style={{ borderRadius: 8 }}
+              />
+            </div>
+          </Card>
+
+          {/* 4. MÃ KHUYẾN MÃI & THANH TOÁN */}
+          <Card
+            title={
+              <Space>
+                <DollarOutlined style={{ color: '#009B60', fontSize: 18 }} />
+                <span style={{ fontWeight: 600, fontSize: 16 }}>4. Mã Khuyến Mãi & Phương Thức Thanh Toán</span>
+              </Space>
+            }
+            style={{
+              borderRadius: 14,
+              marginBottom: 20,
+              boxShadow: '0 2px 10px rgba(0,0,0,0.03)',
+              border: '1px solid #e2e8f0'
+            }}
+          >
+            {/* Voucher */}
+            <div style={{ marginBottom: 20 }}>
+              <Text strong style={{ display: 'block', marginBottom: 8, fontSize: 13 }}>
+                <TagOutlined style={{ color: '#009B60', marginRight: 6 }} />
+                Mã Khuyến Mãi / Voucher:
+              </Text>
+              <div style={{ display: 'flex', gap: 10, marginBottom: 10 }}>
+                <Input
+                  placeholder="Nhập mã voucher (VD: CHAOMUNG20, GIAM30K)"
+                  value={voucherCodeInput}
+                  onChange={(e) => setVoucherCodeInput(e.target.value.toUpperCase())}
+                  style={{ height: 40, borderRadius: 8 }}
+                  disabled={!!appliedVoucher}
+                />
+                {appliedVoucher ? (
+                  <Button danger onClick={handleRemoveVoucher} style={{ height: 40, borderRadius: 8 }}>
+                    Hủy bỏ
+                  </Button>
+                ) : (
+                  <Button
+                    type="primary"
+                    loading={validatingVoucher}
+                    onClick={() => handleApplyVoucher()}
+                    style={{ height: 40, borderRadius: 8, backgroundColor: '#009B60', borderColor: '#009B60' }}
+                  >
+                    Áp Dụng
+                  </Button>
+                )}
+              </div>
+
+              {appliedVoucher ? (
+                <Alert
+                  message={`Áp dụng thành công mã ${appliedVoucher.voucherCode}!`}
+                  description={`${appliedVoucher.voucherName} (Giảm ${appliedVoucher.discount.toLocaleString('vi-VN')} đ)`}
+                  type="success"
+                  showIcon
+                  style={{ borderRadius: 8 }}
+                />
+              ) : (
+                <div>
+                  <Text style={{ fontSize: 12, color: '#64748b', display: 'block', marginBottom: 6 }}>
+                    Gợi ý mã giảm giá hôm nay (nhấn để chọn nhanh):
+                  </Text>
+                  <Space wrap>
+                    <Tag
+                      color="purple"
+                      style={{ cursor: 'pointer', padding: '4px 8px', borderRadius: 6 }}
+                      onClick={() => handleApplyVoucher('CHAOMUNG20')}
+                    >
+                      🏷️ CHAOMUNG20 (-20%)
+                    </Tag>
+                    <Tag
+                      color="magenta"
+                      style={{ cursor: 'pointer', padding: '4px 8px', borderRadius: 6 }}
+                      onClick={() => handleApplyVoucher('GIAM30K')}
+                    >
+                      🏷️ GIAM30K (-30k)
+                    </Tag>
+                    <Tag
+                      color="gold"
+                      style={{ cursor: 'pointer', padding: '4px 8px', borderRadius: 6 }}
+                      onClick={() => handleApplyVoucher('VIPBADMINTON')}
+                    >
+                      🏷️ VIPBADMINTON (-50k)
+                    </Tag>
+                  </Space>
+                </div>
+              )}
+            </div>
+
+            <Divider style={{ margin: '16px 0' }} />
+
+            {/* Payment Method */}
+            <div>
+              <Text strong style={{ display: 'block', marginBottom: 8, fontSize: 13 }}>
+                <DollarOutlined style={{ color: '#009B60', marginRight: 6 }} />
+                Hình Thức Thanh Toán:
+              </Text>
+              <Radio.Group
+                value={paymentMethod}
+                onChange={(e) => setPaymentMethod(e.target.value)}
+                style={{ width: '100%', display: 'flex', flexDirection: 'column', gap: 10 }}
+              >
+                <div
+                  onClick={() => setPaymentMethod('CASH')}
+                  style={{
+                    padding: '12px 16px',
+                    borderRadius: 10,
+                    border: paymentMethod === 'CASH' ? '2px solid #009B60' : '1px solid #e2e8f0',
+                    backgroundColor: paymentMethod === 'CASH' ? '#f0fdf4' : '#ffffff',
+                    cursor: 'pointer',
+                    transition: 'all 0.2s',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'space-between'
+                  }}
+                >
+                  <Radio value="CASH">
+                    <Space align="center" style={{ marginLeft: 6 }}>
+                      <DollarOutlined style={{ fontSize: 18, color: '#009B60' }} />
+                      <div>
+                        <Text strong style={{ fontSize: 14, display: 'block' }}>
+                          Tiền mặt tại quầy khi nhận sân
+                        </Text>
+                        <Text type="secondary" style={{ fontSize: 12 }}>
+                          Thanh toán trực tiếp tại quầy lễ tân khi đến nhận sân chơi
+                        </Text>
+                      </div>
+                    </Space>
+                  </Radio>
+                  <Tag color="green">Mặc định</Tag>
+                </div>
+
+                <div
+                  onClick={() => setPaymentMethod('TRANSFER')}
+                  style={{
+                    padding: '12px 16px',
+                    borderRadius: 10,
+                    border: paymentMethod === 'TRANSFER' ? '2px solid #009B60' : '1px solid #e2e8f0',
+                    backgroundColor: paymentMethod === 'TRANSFER' ? '#f0fdf4' : '#ffffff',
+                    cursor: 'pointer',
+                    transition: 'all 0.2s',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'space-between'
+                  }}
+                >
+                  <Radio value="TRANSFER">
+                    <Space align="center" style={{ marginLeft: 6 }}>
+                      <BankOutlined style={{ fontSize: 18, color: '#7c3aed' }} />
+                      <div>
+                        <Text strong style={{ fontSize: 14, display: 'block' }}>
+                          Chuyển khoản ngân hàng trực tiếp
+                        </Text>
+                        <Text type="secondary" style={{ fontSize: 12 }}>
+                          Chuyển tiền vào tài khoản ngân hàng của sân
+                        </Text>
+                      </div>
+                    </Space>
+                  </Radio>
+                </div>
+              </Radio.Group>
+            </div>
+          </Card>
+        </Col>
+
+        {/* CỘT PHẢI: BẢNG GIÁ CHI TIẾT TỪNG SÂN VÀ TỪNG KHOẢNG GIỜ (STICKY) */}
+        <Col xs={24} lg={10} xl={9}>
+          <Card
+            title={
+              <Space>
+                <FileTextOutlined style={{ color: '#009B60' }} />
+                <span style={{ fontWeight: 600 }}>Chi Tiết Tính Giá & Tóm Tắt</span>
+              </Space>
+            }
+            extra={loadingPrice && <Spin size="small" />}
+            style={{
+              borderRadius: 14,
+              boxShadow: '0 4px 20px rgba(0,0,0,0.06)',
+              border: '1px solid #e2e8f0',
+              position: 'sticky',
+              top: 24
+            }}
+          >
+            {/* Thông tin cơ bản */}
+            <div style={{ marginBottom: 14, padding: '10px 12px', background: '#f8fafc', borderRadius: 8, border: '1px solid #e2e8f0' }}>
+              <Row justify="space-between" align="middle">
+                <Col>
+                  <Text type="secondary" style={{ fontSize: 12 }}>Ngày chơi:</Text>
+                  <div style={{ fontWeight: 600, color: '#0f172a' }}>{selectedDate.format('DD/MM/YYYY')}</div>
+                </Col>
+                <Col style={{ textAlign: 'right' }}>
+                  <Text type="secondary" style={{ fontSize: 12 }}>Thời gian:</Text>
+                  <div>
+                    {selectedCourts.length === 1 ? (
+                      <Tag color="geekblue" style={{ margin: 0 }}>
+                        {priceCalculation.courtBreakdowns[0]?.startTime || commonStartTime} - {priceCalculation.courtBreakdowns[0]?.endTime || commonEndTime}
+                      </Tag>
+                    ) : (
+                      <Tag color="purple" style={{ margin: 0 }}>
+                        {selectedCourts.length} sân (giờ riêng)
+                      </Tag>
+                    )}
+                  </div>
+                </Col>
+              </Row>
+            </div>
+
+            {/* Chi tiết từng sân và các khoảng giờ */}
+            <div style={{ marginBottom: 16 }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+                <Text strong style={{ fontSize: 13 }}>
+                  🏸 Bảng giá chi tiết ({priceCalculation.courtBreakdowns?.length || 0} sân):
+                </Text>
+                <Text type="secondary" style={{ fontSize: 11 }}>Tính độc lập từng sân</Text>
+              </div>
+
+              {priceCalculation.courtBreakdowns && priceCalculation.courtBreakdowns.length > 0 ? (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+                  {priceCalculation.courtBreakdowns.map((cb) => (
+                    <div
+                      key={cb.courtId}
+                      style={{
+                        background: '#ffffff',
+                        border: '1px solid #cbd5e1',
+                        borderRadius: 8,
+                        padding: '10px 12px',
+                        boxShadow: '0 1px 3px rgba(0,0,0,0.03)'
+                      }}
+                    >
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8, flexWrap: 'wrap', gap: 4 }}>
+                        <Space size={6} wrap>
+                          <Text strong style={{ color: '#009B60', fontSize: 14 }}>{cb.courtName}</Text>
+                          <Tag color={cb.courtType?.includes('VIP') ? 'gold' : 'green'} style={{ margin: 0, fontSize: 10 }}>
+                            {cb.courtType}
+                          </Tag>
+                          <Tag color="geekblue" style={{ margin: 0, fontSize: 10 }}>
+                            🕒 {cb.startTime} - {cb.endTime} ({cb.durationHours}h)
+                          </Tag>
+                        </Space>
+                        <Text strong style={{ color: '#009B60', fontSize: 13 }}>
+                          {(cb.totalAmount || 0).toLocaleString('vi-VN')} đ
+                        </Text>
+                      </div>
+
+                      {/* Các khoảng giờ của sân này */}
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                        {(cb.intervals || []).map((inv, idx) => (
+                          <div
+                            key={idx}
+                            style={{
+                              display: 'flex',
+                              justifyContent: 'space-between',
+                              alignItems: 'center',
+                              background: '#f8fafc',
+                              padding: '5px 8px',
+                              borderRadius: 6,
+                              fontSize: 12
+                            }}
+                          >
+                            <Space size={4}>
+                              <Text strong style={{ fontSize: 12 }}>{inv.startTime}-{inv.endTime}</Text>
+                              <Tag
+                                color={inv.priceType.includes('cao điểm') || inv.priceType.includes('vàng') ? 'volcano' : 'blue'}
+                                style={{ fontSize: 10, padding: '0 4px', margin: 0 }}
+                              >
+                                {inv.priceType.includes('cao điểm') ? 'Cao điểm' : 'Thường'}
+                              </Tag>
+                              <Text type="secondary" style={{ fontSize: 11 }}>
+                                ({inv.hourlyRate.toLocaleString('vi-VN')}đ/h)
+                              </Text>
+                            </Space>
+
+                            <Text strong style={{ color: '#334155' }}>
+                              {inv.amount.toLocaleString('vi-VN')} đ
+                            </Text>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div style={{ textAlign: 'center', padding: '16px 0', color: '#94a3b8' }}>
+                  Chưa chọn sân hoặc thời gian
+                </div>
+              )}
+            </div>
+
+            <Divider style={{ margin: '14px 0' }} />
+
+            {/* Bảng chi tiết tổng tiền */}
+            <div style={{ marginBottom: 16 }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 8 }}>
+                <Text type="secondary">Tổng thành tiền các sân:</Text>
+                <Text strong>{priceCalculation.totalBasePrice.toLocaleString('vi-VN')} đ</Text>
+              </div>
+
+              {priceCalculation.discount > 0 && (
+                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 8, color: '#16a34a' }}>
+                  <Text style={{ color: '#16a34a' }}>Giảm giá khuyến mãi:</Text>
+                  <Text strong style={{ color: '#16a34a' }}>
+                    - {priceCalculation.discount.toLocaleString('vi-VN')} đ
+                  </Text>
+                </div>
+              )}
+
+              <Divider style={{ margin: '10px 0' }} />
+
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
+                <Text strong style={{ fontSize: 15 }}>
+                  Tổng thanh toán:
+                </Text>
+                <Text strong style={{ fontSize: 24, color: '#009B60' }}>
+                  {priceCalculation.finalTotalAmount.toLocaleString('vi-VN')} đ
+                </Text>
+              </div>
+            </div>
 
             <Button
               type="primary"
               size="large"
-              disabled={!selectedSlot}
-              onClick={() => setCurrentStep(2)}
+              block
+              loading={submittingBooking}
+              disabled={selectedCourts.length === 0 || !areAllCourtsValid || priceCalculation.totalBasePrice === 0}
+              onClick={handleOpenLockModal}
               style={{
                 backgroundColor: '#009B60',
                 borderColor: '#009B60',
-                borderRadius: 8,
-                padding: '0 32px'
+                height: 48,
+                borderRadius: 10,
+                fontSize: 16,
+                fontWeight: 600,
+                boxShadow: '0 4px 14px rgba(0, 155, 96, 0.3)'
               }}
-              icon={<ArrowRightOutlined />}
+              icon={<CheckCircleOutlined />}
             >
-              Tiếp tục: Xác nhận thông tin
+              Xác Nhận & Khóa Đơn
             </Button>
-          </div>
-        </div>
-      )}
 
-      {/* BƯỚC 3: THÔNG TIN KHÁCH HÀNG & THANH TOÁN */}
-      {currentStep === 2 && (
-        <div>
-          <Row gutter={[24, 24]}>
-            {/* Cột trái: Thông tin khách & Voucher & Phương thức thanh toán */}
-            <Col xs={24} lg={15}>
-              {/* Thông tin liên hệ */}
-              <Card
-                title={
-                  <Space>
-                    <UserOutlined style={{ color: '#009B60' }} />
-                    <span>Thông Tin Khách Hàng Đặt Sân</span>
-                  </Space>
-                }
-                style={{ borderRadius: 14, marginBottom: 20 }}
-              >
-                <Row gutter={[16, 16]}>
-                  <Col xs={24} sm={12}>
-                    <Text strong style={{ display: 'block', marginBottom: 6 }}>
-                      Họ và Tên khách hàng <span style={{ color: 'red' }}>*</span>
-                    </Text>
-                    <Input
-                      placeholder="Nguyễn Văn A"
-                      value={customerName}
-                      onChange={(e) => setCustomerName(e.target.value)}
-                      style={{ height: 40, borderRadius: 8 }}
-                    />
-                  </Col>
+            <div style={{ textAlign: 'center', marginTop: 12 }}>
+              <Text type="secondary" style={{ fontSize: 12 }}>
+                <SafetyCertificateOutlined style={{ color: '#009B60' }} /> Hệ thống tự động xác minh giá chuẩn xác 100%
+              </Text>
+            </div>
+          </Card>
+        </Col>
+      </Row>
 
-                  <Col xs={24} sm={12}>
-                    <Text strong style={{ display: 'block', marginBottom: 6 }}>
-                      Số điện thoại liên hệ <span style={{ color: 'red' }}>*</span>
-                    </Text>
-                    <Input
-                      placeholder="0901234567"
-                      value={customerPhone}
-                      onChange={(e) => setCustomerPhone(e.target.value)}
-                      style={{ height: 40, borderRadius: 8 }}
-                    />
-                  </Col>
+      {/* MODAL KHÓA ĐƠN & XÁC NHẬN ĐẶT SÂN (RULE 5) */}
+      <Modal
+        open={isConfirmLockModalOpen}
+        onCancel={() => setIsConfirmLockModalOpen(false)}
+        width={760}
+        centered
+        title={
+          <Space>
+            <CheckCircleOutlined style={{ color: '#009B60', fontSize: 20 }} />
+            <span style={{ fontSize: 18, fontWeight: 700 }}>Xác Nhận & Khóa Đơn Đặt Sân</span>
+          </Space>
+        }
+        footer={[
+          <Button key="back" onClick={() => setIsConfirmLockModalOpen(false)} style={{ borderRadius: 8 }}>
+            Quay Lại Điều Chỉnh
+          </Button>,
+          <Button
+            key="submit"
+            type="primary"
+            loading={submittingBooking}
+            onClick={handleExecuteBooking}
+            style={{
+              backgroundColor: '#009B60',
+              borderColor: '#009B60',
+              borderRadius: 8,
+              padding: '0 24px',
+              fontWeight: 600
+            }}
+            icon={<CheckCircleOutlined />}
+          >
+            Đồng Ý & Khóa Đơn Ngay
+          </Button>
+        ]}
+      >
+        <div style={{ padding: '8px 0' }}>
+          <Alert
+            message="Chi tiết bảng giá từng sân và từng khoảng thời gian"
+            description="Mỗi sân và mỗi khung giờ được áp dụng đơn giá riêng theo đúng cấu hình hệ thống (không gộp chung giá)."
+            type="info"
+            showIcon
+            style={{ marginBottom: 16, borderRadius: 8 }}
+          />
 
-                  <Col xs={24} sm={12}>
-                    <Text strong style={{ display: 'block', marginBottom: 6 }}>
-                      Email nhận xác nhận <span style={{ color: '#888', fontWeight: 'normal' }}>(không bắt buộc)</span>
-                    </Text>
-                    <Input
-                      placeholder="email@gmail.com (tùy chọn)"
-                      value={customerEmail}
-                      onChange={(e) => setCustomerEmail(e.target.value)}
-                      style={{ height: 40, borderRadius: 8 }}
-                    />
-                  </Col>
+          {/* Bảng chi tiết từng khoảng giờ theo Rule 5 */}
+          <Table
+            dataSource={breakdownTableData}
+            columns={breakdownColumns}
+            pagination={false}
+            size="small"
+            bordered
+            style={{ marginBottom: 16 }}
+          />
 
-                  <Col xs={24} sm={12}>
-                    <Text strong style={{ display: 'block', marginBottom: 6 }}>
-                      Địa chỉ
-                    </Text>
-                    <Input
-                      placeholder="Cần Thơ..."
-                      value={customerAddress}
-                      onChange={(e) => setCustomerAddress(e.target.value)}
-                      style={{ height: 40, borderRadius: 8 }}
-                    />
-                  </Col>
-
-                  <Col xs={24}>
-                    <Text strong style={{ display: 'block', marginBottom: 6 }}>
-                      Ghi chú thêm cho sân (tùy chọn)
-                    </Text>
-                    <Input.TextArea
-                      rows={2}
-                      placeholder="Ví dụ: Cần mượn thêm vợt, mua thêm nước khoáng, yêu cầu chuẩn bị lưới..."
-                      value={note}
-                      onChange={(e) => setNote(e.target.value)}
-                      style={{ borderRadius: 8 }}
-                    />
-                  </Col>
-                </Row>
-              </Card>
-
-              {/* Mã giảm giá (Voucher) */}
-              <Card
-                title={
-                  <Space>
-                    <TagOutlined style={{ color: '#009B60' }} />
-                    <span>Mã Khuyến Mãi / Voucher</span>
-                  </Space>
-                }
-                style={{ borderRadius: 14, marginBottom: 20 }}
-              >
-                <div style={{ display: 'flex', gap: 10, marginBottom: 12 }}>
-                  <Input
-                    placeholder="Nhập mã voucher (VD: CHAOMUNG20, GIAM30K)"
-                    value={voucherCodeInput}
-                    onChange={(e) => setVoucherCodeInput(e.target.value.toUpperCase())}
-                    style={{ height: 40, borderRadius: 8 }}
-                    disabled={!!appliedVoucher}
-                  />
-                  {appliedVoucher ? (
-                    <Button danger onClick={handleRemoveVoucher} style={{ height: 40, borderRadius: 8 }}>
-                      Hủy bỏ
-                    </Button>
-                  ) : (
-                    <Button
-                      type="primary"
-                      loading={validatingVoucher}
-                      onClick={() => handleApplyVoucher()}
-                      style={{ height: 40, borderRadius: 8, backgroundColor: '#009B60', borderColor: '#009B60' }}
-                    >
-                      Áp Dụng
-                    </Button>
-                  )}
-                </div>
-
-                {appliedVoucher ? (
-                  <Alert
-                    message={`Áp dụng thành công mã ${appliedVoucher.voucherCode}!`}
-                    description={`${appliedVoucher.voucherName} (Giảm ${appliedVoucher.discount.toLocaleString('vi-VN')} đ)`}
-                    type="success"
-                    showIcon
-                    style={{ borderRadius: 8 }}
-                  />
+          {/* Tóm tắt tổng tiền từng sân & tổng đơn */}
+          <Card size="small" style={{ borderRadius: 10, background: '#f8fafc', border: '1px solid #e2e8f0', marginBottom: 16 }}>
+            <Descriptions size="small" column={{ xs: 1, sm: 2 }} bordered={false}>
+              <Descriptions.Item label="Ngày chơi">
+                <Text strong>{selectedDate.format('DD/MM/YYYY')} ({selectedDate.format('dddd')})</Text>
+              </Descriptions.Item>
+              <Descriptions.Item label="Thời gian đặt">
+                {selectedCourts.length === 1 ? (
+                  <Tag color="geekblue">
+                    {priceCalculation.courtBreakdowns[0]?.startTime || commonStartTime} - {priceCalculation.courtBreakdowns[0]?.endTime || commonEndTime}
+                  </Tag>
                 ) : (
-                  <div>
-                    <Text orientation="vertical" style={{ fontSize: 13, color: '#64748b', display: 'block', marginBottom: 6 }}>
-                      Gợi ý mã giảm giá hôm nay:
-                    </Text>
-                    <Space wrap>
-                      <Tag
-                        color="purple"
-                        style={{ cursor: 'pointer', padding: '4px 8px', borderRadius: 6 }}
-                        onClick={() => handleApplyVoucher('CHAOMUNG20')}
-                      >
-                        🏷️ CHAOMUNG20 (-20%)
-                      </Tag>
-                      <Tag
-                        color="magenta"
-                        style={{ cursor: 'pointer', padding: '4px 8px', borderRadius: 6 }}
-                        onClick={() => handleApplyVoucher('GIAM30K')}
-                      >
-                        🏷️ GIAM30K (-30k)
-                      </Tag>
-                      <Tag
-                        color="gold"
-                        style={{ cursor: 'pointer', padding: '4px 8px', borderRadius: 6 }}
-                        onClick={() => handleApplyVoucher('VIPBADMINTON')}
-                      >
-                        🏷️ VIPBADMINTON (-50k)
-                      </Tag>
-                    </Space>
-                  </div>
+                  <Tag color="purple">
+                    Khung giờ riêng cho từng sân ({selectedCourts.length} sân)
+                  </Tag>
                 )}
-              </Card>
+              </Descriptions.Item>
+              <Descriptions.Item label="Khách hàng">
+                <Text strong>{user?.fullName || 'Khách hàng'}</Text> {user?.phone && `(${user.phone})`}
+              </Descriptions.Item>
+              <Descriptions.Item label="Hình thức">
+                <Tag color="blue">{paymentMethod === 'TRANSFER' ? 'Chuyển khoản' : 'Tiền mặt tại quầy'}</Tag>
+              </Descriptions.Item>
 
-              {/* Phương thức thanh toán */}
-              <Card
-                title={
-                  <Space>
-                    <DollarOutlined style={{ color: '#009B60' }} />
-                    <span>Hình Thức Thanh Toán</span>
-                  </Space>
-                }
-                style={{ borderRadius: 14, marginBottom: 20 }}
-              >
-                <Radio.Group
-                  value={paymentMethod}
-                  onChange={(e) => setPaymentMethod(e.target.value)}
-                  style={{ width: '100%', display: 'flex', flexDirection: 'column', gap: 12 }}
-                >
-                  <div
-                    onClick={() => setPaymentMethod('CASH')}
-                    style={{
-                      padding: '14px 16px',
-                      borderRadius: 10,
-                      border: paymentMethod === 'CASH' ? '2px solid #009B60' : '1px solid #e2e8f0',
-                      backgroundColor: paymentMethod === 'CASH' ? '#f0fdf4' : '#ffffff',
-                      cursor: 'pointer',
-                      transition: 'all 0.2s',
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'space-between'
-                    }}
-                  >
-                    <Radio value="CASH">
-                      <Space align="center" style={{ marginLeft: 6 }}>
-                        <DollarOutlined style={{ fontSize: 20, color: '#009B60' }} />
-                        <div>
-                          <Text strong style={{ fontSize: 14, display: 'block' }}>
-                            Tiền mặt tại quầy khi nhận sân
-                          </Text>
-                          <Text type="secondary" style={{ fontSize: 12 }}>
-                            Thanh toán trực tiếp tại quầy lễ tân khi đến nhận sân chơi
-                          </Text>
-                        </div>
-                      </Space>
-                    </Radio>
-                    <Tag color="green">Mặc định</Tag>
-                  </div>
+              {/* Hiển thị tổng tiền từng sân */}
+              <Descriptions.Item label="Tổng tiền từng sân" span={2}>
+                <Space wrap size={[8, 8]}>
+                  {(priceCalculation.courtBreakdowns || []).map((cb) => (
+                    <Tag key={cb.courtId} color="green" style={{ padding: '4px 10px', borderRadius: 6, fontSize: 12 }}>
+                      🏸 <strong>{cb.courtName}</strong> ({cb.startTime} - {cb.endTime}): {(cb.totalAmount || 0).toLocaleString('vi-VN')} đ
+                    </Tag>
+                  ))}
+                </Space>
+              </Descriptions.Item>
 
-                  <div
-                    onClick={() => setPaymentMethod('TRANSFER')}
-                    style={{
-                      padding: '14px 16px',
-                      borderRadius: 10,
-                      border: paymentMethod === 'TRANSFER' ? '2px solid #009B60' : '1px solid #e2e8f0',
-                      backgroundColor: paymentMethod === 'TRANSFER' ? '#f0fdf4' : '#ffffff',
-                      cursor: 'pointer',
-                      transition: 'all 0.2s',
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'space-between'
-                    }}
-                  >
-                    <Radio value="TRANSFER">
-                      <Space align="center" style={{ marginLeft: 6 }}>
-                        <BankOutlined style={{ fontSize: 20, color: '#7c3aed' }} />
-                        <div>
-                          <Text strong style={{ fontSize: 14, display: 'block' }}>
-                            Chuyển khoản ngân hàng trực tiếp
-                          </Text>
-                          <Text type="secondary" style={{ fontSize: 12 }}>
-                            Chuyển tiền vào tài khoản ngân hàng của sân
-                          </Text>
-                        </div>
-                      </Space>
-                    </Radio>
-                  </div>
-                </Radio.Group>
-
-                <div style={{ marginTop: 12, padding: '10px 14px', background: '#fffbe6', border: '1px solid #ffe58f', borderRadius: 8 }}>
-                  <Text style={{ fontSize: 13, color: '#d46b08' }}>
-                    ⚠️ <strong>Lưu ý:</strong> Hệ thống hiện tại chưa hỗ trợ cổng thanh toán VietQR. Quý khách vui lòng chọn <strong>Tiền mặt tại quầy</strong> hoặc <strong>Chuyển khoản trực tiếp</strong>.
+              {priceCalculation.discount > 0 && (
+                <Descriptions.Item label="Mã giảm giá (Voucher)" span={2}>
+                  <Text style={{ color: '#16a34a', fontWeight: 600 }}>
+                    🏷️ {priceCalculation.appliedVoucher?.voucherCode}: -{priceCalculation.discount.toLocaleString('vi-VN')} đ
                   </Text>
-                </div>
-              </Card>
-            </Col>
+                </Descriptions.Item>
+              )}
 
-            {/* Cột phải: Tóm tắt đơn đặt sân & Xác nhận */}
-            <Col xs={24} lg={9}>
-              <Card
-                title="Tóm Tắt Đơn Đặt Sân"
-                style={{
-                  borderRadius: 14,
-                  boxShadow: '0 4px 20px rgba(0,0,0,0.06)',
-                  border: '1px solid #e2e8f0',
-                  position: 'sticky',
-                  top: 24
-                }}
-              >
-                <div style={{ marginBottom: 16 }}>
-                  <Descriptions column={1} size="small" bordered>
-                    <Descriptions.Item label="Sân Đặt">
-                      <Text strong>{selectedCourt?.courtName}</Text>
-                      <div style={{ fontSize: 12, color: '#64748b' }}>{selectedCourt?.courtType}</div>
-                    </Descriptions.Item>
-
-                    <Descriptions.Item label="Địa Điểm">
-                      <Text type="secondary">{selectedCourt?.location}</Text>
-                    </Descriptions.Item>
-
-                    <Descriptions.Item label="Ngày Chơi">
-                      <Text strong style={{ color: '#009B60' }}>
-                        {selectedDate.format('DD/MM/YYYY')}
-                      </Text>
-                    </Descriptions.Item>
-
-                    <Descriptions.Item label="Khung Giờ">
-                      <Tag color="geekblue" style={{ fontSize: 13 }}>
-                        <ClockCircleOutlined /> {selectedSlot?.startTime} - {selectedSlot?.endTime}
-                      </Tag>
-                    </Descriptions.Item>
-                  </Descriptions>
-                </div>
-
-                <Divider style={{ margin: '16px 0' }} />
-
-                {/* Bảng chi tiết giá */}
-                <div style={{ marginBottom: 20 }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 8 }}>
-                    <Text type="secondary">Tiền thuê sân:</Text>
-                    <Text strong>{basePrice.toLocaleString('vi-VN')} đ</Text>
-                  </div>
-
-                  {discountAmount > 0 && (
-                    <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 8, color: '#16a34a' }}>
-                      <Text style={{ color: '#16a34a' }}>Giảm giá khuyến mãi:</Text>
-                      <Text strong style={{ color: '#16a34a' }}>
-                        - {discountAmount.toLocaleString('vi-VN')} đ
-                      </Text>
-                    </div>
-                  )}
-
-                  <Divider style={{ margin: '12px 0' }} />
-
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
-                    <Text strong style={{ fontSize: 16 }}>
-                      Tổng thanh toán:
-                    </Text>
-                    <Text strong style={{ fontSize: 24, color: '#009B60' }}>
-                      {finalTotalAmount.toLocaleString('vi-VN')} đ
-                    </Text>
-                  </div>
-                </div>
-
-                <Button
-                  type="primary"
-                  size="large"
-                  block
-                  loading={submittingBooking}
-                  onClick={handleConfirmBooking}
-                  style={{
-                    backgroundColor: '#009B60',
-                    borderColor: '#009B60',
-                    height: 48,
-                    borderRadius: 10,
-                    fontSize: 16,
-                    fontWeight: 600,
-                    boxShadow: '0 4px 14px rgba(0, 155, 96, 0.3)'
-                  }}
-                  icon={<CheckCircleOutlined />}
-                >
-                  Xác Nhận & Đặt Sân Ngay
-                </Button>
-
-                <div style={{ textAlign: 'center', marginTop: 12 }}>
-                  <Text type="secondary" style={{ fontSize: 12 }}>
-                    <SafetyCertificateOutlined style={{ color: '#009B60' }} /> Đảm bảo giữ sân 100% sau khi đặt
-                  </Text>
-                </div>
-
-                <div style={{ marginTop: 16, textAlign: 'center' }}>
-                  <Button type="link" onClick={() => setCurrentStep(1)} icon={<ArrowLeftOutlined />}>
-                    Quay lại chọn giờ khác
-                  </Button>
-                </div>
-              </Card>
-            </Col>
-          </Row>
+              <Descriptions.Item label="Tổng tiền toàn đơn" span={2}>
+                <Text strong style={{ fontSize: 20, color: '#009B60' }}>
+                  {priceCalculation.finalTotalAmount.toLocaleString('vi-VN')} đ
+                </Text>
+              </Descriptions.Item>
+            </Descriptions>
+          </Card>
         </div>
-      )}
+      </Modal>
 
-      {/* MODAL THÔNG BÁO ĐẶT SÂN THÀNH CÔNG & MÃ VIETQR */}
+      {/* MODAL THÀNH CÔNG */}
       <Modal
         open={isSuccessModalOpen}
         onCancel={() => setIsSuccessModalOpen(false)}
         footer={null}
-        width={650}
+        width={720}
         centered
         style={{ borderRadius: 16 }}
       >
@@ -1027,19 +1453,26 @@ export default function CustomerBookingPage() {
                   <Text strong style={{ color: '#009B60', fontSize: 16 }}>
                     #{createdBooking.bookingCode}
                   </Text>{' '}
-                  đã được ghi nhận vào hệ thống.
+                  đã được ghi nhận vào hệ thống với giá xác minh chuẩn xác.
                 </span>
               }
+            />
+            <Alert
+              message="Đơn đang chờ Admin/Staff duyệt"
+              description="Yêu cầu đã được lưu. Trạng thái sẽ cập nhật sau khi nhân viên xác nhận hoặc từ chối."
+              type="warning"
+              showIcon
+              style={{ marginBottom: 16 }}
             />
 
             {/* Chi tiết đơn */}
             <Card
               size="small"
               style={{
-                borderRadius: 12,
+                borderRadius: 10,
                 background: '#f8fafc',
                 border: '1px solid #e2e8f0',
-                marginBottom: 20
+                marginBottom: 16
               }}
             >
               <Descriptions size="small" column={{ xs: 1, sm: 2 }} bordered={false}>
@@ -1054,18 +1487,35 @@ export default function CustomerBookingPage() {
                     />
                   </Space>
                 </Descriptions.Item>
-                <Descriptions.Item label="Sân">
-                  <Text strong>{selectedCourt?.courtName}</Text>
+                <Descriptions.Item label="Sân Đã Đặt">
+                  <Text strong>
+                    {createdBooking.courtNames ||
+                      (createdBooking.courts
+                        ? createdBooking.courts.map((c) => c?.courtName).join(', ')
+                        : createdBooking.courtId?.courtName ||
+                          selectedCourts.map((c) => c.courtName).join(', '))}
+                  </Text>
                 </Descriptions.Item>
                 <Descriptions.Item label="Ngày Chơi">
                   {dayjs(createdBooking.bookingDate).format('DD/MM/YYYY')}
                 </Descriptions.Item>
                 <Descriptions.Item label="Khung Giờ">
-                  <Tag color="geekblue">
-                    {createdBooking.startTime} - {createdBooking.endTime}
-                  </Tag>
+                  {createdBooking.bookings && createdBooking.bookings.length > 1 ? (
+                    <Space wrap size={[4, 4]}>
+                      {createdBooking.bookings.map((b) => (
+                        <Tag key={b._id} color="geekblue" style={{ fontSize: 11 }}>
+                          {b.courtId?.courtName || 'Sân'}: {b.startTime} - {b.endTime}
+                        </Tag>
+                      ))}
+                    </Space>
+                  ) : (
+                    <Tag color="geekblue">
+                      {createdBooking.startTime} - {createdBooking.endTime}
+                    </Tag>
+                  )}
                 </Descriptions.Item>
-                <Descriptions.Item label="Tổng Tiền">
+
+                <Descriptions.Item label="Tổng Tiền Đơn">
                   <Text strong style={{ color: '#009B60', fontSize: 16 }}>
                     {(createdBooking.totalAmount || 0).toLocaleString('vi-VN')} đ
                   </Text>
@@ -1083,17 +1533,19 @@ export default function CustomerBookingPage() {
               </Descriptions>
             </Card>
 
-            <Alert
-              message="Đơn đặt sân chưa thanh toán"
-              description={
-                createdBooking.paymentMethod === 'TRANSFER'
-                  ? 'Quý khách vui lòng chuyển khoản ngân hàng hoặc thanh toán tại quầy lễ tân khi đến nhận sân chơi.'
-                  : 'Hệ thống không thu tiền lúc đặt sân. Quý khách vui lòng thanh toán tiền mặt trực tiếp tại quầy lễ tân khi đến nhận sân chơi.'
-              }
-              type="info"
-              showIcon
-              style={{ borderRadius: 12, marginBottom: 20 }}
-            />
+            {/* Bảng chi tiết khung giờ trong modal thành công */}
+            <div style={{ marginBottom: 16 }}>
+              <Text strong style={{ display: 'block', marginBottom: 6, fontSize: 13 }}>
+                📋 Chi tiết các khoảng giờ đã khóa đơn:
+              </Text>
+              <Table
+                dataSource={breakdownTableData}
+                columns={breakdownColumns}
+                pagination={false}
+                size="small"
+                bordered
+              />
+            </div>
 
             <div style={{ display: 'flex', justifyContent: 'center', gap: 12 }}>
               <Button onClick={() => navigate('/')} style={{ borderRadius: 8, height: 40, padding: '0 24px' }}>

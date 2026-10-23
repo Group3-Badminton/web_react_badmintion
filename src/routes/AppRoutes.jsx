@@ -20,6 +20,7 @@ import ProfilePage from "../pages/profile/ProfilePage";
 import PricingManagementPage from "../pages/admin/PricingManagementPage";
 import StaffManagementPage from "../pages/admin/StaffManagementPage";
 import CourtManagementPage from "../pages/admin/CourtManagementPage";
+import CustomerManagementPage from "../pages/admin/CustomerManagementPage";
 import { ROLES } from "../utils/constants";
 import { Result, Button } from "antd";
 
@@ -128,6 +129,14 @@ export default function AppRoutes() {
           element={
             <ProtectedRoute allowedRoles={[ROLES.ADMIN]}>
               <StaffManagementPage />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/admin/customers"
+          element={
+            <ProtectedRoute allowedRoles={[ROLES.ADMIN, ROLES.STAFF]}>
+              <CustomerManagementPage />
             </ProtectedRoute>
           }
         />
