@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import {
   Row,
   Col,
@@ -10,6 +10,7 @@ import {
   Avatar,
   Tag,
   message,
+  Spin,
 } from "antd";
 import {
   ThunderboltOutlined,
@@ -31,10 +32,18 @@ import badmintonLogo from "../../assets/BadmintionLogo.png";
 import san1 from "../../assets/sân1.png";
 import san2 from "../../assets/sân2.png";
 import san3 from "../../assets/sân3.png";
+import { pricingService } from "../../services/pricingService";
+
 const { Title, Paragraph, Text } = Typography;
 
+const COURT_IMAGES = {
+  STANDARD: san1,
+  VIP: san2,
+  PREMIUM: san3
+};
+
 // Dữ liệu bảng giá & loại sân cố định giới thiệu trên HomePage
-const courtTypes = [
+const courtTypesFallback = [
   {
     id: "standard",
     name: "Sân Tiêu Chuẩn",
@@ -94,6 +103,28 @@ const courtTypes = [
 export default function HomePage() {
   const { user, isAuthenticated, logout } = useAuth();
   const navigate = useNavigate();
+  const [courtTypesList, setCourtTypesList] = useState([]);
+  const [pricingLoading, setPricingLoading] = useState(true);
+
+  useEffect(() => {
+    let isMounted = true;
+    const fetchPricing = async () => {
+      try {
+        const res = await pricingService.getOverview();
+        if (isMounted && res.success && Array.isArray(res.data)) {
+          setCourtTypesList(res.data);
+        }
+      } catch (err) {
+        console.error("Lỗi khi tải bảng giá HomePage:", err);
+      } finally {
+        if (isMounted) setPricingLoading(false);
+      }
+    };
+    fetchPricing();
+    return () => {
+      isMounted = false;
+    };
+  }, []);
 
   const handleBookNow = () => {
     if (isAuthenticated) {
@@ -694,198 +725,248 @@ export default function HomePage() {
             sân thi đấu cao cấp.
           </p>
 
-          <Row gutter={[24, 24]} align="stretch">
-            {courtTypes.map((court) => (
-              <Col xs={24} md={8} key={court.id}>
-                <div
-                  style={{
-                    background: court.highlighted
-                      ? "rgba(22, 48, 35, 0.9)"
-                      : "rgba(15, 36, 28, 0.75)",
-                    border: court.highlighted
-                      ? "2px solid #bbf246"
-                      : "1px solid rgba(255, 255, 255, 0.12)",
-                    borderRadius: 20,
-                    padding: "24px",
-                    textAlign: "left",
-                    height: "100%",
-                    display: "flex",
-                    flexDirection: "column",
-                    justifyContent: "space-between",
-                    backdropFilter: "blur(12px)",
-                    boxShadow: court.highlighted
-                      ? "0 0 30px rgba(187, 242, 70, 0.25)"
-                      : "0 10px 25px rgba(0, 0, 0, 0.4)",
-                  }}
-                >
-                  <div>
-                    {/* Header của thẻ */}
+          {pricingLoading ? (
+            <div style={{ textAlign: "center", padding: "60px 0" }}>
+              <Spin size="large" tip="Đang tải danh mục sân..." />
+            </div>
+          ) : courtTypesList.length === 0 ? (
+            <div
+              style={{
+                textAlign: "center",
+                padding: "48px 24px",
+                background: "rgba(15, 36, 28, 0.75)",
+                borderRadius: 20,
+                border: "1px solid rgba(255, 255, 255, 0.12)",
+                color: "#94a3b8",
+                maxWidth: 600,
+                margin: "0 auto",
+              }}
+            >
+              <p style={{ fontSize: 16, margin: 0 }}>
+                Hệ thống đang cập nhật danh mục sân và bảng giá niêm yết. Vui lòng quay lại sau!
+              </p>
+            </div>
+          ) : (
+            <Row gutter={[24, 24]} align="stretch" justify="center">
+              {courtTypesList.map((court) => {
+                const colSpan =
+                  courtTypesList.length === 1
+                    ? { xs: 24, sm: 18, md: 12, lg: 10 }
+                    : courtTypesList.length === 2
+                    ? { xs: 24, md: 12, lg: 10 }
+                    : { xs: 24, md: 8 };
+
+                return (
+                  <Col {...colSpan} key={court.id || court.code}>
                     <div
                       style={{
+                        background: court.highlighted
+                          ? "rgba(22, 48, 35, 0.9)"
+                          : "rgba(15, 36, 28, 0.75)",
+                        border: court.highlighted
+                          ? "2px solid #bbf246"
+                          : "1px solid rgba(255, 255, 255, 0.12)",
+                        borderRadius: 20,
+                        padding: "24px",
+                        textAlign: "left",
+                        height: "100%",
                         display: "flex",
+                        flexDirection: "column",
                         justifyContent: "space-between",
-                        alignItems: "flex-start",
-                        marginBottom: 14,
+                        backdropFilter: "blur(12px)",
+                        boxShadow: court.highlighted
+                          ? "0 0 30px rgba(187, 242, 70, 0.25)"
+                          : "0 10px 25px rgba(0, 0, 0, 0.4)",
                       }}
                     >
-                      <div
-                        style={{
-                          display: "flex",
-                          alignItems: "center",
-                          gap: 12,
-                        }}
-                      >
+                      <div>
+                        {/* Header của thẻ */}
                         <div
                           style={{
-                            width: 44,
-                            height: 44,
-                            borderRadius: 12,
-                            background: court.iconBg,
                             display: "flex",
-                            alignItems: "center",
-                            justifyContent: "center",
-                            fontSize: 20,
-                            color: "#fff",
+                            justifyContent: "space-between",
+                            alignItems: "flex-start",
+                            marginBottom: 14,
                           }}
                         >
-                          {court.icon}
+                          <div
+                            style={{
+                              display: "flex",
+                              alignItems: "center",
+                              gap: 12,
+                            }}
+                          >
+                            <div
+                              style={{
+                                width: 44,
+                                height: 44,
+                                borderRadius: 12,
+                                background: court.iconBg,
+                                display: "flex",
+                                alignItems: "center",
+                                justifyContent: "center",
+                                fontSize: 20,
+                                color: "#fff",
+                              }}
+                            >
+                              {court.icon}
+                            </div>
+                            <div
+                              style={{
+                                fontSize: 16,
+                                fontWeight: 800,
+                                color: "#ffffff",
+                              }}
+                            >
+                              {court.name}
+                            </div>
+                          </div>
+                          <span
+                            style={{
+                              background: court.badgeBg,
+                              color: court.badgeColor,
+                              fontSize: 11,
+                              fontWeight: 700,
+                              padding: "3px 10px",
+                              borderRadius: 20,
+                            }}
+                          >
+                            {court.badge}
+                          </span>
                         </div>
+
+                        <p
+                          style={{
+                            fontSize: 12.5,
+                            color: "#94a3b8",
+                            lineHeight: 1.5,
+                            marginBottom: 18,
+                          }}
+                        >
+                          {court.description}
+                        </p>
                         <div
                           style={{
-                            fontSize: 16,
-                            fontWeight: 800,
-                            color: "#ffffff",
+                            height: 140,
+                            width: "100%",
+                            borderRadius: 12,
+                            overflow: "hidden",
+                            marginBottom: 20,
+                            border: "1px solid rgba(255, 255, 255, 0.15)",
+                            boxShadow: "0 4px 15px rgba(0, 0, 0, 0.25)",
                           }}
                         >
-                          {court.name}
+                          <img
+                            src={COURT_IMAGES[court.code] || san1}
+                            alt={court.name}
+                            style={{
+                              width: "100%",
+                              height: "100%",
+                              objectFit: "cover",
+                              display: "block",
+                              transition: "transform 0.3s ease",
+                            }}
+                          />
+                        </div>
+                        {/* Bảng giá niêm yết */}
+                        <div
+                          style={{
+                            background: "rgba(0, 0, 0, 0.3)",
+                            borderRadius: 12,
+                            padding: "14px",
+                            marginBottom: 22,
+                            border: "1px solid rgba(255, 255, 255, 0.06)",
+                          }}
+                        >
+                          <div
+                            style={{
+                              display: "flex",
+                              justifyContent: "space-between",
+                              padding: "4px 0",
+                              fontSize: 13,
+                              color: "#cbd5e1",
+                            }}
+                          >
+                            <span>Giờ thường (06:00 - 17:00):</span>
+                            {court.priceRegular && court.priceRegular !== "Chưa xác định" ? (
+                              <strong style={{ color: "#4ade80" }}>
+                                {court.priceRegular}
+                              </strong>
+                            ) : (
+                              <span style={{ color: "#94a3b8", fontStyle: "italic" }}>
+                                Chưa xác định
+                              </span>
+                            )}
+                          </div>
+                          <div
+                            style={{
+                              display: "flex",
+                              justifyContent: "space-between",
+                              padding: "4px 0",
+                              fontSize: 13,
+                              color: "#cbd5e1",
+                            }}
+                          >
+                            <span>Giờ vàng (17:00 - 22:00):</span>
+                            {court.pricePeak && court.pricePeak !== "Chưa xác định" ? (
+                              <strong style={{ color: "#4ade80" }}>
+                                {court.pricePeak}
+                              </strong>
+                            ) : (
+                              <span style={{ color: "#94a3b8", fontStyle: "italic" }}>
+                                Chưa xác định
+                              </span>
+                            )}
+                          </div>
+                          <div
+                            style={{
+                              display: "flex",
+                              justifyContent: "space-between",
+                              padding: "4px 0",
+                              fontSize: 13,
+                              color: "#cbd5e1",
+                            }}
+                          >
+                            <span>Cuối tuần & Ngày lễ:</span>
+                            {court.priceWeekend && court.priceWeekend !== "Chưa xác định" ? (
+                              <strong style={{ color: "#f87171" }}>
+                                {court.priceWeekend}
+                              </strong>
+                            ) : (
+                              <span style={{ color: "#94a3b8", fontStyle: "italic" }}>
+                                Chưa xác định
+                              </span>
+                            )}
+                          </div>
                         </div>
                       </div>
-                      <span
-                        style={{
-                          background: court.badgeBg,
-                          color: court.badgeColor,
-                          fontSize: 11,
-                          fontWeight: 700,
-                          padding: "3px 10px",
-                          borderRadius: 20,
-                        }}
-                      >
-                        {court.badge}
-                      </span>
-                    </div>
 
-                    <p
-                      style={{
-                        fontSize: 12.5,
-                        color: "#94a3b8",
-                        lineHeight: 1.5,
-                        marginBottom: 18,
-                      }}
-                    >
-                      {court.description}
-                    </p>
-                    <div
-                      style={{
-                        height: 140,
-                        width: "100%",
-                        borderRadius: 12,
-                        overflow: "hidden",
-                        marginBottom: 20,
-                        border: "1px solid rgba(255, 255, 255, 0.15)",
-                        boxShadow: "0 4px 15px rgba(0, 0, 0, 0.25)",
-                      }}
-                    >
-                      <img
-                        src={court.image}
-                        alt={court.name}
+                      <Button
+                        type={court.highlighted ? "primary" : "default"}
+                        onClick={handleBookNow}
                         style={{
+                          height: 42,
                           width: "100%",
-                          height: "100%",
-                          objectFit: "cover",
-                          display: "block",
-                          transition: "transform 0.3s ease",
+                          borderRadius: 30,
+                          fontWeight: 800,
+                          fontSize: 14,
+                          background: court.highlighted
+                            ? "linear-gradient(135deg, #c0f135 0%, #48df7b 50%, #16a34a 100%)"
+                            : "rgba(255, 255, 255, 0.08)",
+                          borderColor: court.highlighted
+                            ? "transparent"
+                            : "rgba(255, 255, 255, 0.25)",
+                          color: court.highlighted ? "#052e16" : "#ffffff",
                         }}
-                      />
+                      >
+                        📅 Đặt sân ngay &gt;
+                      </Button>
                     </div>
-                    {/* Bảng giá niêm yết */}
-                    <div
-                      style={{
-                        background: "rgba(0, 0, 0, 0.3)",
-                        borderRadius: 12,
-                        padding: "14px",
-                        marginBottom: 22,
-                        border: "1px solid rgba(255, 255, 255, 0.06)",
-                      }}
-                    >
-                      <div
-                        style={{
-                          display: "flex",
-                          justifyContent: "space-between",
-                          padding: "4px 0",
-                          fontSize: 13,
-                          color: "#cbd5e1",
-                        }}
-                      >
-                        <span>Giờ thường (06:00 - 17:00):</span>
-                        <strong style={{ color: "#4ade80" }}>
-                          {court.priceRegular}
-                        </strong>
-                      </div>
-                      <div
-                        style={{
-                          display: "flex",
-                          justifyContent: "space-between",
-                          padding: "4px 0",
-                          fontSize: 13,
-                          color: "#cbd5e1",
-                        }}
-                      >
-                        <span>Giờ vàng (17:00 - 22:00):</span>
-                        <strong style={{ color: "#4ade80" }}>
-                          {court.pricePeak}
-                        </strong>
-                      </div>
-                      <div
-                        style={{
-                          display: "flex",
-                          justifyContent: "space-between",
-                          padding: "4px 0",
-                          fontSize: 13,
-                          color: "#cbd5e1",
-                        }}
-                      >
-                        <span>Cuối tuần & Ngày lễ:</span>
-                        <strong style={{ color: "#f87171" }}>
-                          {court.priceWeekend}
-                        </strong>
-                      </div>
-                    </div>
-                  </div>
-
-                  <Button
-                    type={court.highlighted ? "primary" : "default"}
-                    onClick={handleBookNow}
-                    style={{
-                      height: 42,
-                      width: "100%",
-                      borderRadius: 30,
-                      fontWeight: 800,
-                      fontSize: 14,
-                      background: court.highlighted
-                        ? "linear-gradient(135deg, #c0f135 0%, #48df7b 50%, #16a34a 100%)"
-                        : "rgba(255, 255, 255, 0.08)",
-                      borderColor: court.highlighted
-                        ? "transparent"
-                        : "rgba(255, 255, 255, 0.25)",
-                      color: court.highlighted ? "#052e16" : "#ffffff",
-                    }}
-                  >
-                    📅 Đặt sân ngay &gt;
-                  </Button>
-                </div>
-              </Col>
-            ))}
-          </Row>
+                  </Col>
+                );
+              })}
+            </Row>
+          )}
         </div>
       </section>
 
