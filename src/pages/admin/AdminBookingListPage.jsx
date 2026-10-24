@@ -502,6 +502,7 @@ export default function AdminBookingListPage() {
           limit: pageSize,
           search: search.trim(),
           status: statusFilter,
+          paymentStatus: paymentStatusFilter !== 'ALL' ? paymentStatusFilter : undefined,
           courtId: courtFilter,
           bookingDate: selectedDate ? selectedDate.format('YYYY-MM-DD') : ''
         };
@@ -524,7 +525,7 @@ export default function AdminBookingListPage() {
         setLoading(false);
       }
     },
-    [search, statusFilter, courtFilter, selectedDate, pagination.current, pagination.pageSize]
+    [search, statusFilter, paymentStatusFilter, courtFilter, selectedDate, pagination.current, pagination.pageSize]
   );
 
   useEffect(() => {
@@ -534,7 +535,7 @@ export default function AdminBookingListPage() {
 
   useEffect(() => {
     fetchBookings(1, pagination.pageSize);
-  }, [statusFilter, courtFilter, selectedDate]);
+  }, [statusFilter, paymentStatusFilter, courtFilter, selectedDate]);
 
   // Tìm kiếm khi nhấn Enter
   const handleSearchSubmit = () => {
@@ -545,6 +546,7 @@ export default function AdminBookingListPage() {
   const handleResetFilters = () => {
     setSearch('');
     setStatusFilter('ALL');
+    setPaymentStatusFilter('ALL');
     setCourtFilter('ALL');
     setSelectedDate(null);
   };
@@ -1180,7 +1182,7 @@ export default function AdminBookingListPage() {
             )}
 
             {/* Từ chối hoặc hủy đơn */}
-            {['PENDING', 'CONFIRMED'].includes(record.status) && (
+            {['PENDING', 'PENDING_APPROVAL', 'CONFIRMED'].includes(record.status) && (
               <Popconfirm
                 title="Bạn có chắc chắn muốn hủy đơn đặt sân này?"
                 onConfirm={() => handleUpdateStatus(record._id, 'CANCELLED')}
@@ -1336,7 +1338,7 @@ export default function AdminBookingListPage() {
       >
         <Row gutter={[12, 12]} align="middle">
           {/* Ô tìm kiếm */}
-          <Col xs={24} sm={12} md={7}>
+          <Col xs={24} sm={12} md={5}>
             <Input
               placeholder="Tìm mã đơn, tên khách, SĐT..."
               prefix={<SearchOutlined style={{ color: '#bfbfbf' }} />}
@@ -1348,7 +1350,7 @@ export default function AdminBookingListPage() {
           </Col>
 
           {/* Lọc theo trạng thái đặt đơn */}
-          <Col xs={12} sm={6} md={5}>
+          <Col xs={12} sm={6} md={4}>
             <Select
               style={{ width: '100%' }}
               value={statusFilter}
@@ -1365,8 +1367,22 @@ export default function AdminBookingListPage() {
             </Select>
           </Col>
 
+          {/* Lọc theo trạng thái thanh toán */}
+          <Col xs={12} sm={6} md={4}>
+            <Select
+              style={{ width: '100%' }}
+              value={paymentStatusFilter}
+              onChange={setPaymentStatusFilter}
+              placeholder="Thanh toán"
+            >
+              <Option value="ALL">Tất cả thanh toán</Option>
+              <Option value="UNPAID">Chưa thanh toán</Option>
+              <Option value="PAID">Đã thanh toán</Option>
+            </Select>
+          </Col>
+
           {/* Lọc theo sân */}
-          <Col xs={12} sm={6} md={5}>
+          <Col xs={12} sm={6} md={4}>
             <Select
               style={{ width: '100%' }}
               value={courtFilter}
@@ -1383,7 +1399,7 @@ export default function AdminBookingListPage() {
           </Col>
 
           {/* Lọc theo ngày đặt sân */}
-          <Col xs={12} sm={6} md={5}>
+          <Col xs={12} sm={6} md={4}>
             <DatePicker
               style={{ width: '100%' }}
               placeholder="Chọn ngày đặt"
@@ -1394,7 +1410,7 @@ export default function AdminBookingListPage() {
           </Col>
 
           {/* Nút hành động */}
-          <Col xs={24} sm={12} md={2} style={{ textAlign: 'right' }}>
+          <Col xs={24} sm={12} md={3} style={{ textAlign: 'right' }}>
             <Button
               icon={<FilterOutlined />}
               onClick={handleResetFilters}
