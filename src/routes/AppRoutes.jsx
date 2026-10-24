@@ -23,6 +23,7 @@ import CourtManagementPage from "../pages/admin/CourtManagementPage";
 import PlayingSessionPage from "../pages/admin/PlayingSessionPage";
 import PosPaymentPage from "../pages/pos/PosPaymentPage";
 import PaymentHistoryPage from "../pages/invoice/PaymentHistoryPage";
+import CustomerManagementPage from "../pages/admin/CustomerManagementPage";
 import { ROLES } from "../utils/constants";
 import { Result, Button } from "antd";
 
@@ -165,6 +166,14 @@ export default function AppRoutes() {
           element={
             <ProtectedRoute allowedRoles={[ROLES.ADMIN]}>
               <StaffManagementPage />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/admin/customers"
+          element={
+            <ProtectedRoute allowedRoles={[ROLES.ADMIN, ROLES.STAFF]}>
+              <CustomerManagementPage />
             </ProtectedRoute>
           }
         />
