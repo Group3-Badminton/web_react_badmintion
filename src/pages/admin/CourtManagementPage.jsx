@@ -195,6 +195,7 @@ export default function CourtManagementPage() {
     setFormFetchError(null);
     form.resetFields();
     form.setFieldsValue({
+      courtType: 'STANDARD',
       openingTime: '05:00',
       closingTime: '23:00'
     });
@@ -214,8 +215,11 @@ export default function CourtManagementPage() {
       const res = await courtService.getCourtDetail(record._id);
       if (res.success && res.data) {
         setCurrentEditCourt(res.data);
+        const t = (res.data.courtType || 'STANDARD').toUpperCase();
+        const normType = t.includes('VIP') ? 'VIP' : (t.includes('PREMIUM') || t.includes('THI ĐẤU')) ? 'PREMIUM' : 'STANDARD';
         form.setFieldsValue({
           name: res.data.name,
+          courtType: normType,
           description: res.data.description,
           openingTime: res.data.openingTime || '05:00',
           closingTime: res.data.closingTime || '23:00'
@@ -246,6 +250,7 @@ export default function CourtManagementPage() {
 
       const payload = {
         name: values.name.trim(),
+        courtType: values.courtType || 'STANDARD',
         description: (values.description || '').trim(),
         openingTime: values.openingTime ? values.openingTime.trim() : '05:00',
         closingTime: values.closingTime ? values.closingTime.trim() : '23:00'
@@ -351,6 +356,14 @@ export default function CourtManagementPage() {
     }
   };
 
+  // Render Court Type Tag
+  const renderCourtTypeTag = (type) => {
+    const t = (type || 'STANDARD').toUpperCase();
+    if (t.includes('VIP') || t.includes('GỖ')) return <Tag color="gold">Sân VIP</Tag>;
+    if (t.includes('PREMIUM') || t.includes('THI ĐẤU') || t.includes('PVC')) return <Tag color="purple">Sân Thi Đấu</Tag>;
+    return <Tag color="green">Sân Tiêu Chuẩn</Tag>;
+  };
+
   // Render Status Tag
   const renderStatusTag = (status) => {
     switch (status) {
@@ -383,6 +396,14 @@ export default function CourtManagementPage() {
           <Text strong>{text}</Text>
         </Space>
       )
+    },
+    {
+      title: 'Loại sân',
+      dataIndex: 'courtType',
+      key: 'courtType',
+      width: 150,
+      align: 'center',
+      render: (type) => renderCourtTypeTag(type)
     },
     {
       title: 'Giờ hoạt động',
@@ -635,6 +656,9 @@ export default function CourtManagementPage() {
               <Descriptions.Item label="Tên sân">
                 <Text strong>{courtDetail.name}</Text>
               </Descriptions.Item>
+              <Descriptions.Item label="Loại sân">
+                {renderCourtTypeTag(courtDetail.courtType)}
+              </Descriptions.Item>
               <Descriptions.Item label="Trạng thái">
                 {renderStatusTag(courtDetail.status)}
               </Descriptions.Item>
@@ -750,6 +774,18 @@ export default function CourtManagementPage() {
                   placeholder="Ví dụ: Sân 1 (Thảm Yonex)"
                   maxLength={100}
                 />
+              </Form.Item>
+
+              <Form.Item
+                label="Phân loại sân"
+                name="courtType"
+                rules={[{ required: true, message: 'Vui lòng chọn loại sân!' }]}
+              >
+                <Select placeholder="Chọn loại sân áp dụng">
+                  <Select.Option value="STANDARD">Sân Tiêu Chuẩn</Select.Option>
+                  <Select.Option value="VIP">Sân VIP</Select.Option>
+                  <Select.Option value="PREMIUM">Sân Thi Đấu</Select.Option>
+                </Select>
               </Form.Item>
 
               <div style={{ display: 'flex', gap: 16 }}>

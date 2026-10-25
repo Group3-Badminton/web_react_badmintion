@@ -1,12 +1,13 @@
 import React, { useState } from 'react';
-import { Layout, Dropdown, Avatar, Space, Typography, Tag, Button, Badge, Popover, List, Divider } from 'antd';
+import { Layout, Dropdown, Avatar, Space, Typography, Tag, Button, Badge, Popover, List, Divider, Modal, message } from 'antd';
 import {
   UserOutlined,
   LogoutOutlined,
   BellOutlined,
   MenuUnfoldOutlined,
   MenuFoldOutlined,
-  InfoCircleOutlined
+  InfoCircleOutlined,
+  ExclamationCircleOutlined
 } from '@ant-design/icons';
 import { useAuth } from '../../context/AuthContext';
 import { useNavigate } from 'react-router-dom';
@@ -36,9 +37,29 @@ export default function AppHeader({ collapsed, setCollapsed }) {
     return <Tag color="#1890ff">Khách hàng (Customer)</Tag>;
   };
 
-  const handleLogout = async () => {
-    await logout();
-    navigate('/login');
+  // UC-02 Logout with Confirmation Modal
+  const handleLogout = () => {
+    Modal.confirm({
+      title: 'Xác nhận đăng xuất',
+      icon: <ExclamationCircleOutlined style={{ color: '#ff4d4f' }} />,
+      content: 'Bạn có chắc chắn muốn đăng xuất khỏi hệ thống không?',
+      okText: 'Đăng xuất',
+      okType: 'danger',
+      cancelText: 'Hủy',
+      centered: true,
+      onOk: async () => {
+        try {
+          await logout();
+          message.success('Đăng xuất thành công!');
+          navigate('/login');
+        } catch (error) {
+          message.error('Có lỗi xảy ra khi đăng xuất. Vui lòng thử lại.');
+        }
+      },
+      onCancel() {
+        // Alternative Flow A1: Người dùng chọn Cancel, giữ nguyên phiên
+      }
+    });
   };
 
   const userMenuItems = [

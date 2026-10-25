@@ -1,6 +1,12 @@
 import api from './api';
 
 export const pricingService = {
+  // Lấy tổng quan loại sân & bảng giá hiển thị HomePage
+  getOverview: async () => {
+    const response = await api.get('/pricing/overview');
+    return response.data;
+  },
+
   // UC-18.1: Lấy danh sách quy tắc giá thuê sân (kèm bộ lọc)
   getAll: async (params = {}) => {
     const response = await api.get('/pricing', { params });
