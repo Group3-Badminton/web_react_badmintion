@@ -68,6 +68,7 @@ export default function CustomerBookingPage() {
 
   // Danh sách các sân vật lý đã được gán tự động
   const [selectedCourts, setSelectedCourts] = useState([]);
+  const [referencePrices, setReferencePrices] = useState({});
 
   // Bước 2: Ngày & Khung giờ
   const [selectedDate, setSelectedDate] = useState(dayjs());
@@ -124,27 +125,63 @@ export default function CustomerBookingPage() {
     fetchCourts();
   }, []);
 
-  // 2. Nhóm các sân vật lý theo Loại Sân (Court Type)
+  // 2. Tải bảng giá tham khảo thực tế từ backend cho danh sách sân
+  useEffect(() => {
+    const fetchReferencePrices = async () => {
+      if (courts.length === 0) return;
+      try {
+        const courtOrders = courts.map((c) => ({
+          courtId: c._id,
+          startTime: '08:00',
+          endTime: '09:00'
+        }));
+        const res = await bookingService.calculateBookingPrice({
+          courtOrders,
+          bookingDate: selectedDate.format('YYYY-MM-DD')
+        });
+        if (res.success && Array.isArray(res.data?.courtBreakdowns)) {
+          const map = {};
+          res.data.courtBreakdowns.forEach((cb) => {
+            map[cb.courtId] = cb.totalAmount;
+          });
+          setReferencePrices(map);
+        }
+      } catch (err) {
+        console.warn('Lỗi tải bảng giá tham khảo từ backend:', err);
+      }
+    };
+    fetchReferencePrices();
+  }, [courts, selectedDate]);
+
+  // 3. Nhóm các sân vật lý theo Loại Sân (Court Type)
   const courtTypeGroups = useMemo(() => {
     const groups = {};
     courts.forEach((court) => {
       const typeKey = (court.courtType || 'Sân Tiêu Chuẩn').trim();
       if (!groups[typeKey]) {
         const isVip = typeKey.toLowerCase().includes('vip');
+        const groupCourts = courts.filter(
+          (c) => (c.courtType || 'Sân Tiêu Chuẩn').trim() === typeKey
+        );
+        const groupPrices = groupCourts
+          .map((c) => referencePrices[c._id])
+          .filter((p) => typeof p === 'number' && p > 0);
+        const refText = groupPrices.length > 0
+          ? `Từ ${Math.min(...groupPrices).toLocaleString('vi-VN')} đ / giờ`
+          : 'Giá tính tự động theo khung giờ';
+
         groups[typeKey] = {
           courtType: typeKey,
           courts: [],
           image: isVip ? san2 : san1,
-          description: court.description || (isVip
-            ? 'Thảm VIP đạt chuẩn BWF, hệ thống đèn cao cấp và quạt mát riêng'
-            : 'Mặt thảm chống trượt chuẩn thi đấu, không gian thông thoáng'),
-          referencePrice: isVip ? '120.000đ – 150.000đ / giờ' : '80.000đ – 130.000đ / giờ'
+          description: court.description || 'Sân đạt chuẩn thi đấu, mặt thảm chuyên dụng',
+          referencePrice: refText
         };
       }
       groups[typeKey].courts.push(court);
     });
     return Object.values(groups);
-  }, [courts]);
+  }, [courts, referencePrices]);
 
   // Lấy số lượng sân đã chọn của từng loại sân
   const getSelectedCountForType = useCallback((courtType) => {
@@ -306,7 +343,7 @@ export default function CustomerBookingPage() {
       return;
     }
 
-    const currentPrice = priceCalculation.totalBasePrice > 0 ? priceCalculation.totalBasePrice : 100000;
+    const currentPrice = priceCalculation.totalBasePrice || 0;
     try {
       setValidatingVoucher(true);
       const res = await bookingService.validateVoucher(code, currentPrice);
@@ -740,7 +777,7 @@ export default function CustomerBookingPage() {
                   <div className="customer-field-card">
                     <Text type="secondary" style={{ fontSize: 11, display: 'block' }}>Địa chỉ</Text>
                     <Text strong style={{ fontSize: 14, color: '#0f172a' }}>
-                      {user?.address || 'Cần Thơ'}
+                      {user?.address || 'Chưa cập nhật'}
                     </Text>
                   </div>
                 </Col>
@@ -782,7 +819,7 @@ export default function CustomerBookingPage() {
               </Text>
               <div className="voucher-input-wrapper">
                 <Input
-                  placeholder="Nhập mã voucher (VD: CHAOMUNG20, GIAM30K)"
+                  placeholder="Nhập mã voucher (nếu có)"
                   value={voucherCodeInput}
                   onChange={(e) => setVoucherCodeInput(e.target.value.toUpperCase())}
                   style={{ height: 40, borderRadius: 8 }}
@@ -813,31 +850,10 @@ export default function CustomerBookingPage() {
                   style={{ borderRadius: 8, marginTop: 10 }}
                 />
               ) : (
-                <div style={{ marginTop: 8 }}>
-                  <Text type="secondary" style={{ fontSize: 12, marginRight: 8 }}>Gợi ý mã hôm nay:</Text>
-                  <Space wrap size={[6, 6]}>
-                    <Tag
-                      color="purple"
-                      style={{ cursor: 'pointer', borderRadius: 4 }}
-                      onClick={() => handleApplyVoucher('CHAOMUNG20')}
-                    >
-                      CHAOMUNG20 (-20%)
-                    </Tag>
-                    <Tag
-                      color="magenta"
-                      style={{ cursor: 'pointer', borderRadius: 4 }}
-                      onClick={() => handleApplyVoucher('GIAM30K')}
-                    >
-                      GIAM30K (-30k)
-                    </Tag>
-                    <Tag
-                      color="gold"
-                      style={{ cursor: 'pointer', borderRadius: 4 }}
-                      onClick={() => handleApplyVoucher('VIPBADMINTON')}
-                    >
-                      VIPBADMINTON (-50k)
-                    </Tag>
-                  </Space>
+                <div style={{ marginTop: 6 }}>
+                  <Text type="secondary" style={{ fontSize: 12 }}>
+                    Nhập mã giảm giá của bạn để áp dụng chiết khấu trực tiếp trên tổng đơn đặt sân.
+                  </Text>
                 </div>
               )}
             </div>

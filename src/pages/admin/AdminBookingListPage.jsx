@@ -219,10 +219,10 @@ export default function AdminBookingListPage() {
   const [createBookingDate, setCreateBookingDate] = useState(dayjs());
   const [createStartTime, setCreateStartTime] = useState(dayjs('08:00', 'HH:mm'));
   const [createEndTime, setCreateEndTime] = useState(dayjs('09:00', 'HH:mm'));
-  const [createPrice, setCreatePrice] = useState(100000);
+  const [createPrice, setCreatePrice] = useState(0);
   const [createVoucherCode, setCreateVoucherCode] = useState('');
   const [createDiscount, setCreateDiscount] = useState(0);
-  const [createTotalAmount, setCreateTotalAmount] = useState(100000);
+  const [createTotalAmount, setCreateTotalAmount] = useState(0);
   const [createPaymentMethod, setCreatePaymentMethod] = useState('CASH');
   const [createNote, setCreateNote] = useState('');
   const [createStatus, setCreateStatus] = useState('CONFIRMED');
@@ -255,35 +255,42 @@ export default function AdminBookingListPage() {
     }
   };
 
-  // Hàm tính toán giá dựa theo thời gian bắt đầu và kết thúc (tách và cộng dồn từng khung giờ theo giá cấu hình)
-  const getCalculatedPrice = (startTimeDayjs, endTimeDayjs, dateDayjs, slots = []) => {
-    if (!startTimeDayjs || !endTimeDayjs) return 100000;
-    const sStr = startTimeDayjs.format('HH:mm');
-    const eStr = endTimeDayjs.format('HH:mm');
-    if (sStr >= eStr) return 0;
-
-    const isWeekend = dateDayjs ? (dateDayjs.day() === 0 || dateDayjs.day() === 6) : false;
-    const defaultHourlyRate = isWeekend ? 140000 : 100000;
-
-    if (slots && slots.length > 0) {
-      const matchedSlots = slots.filter((slot) => slot.startTime < eStr && slot.endTime > sStr);
-      if (matchedSlots.length > 0) {
-        return matchedSlots.reduce((sum, slot) => {
-          const overlapStart = slot.startTime > sStr ? slot.startTime : sStr;
-          const overlapEnd = slot.endTime < eStr ? slot.endTime : eStr;
-          const [sh, sm] = overlapStart.split(':').map(Number);
-          const [eh, em] = overlapEnd.split(':').map(Number);
-          const overlapHours = Math.max(0, ((eh * 60 + em) - (sh * 60 + sm)) / 60);
-          return sum + Math.round((slot.price || defaultHourlyRate) * overlapHours);
-        }, 0);
-      }
+  // Tính toán giá chính xác từ Backend (Database Price / PriceRule)
+  const updateCreatePriceFromBackend = async (courtId, date, startTime, endTime, voucherCode) => {
+    if (!courtId || !date || !startTime || !endTime) {
+      setCreatePrice(0);
+      setCreateDiscount(0);
+      setCreateTotalAmount(0);
+      return;
     }
-
-    const diffMinutes = endTimeDayjs.diff(startTimeDayjs, 'minute');
-    const hours = Math.max(0, diffMinutes / 60);
-    return Math.round(defaultHourlyRate * hours);
+    const sStr = startTime.format('HH:mm');
+    const eStr = endTime.format('HH:mm');
+    if (sStr >= eStr) {
+      setCreatePrice(0);
+      setCreateDiscount(0);
+      setCreateTotalAmount(0);
+      return;
+    }
+    try {
+      const res = await bookingService.calculateBookingPrice({
+        courtOrders: [{
+          courtId,
+          bookingDate: date.format('YYYY-MM-DD'),
+          startTime: sStr,
+          endTime: eStr
+        }],
+        bookingDate: date.format('YYYY-MM-DD'),
+        voucherCode: voucherCode || undefined
+      });
+      if (res.success && res.data) {
+        setCreatePrice(res.data.totalBasePrice || 0);
+        setCreateDiscount(res.data.discount || 0);
+        setCreateTotalAmount(res.data.finalTotalAmount || 0);
+      }
+    } catch (err) {
+      console.error('Lỗi tính giá từ backend:', err);
+    }
   };
-
 
   // Tải khung giờ trống cho form tạo đơn
   const fetchCreateSlotAvailability = async (courtId, date) => {
@@ -294,8 +301,6 @@ export default function AdminBookingListPage() {
       const res = await bookingService.getCourtAvailability(courtId, dateStr);
       if (res.success && res.data && res.data.slots) {
         setCreateAvailableSlots(res.data.slots);
-        const price = getCalculatedPrice(createStartTime, createEndTime, date, res.data.slots);
-        recalculateCreateAmounts(price);
       }
     } catch (err) {
       console.error('Lỗi tải khung giờ trống:', err);
@@ -314,22 +319,24 @@ export default function AdminBookingListPage() {
     setNewCustomerPhone('');
     setNewCustomerEmail('');
     setCreateCourtId(defaultCourt);
-    setCreateBookingDate(dayjs());
+    const today = dayjs();
+    setCreateBookingDate(today);
     const initStart = dayjs('08:00', 'HH:mm');
     const initEnd = dayjs('09:00', 'HH:mm');
     setCreateStartTime(initStart);
     setCreateEndTime(initEnd);
-    setCreatePrice(100000);
+    setCreatePrice(0);
     setCreateVoucherCode('');
     setCreateDiscount(0);
-    setCreateTotalAmount(100000);
+    setCreateTotalAmount(0);
     setCreatePaymentMethod('CASH');
     setCreateNote('Khách đặt tại quầy');
     setCreateStatus('CONFIRMED');
     setAppliedCreateVoucher(null);
     setIsCreateModalOpen(true);
     if (defaultCourt) {
-      fetchCreateSlotAvailability(defaultCourt, dayjs());
+      fetchCreateSlotAvailability(defaultCourt, today);
+      updateCreatePriceFromBackend(defaultCourt, today, initStart, initEnd, undefined);
     }
   };
 
@@ -337,32 +344,14 @@ export default function AdminBookingListPage() {
   const handleCreateCourtChange = (newCourtId) => {
     setCreateCourtId(newCourtId);
     fetchCreateSlotAvailability(newCourtId, createBookingDate);
+    updateCreatePriceFromBackend(newCourtId, createBookingDate, createStartTime, createEndTime, appliedCreateVoucher?.voucherCode);
   };
 
   // Khi đổi Ngày ở form tạo đơn -> cập nhật ngay khung giờ và đơn giá theo thời gian chọn
   const handleCreateDateChange = (newDate) => {
     setCreateBookingDate(newDate);
     fetchCreateSlotAvailability(createCourtId, newDate);
-  };
-
-  // Tính lại tổng tiền form tạo
-  const recalculateCreateAmounts = (priceVal, voucherObj = appliedCreateVoucher) => {
-    const base = Number(priceVal) || 0;
-    let disc = 0;
-    if (voucherObj) {
-      if (voucherObj.discountType === 'PERCENTAGE') {
-        disc = Math.round((base * voucherObj.discountValue) / 100);
-        if (voucherObj.maxDiscount > 0 && disc > voucherObj.maxDiscount) {
-          disc = voucherObj.maxDiscount;
-        }
-      } else if (voucherObj.discountValue) {
-        disc = Math.min(voucherObj.discountValue, base);
-      }
-    }
-    disc = Math.min(disc, base);
-    setCreatePrice(base);
-    setCreateDiscount(disc);
-    setCreateTotalAmount(Math.max(0, base - disc));
+    updateCreatePriceFromBackend(createCourtId, newDate, createStartTime, createEndTime, appliedCreateVoucher?.voucherCode);
   };
 
   // Khi đổi Thời gian bắt đầu ở form tạo đơn
@@ -374,16 +363,14 @@ export default function AdminBookingListPage() {
       end = newStartTime.add(1, 'hour');
       setCreateEndTime(end);
     }
-    const price = getCalculatedPrice(newStartTime, end, createBookingDate, createAvailableSlots);
-    recalculateCreateAmounts(price);
+    updateCreatePriceFromBackend(createCourtId, createBookingDate, newStartTime, end, appliedCreateVoucher?.voucherCode);
   };
 
   // Khi đổi Thời gian kết thúc ở form tạo đơn
   const handleCreateEndTimeChange = (newEndTime) => {
     if (!newEndTime) return;
     setCreateEndTime(newEndTime);
-    const price = getCalculatedPrice(createStartTime, newEndTime, createBookingDate, createAvailableSlots);
-    recalculateCreateAmounts(price);
+    updateCreatePriceFromBackend(createCourtId, createBookingDate, createStartTime, newEndTime, appliedCreateVoucher?.voucherCode);
   };
 
   // Áp dụng voucher ở form tạo đơn
@@ -398,13 +385,13 @@ export default function AdminBookingListPage() {
       const res = await bookingService.validateVoucher(code, createPrice);
       if (res.success && res.data) {
         setAppliedCreateVoucher(res.data);
-        recalculateCreateAmounts(createPrice, res.data);
+        await updateCreatePriceFromBackend(createCourtId, createBookingDate, createStartTime, createEndTime, res.data.voucherCode);
         message.success(`Đã áp dụng mã ${res.data.voucherCode}!`);
       }
     } catch (err) {
       message.error(err?.response?.data?.message || 'Mã giảm giá không hợp lệ!');
       setAppliedCreateVoucher(null);
-      recalculateCreateAmounts(createPrice, null);
+      await updateCreatePriceFromBackend(createCourtId, createBookingDate, createStartTime, createEndTime, undefined);
     } finally {
       setValidatingCreateVoucher(false);
     }

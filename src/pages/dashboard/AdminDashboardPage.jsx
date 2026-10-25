@@ -1,14 +1,17 @@
-import React, { useState } from 'react';
-import { Row, Col, Card, Statistic, Typography, Space, Button, Progress, Tag, Table } from 'antd';
+import React, { useState, useEffect, useCallback } from 'react';
+import { Row, Col, Card, Statistic, Typography, Space, Button, Progress, Tag, Table, Empty } from 'antd';
 import {
   DollarOutlined,
   CalendarOutlined,
   ThunderboltOutlined,
   CheckCircleOutlined,
-  ShoppingOutlined,
+  ClockCircleOutlined,
+  CloseCircleOutlined,
   ReloadOutlined
 } from '@ant-design/icons';
+import dayjs from 'dayjs';
 import { useAuth } from '../../context/AuthContext';
+import { bookingService } from '../../services/bookingService';
 
 const { Title, Text } = Typography;
 
@@ -16,45 +19,109 @@ export default function AdminDashboardPage() {
   const { user } = useAuth();
   const [loading, setLoading] = useState(false);
 
-  // Mock initial stats for UI visualization
-  const stats = {
-    totalRevenue: 15850000,
-    occupancyRate: 75,
-    todayBookings: 12,
-    activeCourts: 6,
-    totalCourts: 8
-  };
+  // Dữ liệu thống kê thực tế lấy từ Database thông qua API
+  const [stats, setStats] = useState({
+    totalRevenue: 0,
+    occupancyRate: 0,
+    todayBookings: 0,
+    activeCourts: 0,
+    totalCourts: 0,
+    pendingCount: 0,
+    confirmedCount: 0,
+    completedCount: 0,
+    cancelledCount: 0,
+    totalAll: 0
+  });
 
-  const sampleInvoices = [
-    {
-      key: '1',
-      invoiceNumber: 'INV-2026-001',
-      customer: 'Nguyễn Văn An',
-      total: 360000,
-      method: 'CASH',
-      time: '08:30'
-    },
-    {
-      key: '2',
-      invoiceNumber: 'INV-2026-002',
-      customer: 'Trần Thị Mai',
-      total: 540000,
-      method: 'VIETQR',
-      time: '09:15'
-    },
-    {
-      key: '3',
-      invoiceNumber: 'INV-2026-003',
-      customer: 'Lê Hoàng Nam',
-      total: 240000,
-      method: 'CASH',
-      time: '10:00'
+  const [recentBookings, setRecentBookings] = useState([]);
+
+  const fetchDashboardData = useCallback(async () => {
+    try {
+      setLoading(true);
+      const todayStr = dayjs().format('YYYY-MM-DD');
+
+      const [allBookingsRes, todayBookingsRes, courtsRes] = await Promise.all([
+        bookingService.getAllBookings({ page: 1, limit: 5 }),
+        bookingService.getAllBookings({ bookingDate: todayStr, limit: 1 }),
+        bookingService.getCourts()
+      ]);
+
+      let revenue = 0;
+      let pending = 0;
+      let confirmed = 0;
+      let completed = 0;
+      let cancelled = 0;
+      let totalAll = 0;
+      let recentList = [];
+
+      if (allBookingsRes.success && allBookingsRes.data) {
+        recentList = allBookingsRes.data.bookings || [];
+        if (allBookingsRes.data.stats) {
+          const s = allBookingsRes.data.stats;
+          revenue = s.totalRevenue || 0;
+          pending = s.pendingCount || 0;
+          confirmed = s.confirmedCount || 0;
+          completed = s.completedCount || 0;
+          cancelled = s.cancelledCount || 0;
+          totalAll = s.totalAll || 0;
+        }
+      }
+
+      let activeC = 0;
+      let totalC = 0;
+      if (courtsRes.success && Array.isArray(courtsRes.data)) {
+        totalC = courtsRes.data.length;
+        activeC = courtsRes.data.filter((c) => c.status === 'ACTIVE').length;
+      }
+
+      const todayTotal = todayBookingsRes.success && todayBookingsRes.data?.pagination
+        ? todayBookingsRes.data.pagination.total
+        : 0;
+
+      // Tính tỷ lệ khai thác dựa trên số đơn hôm nay và tổng năng lực phục vụ
+      const maxSlotsEstimate = Math.max(1, totalC * 6);
+      const occupancy = totalC > 0 ? Math.min(100, Math.round((todayTotal / maxSlotsEstimate) * 100)) : 0;
+
+      setStats({
+        totalRevenue: revenue,
+        occupancyRate: occupancy,
+        todayBookings: todayTotal,
+        activeCourts: activeC,
+        totalCourts: totalC,
+        pendingCount: pending,
+        confirmedCount: confirmed,
+        completedCount: completed,
+        cancelledCount: cancelled,
+        totalAll
+      });
+
+      setRecentBookings(
+        recentList.map((b) => ({
+          key: b._id,
+          invoiceNumber: `#${b.bookingCode}`,
+          customer: b.customerId?.fullName || b.customerName || 'Khách vãng lai',
+          total: b.totalAmount || 0,
+          method: b.paymentMethod || 'CASH',
+          paymentStatus: b.paymentStatus || 'UNPAID',
+          time: b.startTime
+            ? `${b.startTime} (${dayjs(b.bookingDate).format('DD/MM')})`
+            : dayjs(b.createdAt).format('HH:mm DD/MM')
+        }))
+      );
+    } catch (err) {
+      console.error('Lỗi nạp dữ liệu dashboard từ backend:', err);
+    } finally {
+      setLoading(false);
     }
-  ];
+  }, []);
+
+  useEffect(() => {
+    fetchDashboardData();
+  }, [fetchDashboardData]);
 
   const columns = [
     {
-      title: 'Mã hóa đơn',
+      title: 'Mã đơn',
       dataIndex: 'invoiceNumber',
       key: 'invoiceNumber',
       render: (t) => <Text strong style={{ color: '#009B60' }}>{t}</Text>
@@ -68,13 +135,20 @@ export default function AdminDashboardPage() {
       title: 'Tổng tiền',
       dataIndex: 'total',
       key: 'total',
-      render: (v) => <Text strong>{v.toLocaleString('vi-VN')} đ</Text>
+      render: (v) => <Text strong>{(v || 0).toLocaleString('vi-VN')} đ</Text>
     },
     {
       title: 'Thanh toán',
       dataIndex: 'method',
       key: 'method',
-      render: (m) => <Tag color={m === 'CASH' ? 'green' : 'blue'}>{m}</Tag>
+      render: (m, r) => (
+        <Space size={4}>
+          <Tag color={m === 'CASH' ? 'green' : 'blue'}>{m}</Tag>
+          <Tag color={r.paymentStatus === 'PAID' ? 'green' : 'orange'}>
+            {r.paymentStatus === 'PAID' ? 'Đã thu' : 'Chưa thu'}
+          </Tag>
+        </Space>
+      )
     },
     {
       title: 'Thời gian',
@@ -101,24 +175,21 @@ export default function AdminDashboardPage() {
       >
         <div>
           <Title level={3} style={{ color: '#ffffff', margin: '0 0 6px' }}>
-            Xin chào, {user?.name || 'Quản trị viên'} 👋
+            Xin chào, {user?.fullName || user?.name || 'Quản trị viên'} 👋
           </Title>
           <Text style={{ color: '#bbf246', fontSize: 14 }}>
-            Hệ thống quản lý sân cầu lông BCMS — Chúc bạn một ngày làm việc hiệu quả!
+            Hệ thống quản lý sân cầu lông BCMS — Dữ liệu thời gian thực từ cơ sở dữ liệu
           </Text>
         </div>
         <Button
-          icon={<ReloadOutlined />}
+          icon={<ReloadOutlined spin={loading} />}
           style={{
             background: 'rgba(255, 255, 255, 0.15)',
             borderColor: 'rgba(255, 255, 255, 0.3)',
             color: '#fff',
             borderRadius: 8
           }}
-          onClick={() => {
-            setLoading(true);
-            setTimeout(() => setLoading(false), 500);
-          }}
+          onClick={fetchDashboardData}
           loading={loading}
         >
           Làm mới
@@ -130,14 +201,14 @@ export default function AdminDashboardPage() {
         <Col xs={24} sm={12} lg={6}>
           <Card style={{ borderRadius: 12, borderTop: '4px solid #009B60' }}>
             <Statistic
-              title="Doanh Thu Tháng Này"
+              title="Tổng Doanh Thu Đã Thu"
               value={stats.totalRevenue}
               suffix="đ"
               valueStyle={{ color: '#009B60', fontWeight: 'bold', fontSize: 22 }}
               prefix={<DollarOutlined />}
             />
             <div style={{ marginTop: 8, fontSize: 13, color: '#888' }}>
-              Tăng trưởng ổn định
+              Từ các đơn đặt sân đã thanh toán
             </div>
           </Card>
         </Col>
@@ -145,7 +216,7 @@ export default function AdminDashboardPage() {
         <Col xs={24} sm={12} lg={6}>
           <Card style={{ borderRadius: 12, borderTop: '4px solid #1890ff' }}>
             <Statistic
-              title="Tỷ Lệ Khai Thác Sân"
+              title="Tỷ Lệ Khai Thác Sân Hôm Nay"
               value={stats.occupancyRate}
               suffix="%"
               valueStyle={{ color: '#1890ff', fontWeight: 'bold', fontSize: 22 }}
@@ -169,7 +240,7 @@ export default function AdminDashboardPage() {
               prefix={<CalendarOutlined />}
             />
             <div style={{ marginTop: 8, fontSize: 13, color: '#888' }}>
-              6 ca hoàn thành, 6 ca sắp tới
+              {stats.todayBookings} lượt đặt trong ngày
             </div>
           </Card>
         </Col>
@@ -177,55 +248,79 @@ export default function AdminDashboardPage() {
         <Col xs={24} sm={12} lg={6}>
           <Card style={{ borderRadius: 12, borderTop: '4px solid #52c41a' }}>
             <Statistic
-              title="Trạng Thái Vận Hành"
-              value="Tốt"
+              title="Tổng Số Đơn Đặt Sân"
+              value={stats.totalAll}
               valueStyle={{ color: '#52c41a', fontWeight: 'bold', fontSize: 22 }}
               prefix={<CheckCircleOutlined />}
             />
             <div style={{ marginTop: 8, fontSize: 13, color: '#888' }}>
-              Hệ thống hoạt động trơn tru
+              {stats.pendingCount} chờ duyệt, {stats.confirmedCount} đã xác nhận
             </div>
           </Card>
         </Col>
       </Row>
 
-      {/* Revenue Structure Breakdown & Recent Transactions */}
+      {/* Booking Structure Breakdown & Recent Transactions */}
       <Row gutter={[20, 20]}>
         <Col xs={24} lg={12}>
-          <Card title="Cơ Cấu Doanh Thu Ước Tính" style={{ borderRadius: 12, height: '100%' }}>
+          <Card title="Cơ Cấu Trạng Thái Đặt Sân" style={{ borderRadius: 12, height: '100%' }}>
             <div style={{ marginBottom: 16 }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4 }}>
-                <Text strong><CalendarOutlined style={{ color: '#009B60' }} /> Tiền Thuê Sân:</Text>
-                <Text strong>11.500.000 đ (72%)</Text>
+                <Text strong><CheckCircleOutlined style={{ color: '#009B60' }} /> Đã xác nhận / Hoàn thành:</Text>
+                <Text strong>
+                  {stats.confirmedCount + stats.completedCount} đơn (
+                  {stats.totalAll > 0
+                    ? Math.round(((stats.confirmedCount + stats.completedCount) / stats.totalAll) * 100)
+                    : 0}%)
+                </Text>
               </div>
-              <Progress percent={72} strokeColor="#009B60" />
+              <Progress
+                percent={stats.totalAll > 0 ? Math.round(((stats.confirmedCount + stats.completedCount) / stats.totalAll) * 100) : 0}
+                strokeColor="#009B60"
+              />
             </div>
 
             <div style={{ marginBottom: 16 }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4 }}>
-                <Text strong><ShoppingOutlined style={{ color: '#1890ff' }} /> Bán Lẻ Nước & Đồ Ăn (POS):</Text>
-                <Text strong>3.250.000 đ (21%)</Text>
+                <Text strong><ClockCircleOutlined style={{ color: '#faad14' }} /> Chờ duyệt (Pending):</Text>
+                <Text strong>
+                  {stats.pendingCount} đơn (
+                  {stats.totalAll > 0 ? Math.round((stats.pendingCount / stats.totalAll) * 100) : 0}%)
+                </Text>
               </div>
-              <Progress percent={21} strokeColor="#1890ff" />
+              <Progress
+                percent={stats.totalAll > 0 ? Math.round((stats.pendingCount / stats.totalAll) * 100) : 0}
+                strokeColor="#faad14"
+              />
             </div>
 
             <div style={{ marginBottom: 16 }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4 }}>
-                <Text strong><ThunderboltOutlined style={{ color: '#E9B323' }} /> Cho Thuê Vợt & Phụ Kiện:</Text>
-                <Text strong>1.100.000 đ (7%)</Text>
+                <Text strong><CloseCircleOutlined style={{ color: '#ff4d4f' }} /> Đã hủy (Cancelled):</Text>
+                <Text strong>
+                  {stats.cancelledCount} đơn (
+                  {stats.totalAll > 0 ? Math.round((stats.cancelledCount / stats.totalAll) * 100) : 0}%)
+                </Text>
               </div>
-              <Progress percent={7} strokeColor="#E9B323" />
+              <Progress
+                percent={stats.totalAll > 0 ? Math.round((stats.cancelledCount / stats.totalAll) * 100) : 0}
+                strokeColor="#ff4d4f"
+              />
             </div>
           </Card>
         </Col>
 
         <Col xs={24} lg={12}>
-          <Card title="Giao Dịch Gần Đây" style={{ borderRadius: 12, height: '100%' }}>
+          <Card title="Giao Dịch Đặt Sân Gần Đây" style={{ borderRadius: 12, height: '100%' }}>
             <Table
-              dataSource={sampleInvoices}
+              dataSource={recentBookings}
               columns={columns}
               pagination={false}
               size="small"
+              loading={loading}
+              locale={{
+                emptyText: <Empty description="Chưa có giao dịch đặt sân nào" style={{ padding: '24px 0' }} />
+              }}
             />
           </Card>
         </Col>
