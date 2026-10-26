@@ -1,4 +1,4 @@
-import { Drawer, Descriptions, Typography, Tag, Empty, Spin } from 'antd';
+import { Drawer, Descriptions, Typography, Space, Tag, Empty, Spin } from 'antd';
 import dayjs from 'dayjs';
 import VoucherStatusBadge from './VoucherStatusBadge';
 
@@ -14,7 +14,7 @@ export default function VoucherDetailDrawer({
     <Drawer
       title="Chi tiết mã voucher"
       placement="right"
-      width={640}
+      width={typeof window !== 'undefined' && window.innerWidth < 640 ? '100%' : 640}
       open={visible}
       onClose={onClose}
       destroyOnClose
@@ -26,7 +26,7 @@ export default function VoucherDetailDrawer({
       ) : !voucher ? (
         <Empty description="Không tìm thấy thông tin voucher" />
       ) : (
-        <Descriptions bordered column={2} size="middle">
+        <Descriptions bordered column={{ xs: 1, sm: 2 }} size="middle">
           <Descriptions.Item label="Mã voucher" span={2}>
             <Tag color="geekblue" style={{ fontSize: 16, fontWeight: 'bold', padding: '4px 12px' }}>
               {voucher.code}
@@ -53,6 +53,24 @@ export default function VoucherDetailDrawer({
             {voucher.maxDiscountAmount
               ? `${Number(voucher.maxDiscountAmount).toLocaleString('vi-VN')} đ`
               : 'Không giới hạn'}
+          </Descriptions.Item>
+
+          <Descriptions.Item label="Loại sân áp dụng" span={2}>
+            {(!voucher.applicableCourtTypes || voucher.applicableCourtTypes.length === 0 || voucher.applicableCourtTypes.includes('ALL')) ? (
+              <Tag color="blue" style={{ fontSize: 13, padding: '2px 8px' }}>Tất cả các loại sân (ALL)</Tag>
+            ) : (
+              <Space size={[0, 6]} wrap>
+                {voucher.applicableCourtTypes.map((t) => {
+                  const colorMap = { STANDARD: 'green', VIP: 'gold', PREMIUM: 'purple' };
+                  const labelMap = { STANDARD: 'Sân Tiêu Chuẩn', VIP: 'Sân VIP', PREMIUM: 'Sân Thi Đấu' };
+                  return (
+                    <Tag key={t} color={colorMap[t] || 'default'} style={{ fontSize: 13, padding: '2px 8px' }}>
+                      {labelMap[t] || t}
+                    </Tag>
+                  );
+                })}
+              </Space>
+            )}
           </Descriptions.Item>
 
           <Descriptions.Item label="Đơn tối thiểu">

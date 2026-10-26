@@ -93,6 +93,7 @@ export default function ProductTable({
       key: 'actions',
       width: 180,
       align: 'center',
+      fixed: 'right',
       render: (_, record) => (
         <Space size="small">
           {/* Xem chi tiết - Cho cả Staff và Admin */}
@@ -167,6 +168,7 @@ export default function ProductTable({
         showTotal: (total, range) => `${range[0]}-${range[1]} trên tổng số ${total} sản phẩm`
       }}
       onChange={onTableChange}
+      scroll={{ x: 800 }}
       locale={{
         emptyText: 'Không tìm thấy sản phẩm nào phù hợp'
       }}

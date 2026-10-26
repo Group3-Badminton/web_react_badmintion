@@ -277,6 +277,10 @@ export default function CustomerBookingPage() {
 
       if (res.success && res.data) {
         setPriceCalculation(res.data);
+        if (appliedVoucher && !res.data.appliedVoucher) {
+          setAppliedVoucher(null);
+          message.warning(`Mã ${appliedVoucher.voucherCode} không còn áp dụng được do danh sách sân đã thay đổi!`);
+        }
       }
     } catch (err) {
       console.error('Lỗi tính giá chi tiết:', err);
@@ -346,7 +350,10 @@ export default function CustomerBookingPage() {
     const currentPrice = priceCalculation.totalBasePrice || 0;
     try {
       setValidatingVoucher(true);
-      const res = await bookingService.validateVoucher(code, currentPrice);
+      const res = await bookingService.validateVoucher(code, currentPrice, {
+        courtBreakdowns: priceCalculation.courtBreakdowns,
+        courtTypes: selectedCourts.map((c) => c.courtType)
+      });
       if (res.success && res.data) {
         setAppliedVoucher(res.data);
         setVoucherCodeInput(code);

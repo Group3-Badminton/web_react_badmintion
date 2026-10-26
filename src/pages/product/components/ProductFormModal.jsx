@@ -1,5 +1,5 @@
 import { useEffect } from 'react';
-import { Modal, Form, Input, InputNumber, Select, Alert } from 'antd';
+import { Modal, Form, Input, InputNumber, Select, Alert, Row, Col } from 'antd';
 
 const { TextArea } = Input;
 const { Option } = Select;
@@ -56,6 +56,7 @@ export default function ProductFormModal({
       cancelText="Hủy bỏ"
       destroyOnClose
       maskClosable={!loading}
+      style={{ maxWidth: '95vw', top: 20 }}
     >
       {isEdit && (
         <Alert
@@ -110,12 +111,11 @@ export default function ProductFormModal({
           />
         </Form.Item>
 
-        <Form.Item orientation="horizontal">
-          <div style={{ display: 'flex', gap: 12 }}>
+        <Row gutter={16}>
+          <Col xs={24} sm={12}>
             <Form.Item
               name="unit"
               label="Đơn vị tính"
-              style={{ flex: 1, marginBottom: 0 }}
               rules={[{ required: true, message: 'Vui lòng chọn hoặc nhập đơn vị tính!' }]}
             >
               <Select placeholder="Chọn đơn vị tính">
@@ -128,11 +128,12 @@ export default function ProductFormModal({
                 <Option value="gói">gói</Option>
               </Select>
             </Form.Item>
+          </Col>
 
+          <Col xs={24} sm={12}>
             <Form.Item
               name="category"
               label="Phân loại"
-              style={{ flex: 1, marginBottom: 0 }}
             >
               <Select placeholder="Chọn nhóm">
                 <Option value="DRINK">Nước giải khát</Option>
@@ -143,8 +144,8 @@ export default function ProductFormModal({
                 <Option value="GENERAL">Khác / Tổng hợp</Option>
               </Select>
             </Form.Item>
-          </div>
-        </Form.Item>
+          </Col>
+        </Row>
 
         <Form.Item name="description" label="Mô tả chi tiết">
           <TextArea rows={3} placeholder="Thông số, quy cách đóng gói, xuất xứ hoặc ghi chú sản phẩm..." />
