@@ -152,6 +152,31 @@ export default function PricingManagementPage() {
     setModalVisible(true);
   };
 
+    // Helper kiểm tra 2 quy tắc giá có trùng ngày, giờ, loại sân không
+  const isRuleConflict = (ruleA, ruleB) => {
+    // 1. Loại sân
+    const courtMatch = ruleA.courtType === 'ALL' || ruleB.courtType === 'ALL' || ruleA.courtType === ruleB.courtType;
+    if (!courtMatch) return false;
+
+    // 2. Ngày trong tuần
+    const daysA = ruleA.daysOfWeek || [];
+    const daysB = ruleB.daysOfWeek || [];
+    const daysMatch = daysA.some((d) => daysB.includes(d));
+    if (!daysMatch) return false;
+
+    // 3. Khung giờ giao thoa
+    const timeToMins = (t) => {
+      const [h, m] = String(t).split(':').map(Number);
+      return h * 60 + m;
+    };
+    const startA = timeToMins(ruleA.startTime);
+    const endA = timeToMins(ruleA.endTime);
+    const startB = timeToMins(ruleB.startTime);
+    const endB = timeToMins(ruleB.endTime);
+
+    return startA < endB && endA > startB;
+  };
+
   // Xử lý submit Form (Create hoặc Update)
   const handleFormSubmit = async (values) => {
     setSubmitting(true);
@@ -165,6 +190,27 @@ export default function PricingManagementPage() {
         setSubmitting(false);
         return;
       }
+
+      // Kiểm tra trùng lặp trên client với các quy tắc đang ACTIVE
+      const candidateRule = {
+        courtType: values.courtType,
+        daysOfWeek: values.daysOfWeek,
+        startTime: startTimeStr,
+        endTime: endTimeStr
+      };
+
+      const conflicting = priceRules.find(
+        (r) => r.status === 'ACTIVE' && (modalMode === 'CREATE' || r._id !== editingRule?._id) && isRuleConflict(candidateRule, r)
+      );
+
+      if (conflicting) {
+        message.error(
+          `Bảng giá này bị trùng ngày, giờ và loại sân với quy tắc đang áp dụng: "${conflicting.name}" (${conflicting.startTime} - ${conflicting.endTime})! Vui lòng điều chỉnh lại.`
+        );
+        setSubmitting(false);
+        return;
+      }
+
 
       const payload = {
         name: values.name.trim(),
@@ -252,22 +298,37 @@ export default function PricingManagementPage() {
 
   // Cấu hình các cột bảng
   const columns = [
-    {
+        {
       title: 'Tên quy tắc giá',
       dataIndex: 'name',
       key: 'name',
-      render: (text, record) => (
-        <div>
-          <Text strong style={{ fontSize: 14 }}>
-            {text}
-          </Text>
-          {record.description && (
-            <div style={{ fontSize: 12, color: '#64748b', marginTop: 2 }}>
-              {record.description}
-            </div>
-          )}
-        </div>
-      )
+      render: (text, record) => {
+        const hasConflict = record.status === 'ACTIVE' && priceRules.some(
+          (other) => other._id !== record._id && other.status === 'ACTIVE' && isRuleConflict(record, other)
+        );
+
+        return (
+          <div>
+            <Space align="center" wrap>
+              <Text strong style={{ fontSize: 14 }}>
+                {text}
+              </Text>
+              {hasConflict && (
+                <Tooltip title="Cảnh báo: Bảng giá này đang bị trùng loại sân, ngày và khung giờ với bảng giá khác!">
+                  <Tag color="error" style={{ fontSize: 11, cursor: 'help' }}>
+                    ⚠️ Trùng lịch
+                  </Tag>
+                </Tooltip>
+              )}
+            </Space>
+            {record.description && (
+              <div style={{ fontSize: 12, color: '#64748b', marginTop: 2 }}>
+                {record.description}
+              </div>
+            )}
+          </div>
+        );
+      }
     },
     {
       title: 'Loại sân áp dụng',
