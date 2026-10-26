@@ -382,7 +382,7 @@ export default function AdminBookingListPage() {
     }
     try {
       setValidatingCreateVoucher(true);
-      const res = await bookingService.validateVoucher(code, createPrice);
+      const res = await bookingService.validateVoucher(code, createPrice, { courtIds: createCourtId ? [createCourtId] : [] });
       if (res.success && res.data) {
         setAppliedCreateVoucher(res.data);
         await updateCreatePriceFromBackend(createCourtId, createBookingDate, createStartTime, createEndTime, res.data.voucherCode);
