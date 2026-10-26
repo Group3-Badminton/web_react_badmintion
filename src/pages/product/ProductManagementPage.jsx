@@ -299,7 +299,7 @@ export default function ProductManagementPage() {
             title: 'Quản trị'
           },
           {
-            title: 'Quản lý sản phẩm (UC-14)'
+            title: 'Quản lý sản phẩm'
           }
         ]}
       />
@@ -310,6 +310,8 @@ export default function ProductManagementPage() {
           display: 'flex',
           justifyContent: 'space-between',
           alignItems: 'center',
+          flexWrap: 'wrap',
+          gap: 16,
           marginBottom: 20
         }}
       >

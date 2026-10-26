@@ -6,9 +6,11 @@ import {
   InputNumber,
   Radio,
   DatePicker,
+  Select,
   Row,
   Col,
-  Alert
+  Alert,
+  Tag
 } from 'antd';
 import dayjs from 'dayjs';
 
@@ -35,6 +37,7 @@ export default function VoucherFormModal({
           discountValue: initialData.discountValue,
           maxDiscountAmount: initialData.maxDiscountAmount,
           minInvoiceAmount: initialData.minInvoiceAmount || 0,
+          applicableCourtTypes: (initialData.applicableCourtTypes && initialData.applicableCourtTypes.length > 0) ? initialData.applicableCourtTypes : ['ALL'],
           dateRange: [dayjs(initialData.startDate), dayjs(initialData.endDate)],
           usageLimit: initialData.usageLimit,
           description: initialData.description || ''
@@ -45,6 +48,7 @@ export default function VoucherFormModal({
           discountType: 'PERCENTAGE',
           discountValue: 10,
           minInvoiceAmount: 0,
+          applicableCourtTypes: ['ALL'],
           dateRange: [dayjs(), dayjs().add(30, 'day')]
         });
       }
@@ -60,6 +64,7 @@ export default function VoucherFormModal({
         discountType: values.discountType,
         discountValue: values.discountValue,
         minInvoiceAmount: values.minInvoiceAmount || 0,
+        applicableCourtTypes: values.applicableCourtTypes && values.applicableCourtTypes.length > 0 ? values.applicableCourtTypes : ['ALL'],
         maxDiscountAmount:
           values.discountType === 'PERCENTAGE' && values.maxDiscountAmount
             ? values.maxDiscountAmount
@@ -73,6 +78,26 @@ export default function VoucherFormModal({
     } catch {
       // Validate error handled by antd
     }
+  };
+
+  const courtTypeTagRender = (props) => {
+    const { label, value, closable, onClose } = props;
+    const colorMap = {
+      ALL: 'blue',
+      STANDARD: 'green',
+      VIP: 'gold',
+      PREMIUM: 'purple'
+    };
+    return (
+      <Tag
+        color={colorMap[value] || 'default'}
+        closable={closable}
+        onClose={onClose}
+        style={{ marginRight: 3, fontWeight: 500 }}
+      >
+        {label}
+      </Tag>
+    );
   };
 
   const isEdit = mode === 'edit';
@@ -89,6 +114,7 @@ export default function VoucherFormModal({
       width={680}
       destroyOnClose
       maskClosable={!loading}
+      style={{ maxWidth: '95vw', top: 20 }}
     >
       {isEdit && (
         <Alert
@@ -101,7 +127,7 @@ export default function VoucherFormModal({
 
       <Form form={form} layout="vertical">
         <Row gutter={16}>
-          <Col span={12}>
+          <Col xs={24} sm={12}>
             <Form.Item
               name="code"
               label="Mã voucher"
@@ -120,7 +146,7 @@ export default function VoucherFormModal({
             </Form.Item>
           </Col>
 
-          <Col span={12}>
+          <Col xs={24} sm={12}>
             <Form.Item
               name="name"
               label="Tên chương trình / Tên voucher"
@@ -132,7 +158,7 @@ export default function VoucherFormModal({
         </Row>
 
         <Row gutter={16}>
-          <Col span={12}>
+          <Col xs={24} sm={12}>
             <Form.Item
               name="discountType"
               label="Hình thức giảm giá"
@@ -145,7 +171,7 @@ export default function VoucherFormModal({
             </Form.Item>
           </Col>
 
-          <Col span={12}>
+          <Col xs={24} sm={12}>
             <Form.Item
               name="discountValue"
               label={
@@ -181,7 +207,7 @@ export default function VoucherFormModal({
         </Row>
 
         <Row gutter={16}>
-          <Col span={12}>
+          <Col xs={24} sm={12}>
             <Form.Item
               name="minInvoiceAmount"
               label="Giá trị đơn hàng tối thiểu (VNĐ)"
@@ -202,7 +228,7 @@ export default function VoucherFormModal({
             </Form.Item>
           </Col>
 
-          <Col span={12}>
+          <Col xs={24} sm={12}>
             {discountType === 'PERCENTAGE' ? (
               <Form.Item
                 name="maxDiscountAmount"
@@ -221,7 +247,41 @@ export default function VoucherFormModal({
         </Row>
 
         <Row gutter={16}>
-          <Col span={16}>
+          <Col span={24}>
+            <Form.Item
+              name="applicableCourtTypes"
+              label="Loại sân áp dụng"
+              rules={[{ required: true, message: 'Vui lòng chọn loại sân áp dụng!' }]}
+              tooltip="Chọn loại sân được áp dụng mã giảm giá. Bạn có thể chọn nhiều loại sân hoặc chọn Tất cả."
+            >
+              <Select
+                mode="multiple"
+                placeholder="Chọn loại sân áp dụng"
+                style={{ width: '100%' }}
+                maxTagCount="responsive"
+                tagRender={courtTypeTagRender}
+                onChange={(vals) => {
+                  if (vals.includes('ALL') && vals.length > 1) {
+                    const last = vals[vals.length - 1];
+                    if (last === 'ALL') {
+                      form.setFieldsValue({ applicableCourtTypes: ['ALL'] });
+                    } else {
+                      form.setFieldsValue({ applicableCourtTypes: vals.filter((v) => v !== 'ALL') });
+                    }
+                  }
+                }}
+              >
+                <Select.Option value="ALL">Tất cả các loại sân (ALL)</Select.Option>
+                <Select.Option value="STANDARD">Sân Tiêu Chuẩn (STANDARD)</Select.Option>
+                <Select.Option value="VIP">Sân VIP (VIP)</Select.Option>
+                <Select.Option value="PREMIUM">Sân Thi Đấu (PREMIUM)</Select.Option>
+              </Select>
+            </Form.Item>
+          </Col>
+        </Row>
+
+        <Row gutter={16}>
+          <Col xs={24} sm={16}>
             <Form.Item
               name="dateRange"
               label="Thời gian hiệu lực (Bắt đầu - Kết thúc)"
@@ -235,7 +295,7 @@ export default function VoucherFormModal({
             </Form.Item>
           </Col>
 
-          <Col span={8}>
+          <Col xs={24} sm={8}>
             <Form.Item
               name="usageLimit"
               label="Giới hạn số lượt dùng"

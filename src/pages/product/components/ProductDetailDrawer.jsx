@@ -65,7 +65,7 @@ export default function ProductDetailDrawer({
     <Drawer
       title="Thông tin chi tiết sản phẩm"
       placement="right"
-      width={680}
+      width={typeof window !== 'undefined' && window.innerWidth < 680 ? '100%' : 680}
       open={visible}
       onClose={onClose}
       destroyOnClose
@@ -80,7 +80,7 @@ export default function ProductDetailDrawer({
         <div>
           <Descriptions
             bordered
-            column={2}
+            column={{ xs: 1, sm: 2 }}
             size="middle"
             style={{ marginBottom: 24 }}
           >
@@ -138,6 +138,7 @@ export default function ProductDetailDrawer({
             dataSource={product.stockHistory || []}
             rowKey="_id"
             size="small"
+            scroll={{ x: 650 }}
             pagination={{ pageSize: 5 }}
             locale={{
               emptyText: 'Chưa có lịch sử nhập kho nào được ghi nhận'

@@ -40,10 +40,11 @@ export const bookingService = {
   },
 
   // 7. Kiểm tra và áp dụng mã giảm giá
-  validateVoucher: async (voucherCode, orderAmount = 0) => {
+  validateVoucher: async (voucherCode, orderAmount = 0, context = {}) => {
     const response = await api.post('/bookings/validate-voucher', {
       voucherCode,
-      orderAmount
+      orderAmount,
+      ...context
     });
     return response.data;
   },
