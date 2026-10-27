@@ -24,6 +24,7 @@ import PlayingSessionPage from "../pages/admin/PlayingSessionPage";
 import PosPaymentPage from "../pages/pos/PosPaymentPage";
 import PaymentHistoryPage from "../pages/invoice/PaymentHistoryPage";
 import CustomerManagementPage from "../pages/admin/CustomerManagementPage";
+import NotificationManagementPage from "../pages/notification/NotificationManagementPage";
 import { ROLES } from "../utils/constants";
 import { Result, Button } from "antd";
 
@@ -60,6 +61,16 @@ export default function AppRoutes() {
               allowedRoles={[ROLES.CUSTOMER, ROLES.ADMIN, ROLES.STAFF]}
             >
               <CustomerMyBookingsPage />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/customer/notifications"
+          element={
+            <ProtectedRoute
+              allowedRoles={[ROLES.CUSTOMER, ROLES.ADMIN, ROLES.STAFF]}
+            >
+              <NotificationManagementPage />
             </ProtectedRoute>
           }
         />
@@ -148,6 +159,15 @@ export default function AppRoutes() {
           element={
             <ProtectedRoute allowedRoles={[ROLES.ADMIN, ROLES.STAFF]}>
               <VoucherManagementPage />
+            </ProtectedRoute>
+          }
+        />
+        {/* UC-15 Notification Management (Staff & Admin) */}
+        <Route
+          path="/admin/notifications"
+          element={
+            <ProtectedRoute allowedRoles={[ROLES.ADMIN, ROLES.STAFF]}>
+              <NotificationManagementPage />
             </ProtectedRoute>
           }
         />
