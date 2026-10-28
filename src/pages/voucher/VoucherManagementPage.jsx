@@ -259,7 +259,7 @@ export default function VoucherManagementPage() {
             title: 'Quản trị'
           },
           {
-            title: 'Quản lý mã giảm giá (UC-15)'
+            title: 'Quản lý mã giảm giá'
           }
         ]}
       />
@@ -270,6 +270,8 @@ export default function VoucherManagementPage() {
           display: 'flex',
           justifyContent: 'space-between',
           alignItems: 'center',
+          flexWrap: 'wrap',
+          gap: 16,
           marginBottom: 20
         }}
       >

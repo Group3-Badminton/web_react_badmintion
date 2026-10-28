@@ -14,7 +14,8 @@ import {
   ShoppingCartOutlined,
   TagOutlined,
   FileTextOutlined,
-  FolderOutlined
+  FolderOutlined,
+  BellOutlined
 } from '@ant-design/icons';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
@@ -39,6 +40,11 @@ export default function AppSidebar({ collapsed }) {
           key: '/customer/my-bookings',
           icon: <UnorderedListOutlined />,
           label: 'Lịch đặt của tôi'
+        },
+        {
+          key: '/customer/notifications',
+          icon: <BellOutlined style={{ color: '#009B60' }} />,
+          label: 'Thông báo của tôi'
         },
         {
           key: '/customer/profile',
@@ -110,6 +116,15 @@ export default function AppSidebar({ collapsed }) {
         key: '/admin/vouchers',
         icon: <TagOutlined />,
         label: 'Mã giảm giá (Voucher)'
+      });
+    }
+
+    // Notifications (UC-15 Notification Management)
+    if (isAdmin || isStaff) {
+      items.push({
+        key: '/admin/notifications',
+        icon: <BellOutlined style={{ color: '#009B60' }} />,
+        label: 'Quản lý thông báo'
       });
     }
 

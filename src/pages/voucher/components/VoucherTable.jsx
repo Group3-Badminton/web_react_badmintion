@@ -67,6 +67,27 @@ export default function VoucherTable({
       }
     },
     {
+      title: 'Loại sân áp dụng',
+      dataIndex: 'applicableCourtTypes',
+      key: 'applicableCourtTypes',
+      render: (types) => {
+        if (!types || types.length === 0 || types.includes('ALL')) {
+          return <Tag color="blue">Tất cả sân</Tag>;
+        }
+        const colorMap = { STANDARD: 'green', VIP: 'gold', PREMIUM: 'purple' };
+        const labelMap = { STANDARD: 'Tiêu Chuẩn', VIP: 'VIP', PREMIUM: 'Thi Đấu' };
+        return (
+          <Space size={[0, 4]} wrap>
+            {types.map((t) => (
+              <Tag key={t} color={colorMap[t] || 'default'}>
+                {labelMap[t] || t}
+              </Tag>
+            ))}
+          </Space>
+        );
+      }
+    },
+    {
       title: 'Thời gian hiệu lực',
       key: 'validityPeriod',
       render: (_, r) => (
@@ -112,6 +133,7 @@ export default function VoucherTable({
       key: 'actions',
       width: 140,
       align: 'center',
+      fixed: 'right',
       render: (_, record) => (
         <Space size="small">
           {/* Xem chi tiết - Cho cả Staff và Admin */}
@@ -176,6 +198,7 @@ export default function VoucherTable({
         showTotal: (total, range) => `${range[0]}-${range[1]} trên tổng số ${total} voucher`
       }}
       onChange={onTableChange}
+      scroll={{ x: 1050 }}
       locale={{
         emptyText: 'Không tìm thấy voucher nào'
       }}

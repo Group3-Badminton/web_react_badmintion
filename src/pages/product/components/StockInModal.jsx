@@ -52,6 +52,7 @@ export default function StockInModal({
       cancelText="Hủy bỏ"
       destroyOnClose
       maskClosable={!loading}
+      style={{ maxWidth: '95vw', top: 20 }}
     >
       <Descriptions size="small" column={1} bordered style={{ marginBottom: 16 }}>
         <Descriptions.Item label="Sản phẩm">
