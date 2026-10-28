@@ -877,7 +877,7 @@ export default function AdminBookingListPage() {
       width: 140,
       render: (code, record) => (
         <Space size={4}>
-          <Text strong style={{ color: '#009B60' }}>
+          <Text strong style={{ color: '#059669' }}>
             #{code}
           </Text>
           <Tooltip title="Sao chép mã">
@@ -911,7 +911,7 @@ export default function AdminBookingListPage() {
             <Space>
               <Avatar
                 size="small"
-                style={{ backgroundColor: '#009B60' }}
+                style={{ backgroundColor: '#059669' }}
                 icon={<UserOutlined />}
               >
                 {customer?.fullName ? customer.fullName.charAt(0).toUpperCase() : 'U'}
@@ -986,7 +986,7 @@ export default function AdminBookingListPage() {
         return (
           <Space direction="vertical" size={2}>
             <Space size={6}>
-              <CalendarOutlined style={{ color: '#009B60' }} />
+              <CalendarOutlined style={{ color: '#059669' }} />
               <Text strong>{dayjs(record.bookingDate).format('DD/MM/YYYY')}</Text>
             </Space>
             {items.length > 1 ? (
@@ -1042,7 +1042,7 @@ export default function AdminBookingListPage() {
       width: 140,
       render: (amount, record) => (
         <div>
-          <Text strong style={{ color: '#009B60', fontSize: 14 }}>
+          <Text strong style={{ color: '#059669', fontSize: 14 }}>
             {(amount || 0).toLocaleString('vi-VN')} đ
           </Text>
           {record.discount > 0 && (
@@ -1116,7 +1116,7 @@ export default function AdminBookingListPage() {
                   size="small"
                   type="primary"
                   icon={<CheckOutlined />}
-                  style={{ backgroundColor: '#009B60', borderColor: '#009B60' }}
+                  style={{ backgroundColor: '#059669', borderColor: '#059669' }}
                 >
                   Xác nhận
                 </Button>
@@ -1201,39 +1201,40 @@ export default function AdminBookingListPage() {
 
   return (
     <div style={{ padding: '4px 0' }}>
-      {/* Header Banner */}
+      {/* Page Header - Tinh giản, tone Trắng + Xanh Emerald hiện đại */}
       <div
         style={{
           display: 'flex',
           justifyContent: 'space-between',
           alignItems: 'center',
-          marginBottom: 20,
-          background: 'linear-gradient(135deg, #092615 0%, #1a4d2e 100%)',
-          padding: '20px 24px',
-          borderRadius: 14,
-          color: '#ffffff',
-          boxShadow: '0 4px 16px rgba(9, 38, 21, 0.12)'
+          marginBottom: 16,
+          background: '#ffffff',
+          padding: '16px 20px',
+          borderRadius: 12,
+          border: '1px solid #e2e8f0',
+          boxShadow: '0 1px 3px rgba(0, 0, 0, 0.03)'
         }}
       >
         <div>
-          <Title level={3} style={{ color: '#ffffff', margin: '0 0 4px' }}>
+          <Title level={4} style={{ color: '#0f172a', margin: '0 0 2px', fontWeight: 700 }}>
             Nhận & Duyệt Đơn Đặt Sân 🏸
           </Title>
-          <Text style={{ color: '#bbf246', fontSize: 13 }}>
+          <Text style={{ color: '#64748b', fontSize: 13 }}>
             Tiếp nhận các đơn đặt lịch từ khách hàng, kiểm tra thông tin và xác nhận giữ sân
           </Text>
         </div>
-        <Space size={12}>
+        <Space size={10}>
           <Button
             type="primary"
             icon={<PlusOutlined />}
             style={{
-              backgroundColor: '#bbf246',
-              borderColor: '#bbf246',
-              color: '#092615',
-              fontWeight: 'bold',
+              backgroundColor: '#059669',
+              borderColor: '#059669',
+              color: '#ffffff',
+              fontWeight: 600,
               borderRadius: 8,
-              height: 38
+              height: 38,
+              boxShadow: '0 1px 2px rgba(5, 150, 105, 0.2)'
             }}
             onClick={handleOpenCreateModal}
           >
@@ -1242,9 +1243,10 @@ export default function AdminBookingListPage() {
           <Button
             icon={<ReloadOutlined spin={loading} />}
             style={{
-              background: 'rgba(255, 255, 255, 0.15)',
-              borderColor: 'rgba(255, 255, 255, 0.3)',
-              color: '#fff',
+              background: '#ffffff',
+              borderColor: '#cbd5e1',
+              color: '#334155',
+              fontWeight: 500,
               borderRadius: 8,
               height: 38
             }}
@@ -1256,39 +1258,39 @@ export default function AdminBookingListPage() {
         </Space>
       </div>
 
-      {/* KPI Stats Cards - Tập trung vào Nhận đơn & Xác nhận */}
-      <Row gutter={[16, 16]} style={{ marginBottom: 20 }}>
+      {/* KPI Stats Cards - Phong cách Flat Minimalist: Nền Trắng, viền Slate mỏng, Icon bo góc nhẹ */}
+      <Row gutter={[16, 16]} style={{ marginBottom: 16 }}>
         <Col xs={24} sm={12} md={6}>
           <Card
             bordered={false}
-            style={{ borderRadius: 10, boxShadow: '0 2px 8px rgba(0,0,0,0.04)', borderTop: '3px solid #1890ff' }}
+            style={{
+              borderRadius: 12,
+              background: '#ffffff',
+              border: '1px solid #e2e8f0',
+              boxShadow: '0 1px 3px rgba(0,0,0,0.03)'
+            }}
             styles={{ body: { padding: '16px 20px' } }}
           >
-            <Statistic
-              title="Tổng Đơn Đặt Sân"
-              value={stats.totalAll}
-              prefix={<CalendarOutlined style={{ color: '#1890ff' }} />}
-              valueStyle={{ fontWeight: 'bold', fontSize: 24 }}
-            />
-          </Card>
-        </Col>
-
-        <Col xs={24} sm={12} md={6}>
-          <Card
-            bordered={false}
-            style={{ borderRadius: 10, boxShadow: '0 2px 8px rgba(0,0,0,0.04)', borderTop: '3px solid #faad14' }}
-            styles={{ body: { padding: '16px 20px' } }}
-          >
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-              <Statistic
-                title="Đang Chờ Duyệt"
-                value={stats.pendingCount}
-                prefix={<ClockCircleOutlined style={{ color: '#faad14' }} />}
-                valueStyle={{ color: '#faad14', fontWeight: 'bold', fontSize: 24 }}
-              />
-              {stats.pendingCount > 0 && (
-                <Badge count="Cần xử lý" style={{ backgroundColor: '#faad14' }} />
-              )}
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+              <div>
+                <Text style={{ color: '#64748b', fontSize: 13, fontWeight: 500 }}>Tổng Đơn Đặt Sân</Text>
+                <div style={{ fontSize: 26, fontWeight: 700, color: '#0f172a', marginTop: 4 }}>
+                  {stats.totalAll}
+                </div>
+              </div>
+              <div
+                style={{
+                  width: 44,
+                  height: 44,
+                  borderRadius: 10,
+                  backgroundColor: '#ecfdf5',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center'
+                }}
+              >
+                <CalendarOutlined style={{ color: '#059669', fontSize: 20 }} />
+              </div>
             </div>
           </Card>
         </Col>
@@ -1296,30 +1298,110 @@ export default function AdminBookingListPage() {
         <Col xs={24} sm={12} md={6}>
           <Card
             bordered={false}
-            style={{ borderRadius: 10, boxShadow: '0 2px 8px rgba(0,0,0,0.04)', borderTop: '3px solid #009B60' }}
+            style={{
+              borderRadius: 12,
+              background: '#ffffff',
+              border: '1px solid #e2e8f0',
+              boxShadow: '0 1px 3px rgba(0,0,0,0.03)'
+            }}
             styles={{ body: { padding: '16px 20px' } }}
           >
-            <Statistic
-              title="Đã Xác Nhận Đặt"
-              value={stats.confirmedCount}
-              prefix={<CheckCircleOutlined style={{ color: '#009B60' }} />}
-              valueStyle={{ color: '#009B60', fontWeight: 'bold', fontSize: 24 }}
-            />
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+              <div>
+                <Space size={6}>
+                  <Text style={{ color: '#64748b', fontSize: 13, fontWeight: 500 }}>Đang Chờ Duyệt</Text>
+                  {stats.pendingCount > 0 && (
+                    <Badge count="Cần xử lý" style={{ backgroundColor: '#f59e0b', fontSize: 11 }} />
+                  )}
+                </Space>
+                <div style={{ fontSize: 26, fontWeight: 700, color: stats.pendingCount > 0 ? '#d97706' : '#0f172a', marginTop: 4 }}>
+                  {stats.pendingCount}
+                </div>
+              </div>
+              <div
+                style={{
+                  width: 44,
+                  height: 44,
+                  borderRadius: 10,
+                  backgroundColor: '#fef3c7',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center'
+                }}
+              >
+                <ClockCircleOutlined style={{ color: '#d97706', fontSize: 20 }} />
+              </div>
+            </div>
           </Card>
         </Col>
 
         <Col xs={24} sm={12} md={6}>
           <Card
             bordered={false}
-            style={{ borderRadius: 10, boxShadow: '0 2px 8px rgba(0,0,0,0.04)', borderTop: '3px solid #ff4d4f' }}
+            style={{
+              borderRadius: 12,
+              background: '#ffffff',
+              border: '1px solid #e2e8f0',
+              boxShadow: '0 1px 3px rgba(0,0,0,0.03)'
+            }}
             styles={{ body: { padding: '16px 20px' } }}
           >
-            <Statistic
-              title="Đã Hủy / Từ Chối"
-              value={stats.cancelledCount}
-              prefix={<CloseCircleOutlined style={{ color: '#ff4d4f' }} />}
-              valueStyle={{ color: '#ff4d4f', fontWeight: 'bold', fontSize: 24 }}
-            />
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+              <div>
+                <Text style={{ color: '#64748b', fontSize: 13, fontWeight: 500 }}>Đã Xác Nhận Đặt</Text>
+                <div style={{ fontSize: 26, fontWeight: 700, color: '#059669', marginTop: 4 }}>
+                  {stats.confirmedCount}
+                </div>
+              </div>
+              <div
+                style={{
+                  width: 44,
+                  height: 44,
+                  borderRadius: 10,
+                  backgroundColor: '#ecfdf5',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center'
+                }}
+              >
+                <CheckCircleOutlined style={{ color: '#059669', fontSize: 20 }} />
+              </div>
+            </div>
+          </Card>
+        </Col>
+
+        <Col xs={24} sm={12} md={6}>
+          <Card
+            bordered={false}
+            style={{
+              borderRadius: 12,
+              background: '#ffffff',
+              border: '1px solid #e2e8f0',
+              boxShadow: '0 1px 3px rgba(0,0,0,0.03)'
+}}
+            styles={{ body: { padding: '16px 20px' } }}
+          >
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+              <div>
+                <Text style={{ color: '#64748b', fontSize: 13, fontWeight: 500 }}>Đã Hủy / Từ Chối</Text>
+                <div style={{ fontSize: 26, fontWeight: 700, color: '#64748b', marginTop: 4 }}>
+                  {stats.cancelledCount}
+                </div>
+              </div>
+              <div
+                style={{
+                  width: 44,
+                  height: 44,
+                  borderRadius: 10,
+                  backgroundColor: '#f1f5f9',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center'
+                }}
+              >
+                <CloseCircleOutlined style={{ color: '#94a3b8', fontSize: 20 }} />
+              </div>
+            </div>
           </Card>
         </Col>
       </Row>
@@ -1330,8 +1412,7 @@ export default function AdminBookingListPage() {
         style={{
           borderRadius: 12,
           marginBottom: 16,
-          boxShadow: '0 2px 10px rgba(0,0,0,0.03)'
-        }}
+          background: '#ffffff', border: '1px solid #e2e8f0', boxShadow: '0 1px 3px rgba(0,0,0,0.03)' }}
         styles={{ body: { padding: '16px 20px' } }}
       >
         <Row gutter={[12, 12]} align="middle">
@@ -1411,8 +1492,7 @@ export default function AdminBookingListPage() {
         bordered={false}
         style={{
           borderRadius: 12,
-          boxShadow: '0 2px 10px rgba(0,0,0,0.03)'
-        }}
+          background: '#ffffff', border: '1px solid #e2e8f0', boxShadow: '0 1px 3px rgba(0,0,0,0.03)' }}
         styles={{ body: { padding: '12px' } }}
       >
         <Table
@@ -1438,7 +1518,7 @@ export default function AdminBookingListPage() {
       <Modal
         title={
           <Space>
-            <CalendarOutlined style={{ color: '#009B60' }} />
+            <CalendarOutlined style={{ color: '#059669' }} />
             <span>Chi Tiết Đơn Đặt Sân #{selectedBooking?.bookingCode}</span>
             {selectedBooking?.status && (
               <Tag color={STATUS_CONFIG[selectedBooking.status]?.color || 'default'}>
@@ -1464,7 +1544,7 @@ export default function AdminBookingListPage() {
                 type="primary"
                 loading={isChangingInfo}
                 icon={<CheckCircleOutlined />}
-                style={{ backgroundColor: '#009B60', borderColor: '#009B60' }}
+                style={{ backgroundColor: '#059669', borderColor: '#059669' }}
                 onClick={handleChangeBookingInfo}
               >
                 xác nhận
@@ -1530,7 +1610,7 @@ export default function AdminBookingListPage() {
                 >
                   <Button
                     type="primary"
-                    style={{ backgroundColor: '#009B60', borderColor: '#009B60' }}
+                    style={{ backgroundColor: '#059669', borderColor: '#059669' }}
                     icon={<CheckOutlined />}
                   >
                     xác nhận
@@ -1601,7 +1681,7 @@ export default function AdminBookingListPage() {
             {/* Bảng thông tin chi tiết đơn đặt sân */}
             <Descriptions bordered size="small" column={{ xs: 1, sm: 2 }}>
               <Descriptions.Item label="Mã Đơn">
-                <Text strong style={{ color: '#009B60' }}>
+                <Text strong style={{ color: '#059669' }}>
                   #{selectedBooking.bookingCode}
                 </Text>
               </Descriptions.Item>
@@ -1906,7 +1986,7 @@ export default function AdminBookingListPage() {
                         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: 8 }}>
                           <div>
                             <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                              <Text strong style={{ fontSize: 14, color: '#009B60' }}>
+                              <Text strong style={{ fontSize: 14, color: '#059669' }}>
                                 🏸 {cName}
                               </Text>
                               <Tag color="cyan" style={{ fontSize: 11, borderRadius: 4 }}>
@@ -2007,7 +2087,7 @@ export default function AdminBookingListPage() {
       <Modal
         title={
           <Space>
-            <CalendarOutlined style={{ color: '#009B60' }} />
+            <CalendarOutlined style={{ color: '#059669' }} />
             <span style={{ fontSize: 16 }}>Đặt Sân Cầu Lông Mới (Dành Cho Nhân Viên)</span>
           </Space>
         }
@@ -2023,7 +2103,7 @@ export default function AdminBookingListPage() {
             type="primary"
             loading={creatingBooking}
             icon={<CheckCircleOutlined />}
-            style={{ backgroundColor: '#009B60', borderColor: '#009B60' }}
+            style={{ backgroundColor: '#059669', borderColor: '#059669' }}
             onClick={handleSubmitCreateBooking}
           >
             Xác nhận đặt sân
@@ -2036,7 +2116,7 @@ export default function AdminBookingListPage() {
             size="small"
             title={
               <Space>
-                <UserOutlined style={{ color: '#009B60' }} />
+                <UserOutlined style={{ color: '#059669' }} />
                 <span>1. Thông Tin Khách Hàng</span>
               </Space>
             }
@@ -2115,7 +2195,7 @@ export default function AdminBookingListPage() {
             size="small"
             title={
               <Space>
-                <ClockCircleOutlined style={{ color: '#009B60' }} />
+                <ClockCircleOutlined style={{ color: '#059669' }} />
                 <span>2. Chọn Sân & Thời Gian</span>
               </Space>
             }
@@ -2186,7 +2266,7 @@ export default function AdminBookingListPage() {
               <Col xs={24}>
                 <div style={{ background: '#f8fafc', padding: '10px 14px', borderRadius: 8, border: '1px solid #e2e8f0' }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                    <Text strong style={{ color: '#009B60', fontSize: 13 }}>
+                    <Text strong style={{ color: '#059669', fontSize: 13 }}>
                       ⏱️ Thời lượng đặt: {createStartTime && createEndTime && createEndTime.isAfter(createStartTime)
                         ? `${Math.floor(createEndTime.diff(createStartTime, 'minute') / 60)} giờ ${createEndTime.diff(createStartTime, 'minute') % 60} phút (${(createEndTime.diff(createStartTime, 'minute') / 60).toFixed(1)} tiếng)`
                         : 'Vui lòng chọn giờ kết thúc sau giờ bắt đầu'}
@@ -2219,7 +2299,7 @@ export default function AdminBookingListPage() {
             size="small"
             title={
               <Space>
-                <DollarOutlined style={{ color: '#009B60' }} />
+                <DollarOutlined style={{ color: '#059669' }} />
                 <span>3. Giá Tiền & Thanh Toán</span>
               </Space>
             }
@@ -2256,7 +2336,7 @@ export default function AdminBookingListPage() {
                     type="primary"
                     onClick={handleApplyCreateVoucher}
                     loading={validatingCreateVoucher}
-                    style={{ backgroundColor: '#009B60', borderColor: '#009B60' }}
+                    style={{ backgroundColor: '#059669', borderColor: '#059669' }}
                   >
                     Áp dụng
                   </Button>

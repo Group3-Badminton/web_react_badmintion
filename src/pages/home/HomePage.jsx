@@ -11,6 +11,7 @@ import {
   Tag,
   message,
   Spin,
+  Modal,
 } from "antd";
 import {
   ThunderboltOutlined,
@@ -23,6 +24,7 @@ import {
   AppstoreOutlined,
   UserOutlined,
   LogoutOutlined,
+  ExclamationCircleOutlined,
 } from "@ant-design/icons";
 import { useNavigate, Link } from "react-router-dom";
 import { useAuth } from "../../context/AuthContext";
@@ -280,10 +282,25 @@ export default function HomePage() {
                       label: "Đăng xuất",
                       icon: <LogoutOutlined />,
                       danger: true,
-                      onClick: async () => {
-                        await logout();
-                        message.success("Đã đăng xuất thành công");
-                        navigate("/");
+                      onClick: () => {
+                        Modal.confirm({
+                          title: "Xác nhận đăng xuất",
+                          icon: <ExclamationCircleOutlined style={{ color: "#ff4d4f" }} />,
+                          content: "Bạn có chắc chắn muốn đăng xuất không?",
+                          okText: "Đăng xuất",
+                          okType: "danger",
+                          cancelText: "Hủy",
+                          centered: true,
+                          onOk: async () => {
+                            try {
+                              await logout();
+                              message.success("Đăng xuất thành công.");
+                              navigate("/login");
+                            } catch (error) {
+                              message.error("Đã có lỗi xảy ra trong quá trình đăng xuất. Vui lòng thử lại.");
+                            }
+                          },
+                        });
                       },
                     },
                   ],

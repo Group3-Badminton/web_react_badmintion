@@ -32,7 +32,7 @@ export default function AppSidebar({ collapsed }) {
       return [
         {
           key: '/customer/book',
-          icon: <ThunderboltOutlined style={{ color: '#009B60' }} />,
+          icon: <ThunderboltOutlined />,
           label: 'Đặt sân online'
         },
         {
@@ -55,7 +55,7 @@ export default function AppSidebar({ collapsed }) {
     if (isAdmin || isStaff) {
       items.push({
         key: '/admin/dashboard',
-        icon: <AppstoreOutlined style={{ color: '#009B60' }} />,
+        icon: <AppstoreOutlined />,
         label: 'Tổng quan (Dashboard)'
       });
     }
@@ -63,7 +63,7 @@ export default function AppSidebar({ collapsed }) {
     if (isAdmin || isStaff || hasPermission(STAFF_PERMISSIONS.CHECKIN_CHECKOUT)) {
       items.push({
         key: isStaff ? '/staff/monitor' : '/admin/monitor',
-        icon: <PlayCircleOutlined style={{ color: '#1890ff' }} />,
+        icon: <PlayCircleOutlined />,
         label: 'Bảng ca đấu trực tiếp'
       });
     }
@@ -81,7 +81,7 @@ export default function AppSidebar({ collapsed }) {
     if (isAdmin || isStaff) {
       items.push({
         key: '/admin/products',
-        icon: <TagOutlined style={{ color: '#009B60' }} />,
+        icon: <TagOutlined />,
         label: 'Quản lý sản phẩm'
       });
     }
@@ -108,7 +108,7 @@ export default function AppSidebar({ collapsed }) {
     if (isAdmin || isStaff) {
       items.push({
         key: '/admin/vouchers',
-        icon: <TagOutlined style={{ color: '#009B60' }} />,
+        icon: <TagOutlined />,
         label: 'Mã giảm giá (Voucher)'
       });
     }
@@ -146,7 +146,7 @@ export default function AppSidebar({ collapsed }) {
     if (generalCategoryChildren.length > 0) {
       items.push({
         key: 'general-category',
-        icon: <FolderOutlined style={{ color: '#009B60' }} />,
+        icon: <FolderOutlined />,
         label: 'Danh mục chung',
         children: generalCategoryChildren
       });
