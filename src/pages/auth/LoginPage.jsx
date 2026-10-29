@@ -11,11 +11,17 @@ import { useAuth } from "../../context/AuthContext";
 
 export default function LoginPage() {
   const [loading, setLoading] = useState(false);
-  const [errorMessage, setErrorMessage] = useState("");
+  const [errorMessage, setErrorMessage] = useState(() => {
+    const authErr = sessionStorage.getItem('bcms_auth_error');
+    if (authErr) {
+      sessionStorage.removeItem('bcms_auth_error');
+      return authErr;
+    }
+    return "";
+  });
   const { loginSuccess } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
-
   const onFinish = async (values) => {
     setLoading(true);
     setErrorMessage("");

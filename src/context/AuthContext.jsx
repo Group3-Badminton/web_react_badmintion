@@ -1,5 +1,6 @@
-import React, { createContext, useContext, useState } from 'react';
+import React, { createContext, useContext, useState, useEffect } from 'react';
 import { ROLES } from '../utils/constants';
+import api from '../services/api';
 
 const AuthContext = createContext(null);
 
@@ -14,7 +15,40 @@ export function AuthProvider({ children }) {
   });
 
   const [token, setToken] = useState(() => localStorage.getItem('bcms_token') || null);
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState(true);
+
+  // Xác minh phiên đăng nhập khi khởi chạy app hoặc khi F5
+  useEffect(() => {
+    const verifySession = async () => {
+      const storedToken = localStorage.getItem('bcms_token');
+      if (!storedToken) {
+        setLoading(false);
+        return;
+      }
+
+      try {
+        // Gọi API kiểm tra hồ sơ thực tế từ database
+        const res = await api.get('/users/profile');
+        if (res.data?.success && res.data?.data) {
+          setUser(res.data.data);
+          localStorage.setItem('bcms_user', JSON.stringify(res.data.data));
+        }
+      } catch (err) {
+        // Nếu token hết hạn hoặc tài khoản bị xóa/khóa, dọn dẹp state
+        const status = err.response?.status;
+        if (status === 401 || status === 403) {
+          localStorage.removeItem('bcms_token');
+          localStorage.removeItem('bcms_user');
+          setToken(null);
+          setUser(null);
+        }
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    verifySession();
+  }, []);
 
   const handleLoginSuccess = (authData) => {
     const { user: userData, token: newToken } = authData;
