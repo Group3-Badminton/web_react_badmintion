@@ -94,11 +94,11 @@ export default function PosPaymentPage() {
       const res = await sessionService.getLiveBoard();
       const courts = res?.data || res || [];
       const inProgress = courts.filter(
-        (c) => c.currentSession && c.currentSession.status === 'IN_PROGRESS'
+        (c) => (c.activeSession || c.currentSession) && (c.activeSession || c.currentSession).status === 'IN_PROGRESS'
       );
       setActiveSessions(inProgress);
       if (inProgress.length > 0 && !selectedSessionId && !paramSessionId) {
-        setSelectedSessionId(inProgress[0].currentSession._id);
+        setSelectedSessionId((inProgress[0].activeSession || inProgress[0].currentSession)._id);
       }
     } catch (err) {
       console.error(err);
@@ -122,6 +122,26 @@ export default function PosPaymentPage() {
       setLoadingProducts(false);
     }
   };
+
+  const CATEGORY_MAP = {
+    ALL: 'Tất cả',
+    RENTAL: 'Thuê vợt',
+    EQUIPMENT: 'Dụng cụ & Cầu',
+    ACCESSORY: 'Phụ kiện',
+    DRINK: 'Nước uống',
+    FOOD: 'Đồ ăn'
+  };
+
+  const CATEGORY_COLORS = {
+    RENTAL: 'purple',
+    EQUIPMENT: 'blue',
+    ACCESSORY: 'orange',
+    DRINK: 'cyan',
+    FOOD: 'green'
+  };
+
+  const getCategoryLabel = (cat) => CATEGORY_MAP[cat] || cat;
+  const getCategoryColor = (cat) => CATEGORY_COLORS[cat] || 'blue';
 
   const categories = [
     'ALL',
@@ -315,7 +335,7 @@ export default function PosPaymentPage() {
 
       await sessionService.addRentalItem(selectedSessionId, payload);
       const targetCourt = activeSessions.find(
-        (c) => c.currentSession?._id === selectedSessionId
+        (c) => (c.activeSession || c.currentSession)?._id === selectedSessionId
       );
       const courtName = targetCourt ? targetCourt.name : 'sân';
       message.success(`Đã thêm ${cartItems.length} mặt hàng vào ca chơi ${courtName}! Tiền sẽ được thanh toán chung khi khách trả sân.`);
@@ -330,7 +350,7 @@ export default function PosPaymentPage() {
   };
 
   const selectedCourtSession = activeSessions.find(
-    (c) => c.currentSession?._id === selectedSessionId
+    (c) => (c.activeSession || c.currentSession)?._id === selectedSessionId
   );
 
   const qrUrl = `https://img.vietqr.io/image/MB-0382379374-compact2.png?amount=${finalTotal}&addInfo=${encodeURIComponent(`POS BCMS ${customerPhone || ''}`)}&accountName=SAN%20CAU%20LONG%20BCMS`;
@@ -369,7 +389,7 @@ export default function PosPaymentPage() {
               >
                 {categories.map((c) => (
                   <Radio.Button key={c} value={c}>
-                    {c === 'ALL' ? 'Tất cả' : c}
+                    {getCategoryLabel(c)}
                   </Radio.Button>
                 ))}
               </Radio.Group>
@@ -389,45 +409,83 @@ export default function PosPaymentPage() {
 
                   return (
                     <Col xs={12} sm={8} md={6} key={p._id}>
-                      <Badge.Ribbon
-                        text={isOutOfStock ? 'Hết hàng' : `Còn: ${p.stockQuantity}`}
-                        color={isOutOfStock ? '#ef4444' : p.stockQuantity < 5 ? '#f59e0b' : '#009B60'}
+                      <Card
+                        hoverable={!isOutOfStock}
+                        onClick={() => !isOutOfStock && addToCart(p)}
+                        style={{
+                          borderRadius: 10,
+                          borderColor: inCart ? '#009B60' : '#e2e8f0',
+                          background: isOutOfStock ? '#f8fafc' : '#ffffff',
+                          cursor: isOutOfStock ? 'not-allowed' : 'pointer',
+                          opacity: isOutOfStock ? 0.6 : 1,
+                          transition: 'all 0.2s',
+                          boxShadow: inCart ? '0 0 0 2px rgba(0, 155, 96, 0.2)' : 'none',
+                          height: '100%'
+                        }}
+                        bodyStyle={{
+                          padding: '10px 12px',
+                          display: 'flex',
+                          flexDirection: 'column',
+                          justifyContent: 'space-between',
+                          height: '100%'
+                        }}
                       >
-                        <Card
-                          hoverable={!isOutOfStock}
-                          onClick={() => !isOutOfStock && addToCart(p)}
-                          style={{
-                            borderRadius: 10,
-                            borderColor: inCart ? '#009B60' : '#e2e8f0',
-                            background: isOutOfStock ? '#f8fafc' : '#ffffff',
-                            cursor: isOutOfStock ? 'not-allowed' : 'pointer',
-                            opacity: isOutOfStock ? 0.6 : 1,
-                            transition: 'all 0.2s',
-                            boxShadow: inCart ? '0 0 0 2px rgba(0, 155, 96, 0.2)' : 'none'
-                          }}
-                          bodyStyle={{ padding: 12 }}
-                        >
-                          <div style={{ fontSize: 13, fontWeight: 700, color: '#1e293b', minHeight: 38, marginBottom: 4 }}>
+                        <div>
+                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
+                            <Tag
+                              color={getCategoryColor(p.category)}
+                              style={{ margin: 0, fontSize: 10, lineHeight: '18px', padding: '0 5px', fontWeight: 600, border: 'none' }}
+                            >
+                              {getCategoryLabel(p.category)}
+                            </Tag>
+                            <Tag
+                              color={isOutOfStock ? 'error' : p.stockQuantity < 5 ? 'warning' : 'success'}
+                              style={{ margin: 0, fontSize: 10, lineHeight: '18px', padding: '0 5px', fontWeight: 700 }}
+                            >
+                              {isOutOfStock ? 'Hết hàng' : `Còn: ${p.stockQuantity}`}
+                            </Tag>
+                          </div>
+
+                          <div
+                            style={{
+                              fontSize: 13,
+                              fontWeight: 700,
+                              color: isOutOfStock ? '#94a3b8' : '#1e293b',
+                              lineHeight: '18px',
+                              minHeight: 36,
+                              marginBottom: 4,
+                              display: '-webkit-box',
+                              WebkitLineClamp: 2,
+                              WebkitBoxOrient: 'vertical',
+                              overflow: 'hidden'
+                            }}
+                            title={p.name}
+                          >
                             {p.name}
                           </div>
-                          <div style={{ fontSize: 11, color: '#64748b', marginBottom: 6 }}>
-                            ĐVT: {p.unit || 'cái'} • {p.category || 'Chung'}
+
+                          <div style={{ fontSize: 11, color: '#64748b', marginBottom: 8 }}>
+                            ĐVT: {p.unit || 'cái'}
                           </div>
-                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                            <div style={{ fontWeight: 800, color: '#009B60', fontSize: 14 }}>
-                              {(p.price || 0).toLocaleString('vi-VN')} đ
-                            </div>
-                            <Button
-                              type={inCart ? 'primary' : 'default'}
-                              size="small"
-                              shape="circle"
-                              icon={<PlusOutlined />}
-                              disabled={isOutOfStock}
-                              style={{ background: inCart ? '#009B60' : undefined, borderColor: inCart ? '#009B60' : undefined }}
-                            />
+                        </div>
+
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', paddingTop: 6, borderTop: '1px dashed #f1f5f9' }}>
+                          <div style={{ fontWeight: 800, color: isOutOfStock ? '#94a3b8' : '#009B60', fontSize: 14 }}>
+                            {(p.price || 0).toLocaleString('vi-VN')} đ
                           </div>
-                        </Card>
-                      </Badge.Ribbon>
+                          <Button
+                            type={inCart ? 'primary' : 'default'}
+                            size="small"
+                            shape="circle"
+                            icon={<PlusOutlined />}
+                            disabled={isOutOfStock}
+                            style={{
+                              background: inCart ? '#009B60' : undefined,
+                              borderColor: inCart ? '#009B60' : undefined
+                            }}
+                          />
+                        </div>
+                      </Card>
                     </Col>
                   );
                 })}
@@ -501,11 +559,11 @@ export default function PosPaymentPage() {
                       value={selectedSessionId}
                       onChange={(val) => setSelectedSessionId(val)}
                       options={activeSessions.map((c) => {
-                        const sess = c.currentSession;
-                        const custName = sess.bookingId?.customerId?.fullName || sess.bookingId?.customerName || 'Khách chơi';
-                        const custPhone = sess.bookingId?.customerId?.phone || sess.bookingId?.customerPhone || '';
+                        const sess = c.activeSession || c.currentSession;
+                        const custName = sess?.customerDisplayName || sess?.bookingId?.customerId?.fullName || sess?.bookingId?.customerName || 'Khách chơi';
+                        const custPhone = sess?.customerDisplayPhone || sess?.bookingId?.customerId?.phone || sess?.bookingId?.customerPhone || '';
                         return {
-                          value: sess._id,
+                          value: sess?._id,
                           label: `${c.name} - ${custName}${custPhone ? ` (${custPhone})` : ''}`
                         };
                       })}
@@ -518,11 +576,11 @@ export default function PosPaymentPage() {
                         </div>
                         <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 2 }}>
                           <span style={{ color: '#64748b' }}>Khách hàng:</span>
-                          <span>{selectedCourtSession.currentSession?.bookingId?.customerId?.fullName || 'Khách chơi'}</span>
+                          <span>{(selectedCourtSession.activeSession || selectedCourtSession.currentSession)?.customerDisplayName || (selectedCourtSession.activeSession || selectedCourtSession.currentSession)?.bookingId?.customerId?.fullName || 'Khách chơi'}</span>
                         </div>
                         <div style={{ display: 'flex', justifyContent: 'space-between' }}>
                           <span style={{ color: '#64748b' }}>Tiền ca hiện tại:</span>
-                          <b>{(selectedCourtSession.currentSession?.totalAmount || 0).toLocaleString('vi-VN')} đ</b>
+                          <b>{((selectedCourtSession.activeSession || selectedCourtSession.currentSession)?.totalAmount || 0).toLocaleString('vi-VN')} đ</b>
                         </div>
                       </div>
                     )}

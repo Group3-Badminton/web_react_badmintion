@@ -1,8 +1,8 @@
 import api from './api';
 
 export const sessionService = {
-  getCourtMatrix: async (date) => {
-    const response = await api.get('/sessions/matrix', { params: { date } });
+  getCourtMatrix: async (date, step = 60) => {
+    const response = await api.get('/sessions/matrix', { params: { date, step } });
     return response.data;
   },
 
