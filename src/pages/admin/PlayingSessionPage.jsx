@@ -884,9 +884,9 @@ export default function PlayingSessionPage() {
     }
 
     const ROW_H = gridStep === 15 ? 44 : (gridStep === 30 ? 56 : 68);
-    const BORDER_SPACING = 6;
+    const BORDER_SPACING = 0;
     const cardHeight = spanCount > 1
-      ? (spanCount * ROW_H + (spanCount - 1) * BORDER_SPACING - 6)
+      ? (spanCount * ROW_H - 6)
       : (ROW_H - 6);
 
     return (
@@ -894,10 +894,13 @@ export default function PlayingSessionPage() {
         key={`${court._id}-${slot._id}`}
         rowSpan={spanCount || 1}
         style={{
-          padding: '3px',
+          width: 185,
+          minWidth: 185,
+          padding: '3px 4px',
           verticalAlign: 'top',
-          height: spanCount > 1 ? (spanCount * ROW_H + (spanCount - 1) * BORDER_SPACING) : ROW_H,
-          boxSizing: 'border-box'
+          height: spanCount > 1 ? (spanCount * ROW_H) : ROW_H,
+          boxSizing: 'border-box',
+          background: '#ffffff'
         }}
         onClick={() => handleCellClick(court, slot, cell)}
       >
@@ -971,7 +974,7 @@ export default function PlayingSessionPage() {
                 <Button
                   size="small"
                   icon={<PhoneOutlined />}
-                  style={{ flex: 1, fontSize: 11, height: 22, padding: '0 2px', fontWeight: 600 }}
+                  style={{ flex: 1, fontSize: 11, height: 22, padding: '0 2px', fontWeight: 600, whiteSpace: 'nowrap' }}
                   onClick={() => alert(`Gọi điện thoại cho khách: ${cell.booking?.customer?.phone || cell.booking?.customerDisplayPhone || 'Chưa có SĐT'}`)}
                 >
                   Gọi
@@ -979,7 +982,7 @@ export default function PlayingSessionPage() {
                 <Button
                   size="small"
                   danger
-                  style={{ flex: 1, fontSize: 11, height: 22, padding: '0 2px', fontWeight: 600 }}
+                  style={{ flex: 1, fontSize: 11, height: 22, padding: '0 2px', fontWeight: 600, whiteSpace: 'nowrap' }}
                   onClick={() => {
                     setSelectedSlotCell({ court, slot, cell });
                     setCancelModalVisible(true);
@@ -1084,7 +1087,7 @@ export default function PlayingSessionPage() {
               <div style={{ display: 'flex', gap: 4, marginTop: 4 }} onClick={(e) => e.stopPropagation()}>
                 <Button
                   size="small"
-                  style={{ flex: 1, fontSize: 11, height: 22, padding: '0 2px', fontWeight: 600 }}
+                  style={{ flex: 1, fontSize: 11, height: 22, padding: '0 2px', fontWeight: 600, whiteSpace: 'nowrap' }}
                   onClick={() => openExtendModal(cell.session || { courtId: court._id })}
                 >
                   Gia hạn
@@ -1099,7 +1102,8 @@ export default function PlayingSessionPage() {
                     fontSize: 11,
                     height: 22,
                     padding: '0 2px',
-                    fontWeight: 700
+                    fontWeight: 700,
+                    whiteSpace: 'nowrap'
                   }}
                   onClick={() => openCheckOutModal(cell.session || { courtId: court._id })}
                 >
@@ -1460,6 +1464,17 @@ export default function PlayingSessionPage() {
                   allowClear={false}
                   style={{ width: 140 }}
                 />
+                <Select
+                  value={courtScheduleFilter}
+                  onChange={setCourtScheduleFilter}
+                  style={{ width: 160 }}
+                  options={[
+                    { value: 'ALL', label: 'Tất cả loại sân' },
+                    { value: 'STANDARD', label: 'Sân Tiêu Chuẩn' },
+                    { value: 'VIP', label: 'Sân VIP' },
+                    { value: 'PREMIUM', label: 'Sân Thi Đấu' }
+                  ]}
+                />
                 <Button
                   icon={<ReloadOutlined />}
                   onClick={() => { fetchLiveBoard(); fetchMatrix(selectedDate, 15); }}
@@ -1481,62 +1496,101 @@ export default function PlayingSessionPage() {
                 overflowX: 'auto',
                 overflowY: 'auto',
                 maxHeight: 'calc(100vh - 210px)',
-                padding: 8
+                padding: '6px',
+                background: '#ffffff'
               }}>
                 {(() => {
-                  const displayedCourts = matrixData.courts;
+                  const displayedCourts = (matrixData.courts || []).filter((c) => {
+                    if (courtScheduleFilter === 'ALL') return true;
+                    return normalizeCourtType(c.courtType) === courtScheduleFilter;
+                  });
 
                   if (displayedCourts.length === 0) {
                     return (
                       <div style={{ textAlign: 'center', padding: '40px 0', color: '#94a3b8' }}>
-                        Không có sân nào trong hệ thống.
+                        {matrixData.courts?.length === 0 ? 'Không có sân nào trong hệ thống.' : 'Không có sân nào khớp với bộ lọc loại sân.'}
                       </div>
                     );
                   }
 
+                  const TIME_COL_WIDTH = 135;
+                  const COURT_COL_WIDTH = 185;
+                  const tableCalculatedMinWidth = TIME_COL_WIDTH + displayedCourts.length * (COURT_COL_WIDTH + 6) + 12;
+
                   return (
-                    <table style={{ width: '100%', borderCollapse: 'separate', borderSpacing: 6, minWidth: 800, tableLayout: 'fixed' }}>
-                      <thead style={{ position: 'sticky', top: 0, zIndex: 30, background: '#ffffff' }}>
+                    <table style={{
+                      width: '100%',
+                      minWidth: `${tableCalculatedMinWidth}px`,
+                      borderCollapse: 'separate',
+                      borderSpacing: 0,
+                      tableLayout: 'fixed'
+                    }}>
+                      <colgroup>
+                        <col style={{ width: TIME_COL_WIDTH, minWidth: TIME_COL_WIDTH }} />
+                        {displayedCourts.map((court) => (
+                          <col key={`col-${court._id}`} style={{ width: COURT_COL_WIDTH, minWidth: COURT_COL_WIDTH }} />
+                        ))}
+                      </colgroup>
+                      <thead>
                         <tr>
                           <th style={{
-                            width: 140,
-                            minWidth: 140,
-                            padding: '10px 8px',
-                            background: '#f1f5f9',
-                            borderRadius: 8,
-                            color: '#334155',
-                            fontSize: 13,
-                            fontWeight: 700,
-                            textAlign: 'center',
-                            border: '1px solid #cbd5e1',
+                            width: TIME_COL_WIDTH,
+                            minWidth: TIME_COL_WIDTH,
+                            padding: '4px',
+                            background: '#ffffff',
                             position: 'sticky',
                             top: 0,
                             left: 0,
-                            zIndex: 35
+                            zIndex: 40,
+                            borderRight: '2px solid #e2e8f0',
+                            borderBottom: '1px solid #e2e8f0',
+                            boxShadow: '4px 0 8px rgba(0, 0, 0, 0.05)',
+                            verticalAlign: 'middle'
                           }}>
-                            Khung giờ
+                            <div style={{
+                              width: '100%',
+                              padding: '10px 8px',
+                              background: '#f1f5f9',
+                              borderRadius: 8,
+                              color: '#334155',
+                              fontSize: 13,
+                              fontWeight: 700,
+                              textAlign: 'center',
+                              border: '1px solid #cbd5e1',
+                              boxSizing: 'border-box'
+                            }}>
+                              Khung giờ
+                            </div>
                           </th>
                           {displayedCourts.map((court) => (
                             <th key={court._id} style={{
-                              minWidth: 160,
-                              padding: '10px 8px',
-                              background: '#009B60',
-                              color: '#ffffff',
-                              borderRadius: 8,
-                              fontSize: 14,
-                              fontWeight: 700,
-                              textAlign: 'center',
-                              boxShadow: '0 2px 4px rgba(0, 155, 96, 0.2)',
+                              width: COURT_COL_WIDTH,
+                              minWidth: COURT_COL_WIDTH,
+                              padding: '4px',
+                              background: '#ffffff',
                               position: 'sticky',
                               top: 0,
-                              zIndex: 30
+                              zIndex: 30,
+                              borderBottom: '1px solid #e2e8f0',
+                              verticalAlign: 'middle'
                             }}>
-                              <div>{court.name}</div>
-                              <div style={{ fontSize: 11, fontWeight: 400, opacity: 0.9 }}>
-                                {renderCourtTypeTag(court.courtType)}
-                              </div>
-                              <div style={{ fontSize: 10, fontWeight: 500, opacity: 0.85, marginTop: 2 }}>
-                                {court.operationalStatus === 'IN_USE' ? '● Đang có khách' : court.operationalStatus === 'CLEANING' ? '● Dọn dẹp' : '● Sẵn sàng'}
+                              <div style={{
+                                padding: '8px 6px',
+                                background: '#009B60',
+                                color: '#ffffff',
+                                borderRadius: 8,
+                                fontSize: 14,
+                                fontWeight: 700,
+                                textAlign: 'center',
+                                boxShadow: '0 2px 4px rgba(0, 155, 96, 0.2)'
+                              }}>
+                                <div style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{court.name}</div>
+                                <div style={{ fontSize: 11, fontWeight: 400, opacity: 0.9 }}>
+                                  {renderCourtTypeTag(court.courtType)}
+                                </div>
+                                <div style={{ fontSize: 10, fontWeight: 500, opacity: 0.85, marginTop: 2 }}>
+                                  {court.operationalStatus === 'IN_USE' ? '● Đang có khách' : court.operationalStatus === 'CLEANING' ? '● Dọn dẹp' : '● Sẵn sàng'}
+                                </div>
                               </div>
                             </th>
                           ))}
@@ -1571,34 +1625,46 @@ export default function PlayingSessionPage() {
                             return (
                               <tr key={slot._id} style={{ height: rowHeight }}>
                                 <td style={{
-                                  width: 140,
-                                  minWidth: 140,
+                                  width: 135,
+                                  minWidth: 135,
+                                  maxWidth: 135,
                                   height: rowHeight,
                                   maxHeight: rowHeight,
                                   boxSizing: 'border-box',
-                                  padding: '4px 8px',
-                                  background: isCurrentSlot ? '#dcfce7' : '#f8fafc',
-                                  borderRadius: 8,
-                                  textAlign: 'center',
-                                  fontWeight: 700,
-                                  color: isCurrentSlot ? '#15803d' : '#1e293b',
-                                  fontSize: 13,
-                                  border: isCurrentSlot ? '1.5px solid #86efac' : '1px solid #e2e8f0',
-                                  verticalAlign: 'middle',
-                                  boxShadow: isCurrentSlot ? '0 1px 3px rgba(16, 185, 129, 0.2)' : 'none',
+                                  padding: '3px 4px',
+                                  background: '#ffffff',
+                                  borderRight: '2px solid #e2e8f0',
+                                  boxShadow: '4px 0 8px rgba(0, 0, 0, 0.05)',
                                   position: 'sticky',
                                   left: 0,
-                                  zIndex: 15
+                                  zIndex: 20,
+                                  verticalAlign: 'middle'
                                 }}>
-                                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 5 }}>
-                                    <ClockCircleOutlined style={{ color: isCurrentSlot ? '#15803d' : '#009B60', fontSize: 13 }} />
-                                    <span>{slot.startTime} - {slot.endTime}</span>
-                                  </div>
-                                  {isCurrentSlot && (
-                                    <div style={{ fontSize: 10, color: '#16a34a', fontWeight: 700, marginTop: 2 }}>
-                                      ● Đang diễn ra
+                                  <div style={{
+                                    width: '100%',
+                                    height: '100%',
+                                    display: 'flex',
+                                    flexDirection: 'column',
+                                    alignItems: 'center',
+                                    justifyContent: 'center',
+                                    background: isCurrentSlot ? '#dcfce7' : '#f8fafc',
+                                    borderRadius: 8,
+                                    border: isCurrentSlot ? '1.5px solid #86efac' : '1px solid #e2e8f0',
+                                    boxSizing: 'border-box',
+                                    padding: '2px 4px'
+                                  }}>
+                                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 4 }}>
+                                      <ClockCircleOutlined style={{ color: isCurrentSlot ? '#15803d' : '#009B60', fontSize: 12 }} />
+                                      <span style={{ whiteSpace: 'nowrap', fontWeight: 700, color: isCurrentSlot ? '#15803d' : '#1e293b', fontSize: 12 }}>
+                                        {slot.startTime} - {slot.endTime}
+                                      </span>
                                     </div>
-                                  )}
+                                    {isCurrentSlot && (
+                                      <div style={{ fontSize: 10, color: '#16a34a', fontWeight: 700, marginTop: 2, whiteSpace: 'nowrap' }}>
+                                        ● Đang diễn ra
+                                      </div>
+                                    )}
+                                  </div>
                                 </td>
                                 {displayedCourts.map((court) => {
                                   const courtCells = matrixData.matrix[court._id] || [];
