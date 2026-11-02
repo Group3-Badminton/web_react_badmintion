@@ -1,4 +1,5 @@
-import React, { useState, useEffect, useCallback, useMemo } from 'react';
+// CLEAN CODE: Khai báo hooks cần thiết cho trang Đặt sân khách hàng
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import {
   Card,
   Row,
@@ -17,14 +18,12 @@ import {
   Result,
   message
 } from 'antd';
+// CLEAN CODE: Khai báo các icons cần thiết cho giao diện đặt sân
 import {
   CalendarOutlined,
-  ClockCircleOutlined,
   CheckCircleOutlined,
-  EnvironmentOutlined,
   TagOutlined,
   DollarOutlined,
-  UserOutlined,
   SafetyCertificateOutlined,
   CopyOutlined,
   SyncOutlined
@@ -38,7 +37,6 @@ import { useAuth } from '../../context/AuthContext';
 import { bookingService } from '../../services/bookingService';
 import san1 from '../../assets/sân1.png';
 import san2 from '../../assets/sân2.png';
-import san3 from '../../assets/sân3.png';
 import './CustomerBookingPage.css';
 
 const { Title, Text, Paragraph } = Typography;
@@ -116,7 +114,7 @@ export default function CustomerBookingPage() {
             });
           }
         }
-      } catch (err) {
+      } catch {
         message.error('Không thể tải danh sách sân cầu lông!');
       } finally {
         setLoadingCourts(false);
@@ -173,7 +171,7 @@ export default function CustomerBookingPage() {
         groups[typeKey] = {
           courtType: typeKey,
           courts: [],
-          image: isVip ? san2 : san1,
+          image: court.image || court.avatar || (isVip ? san2 : san1),
           description: court.description || 'Sân đạt chuẩn thi đấu, mặt thảm chuyên dụng',
           referencePrice: refText
         };
@@ -290,6 +288,7 @@ export default function CustomerBookingPage() {
   }, [selectedCourts, selectedDate, getCourtSchedule, appliedVoucher, areAllCourtsValid]);
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     fetchPriceCalculation();
   }, [fetchPriceCalculation]);
 

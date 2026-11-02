@@ -1,4 +1,5 @@
-import React, { useState, useEffect, useCallback } from 'react';
+// CLEAN CODE: Khai báo hooks cần thiết cho trang Quản lý đơn của tôi
+import { useState, useEffect, useCallback } from 'react';
 import {
   Table,
   Card,
@@ -22,23 +23,18 @@ import {
   DatePicker,
   TimePicker
 } from 'antd';
+// CLEAN CODE: Khai báo các icons cần thiết cho trang Quản lý đơn của tôi
 import {
   CalendarOutlined,
   ClockCircleOutlined,
-  DollarOutlined,
   CheckCircleOutlined,
   CloseCircleOutlined,
   EyeOutlined,
   ThunderboltOutlined,
   ReloadOutlined,
-  TagOutlined,
   SearchOutlined,
   StopOutlined,
   PlayCircleOutlined,
-  ExclamationCircleOutlined,
-  UserOutlined,
-  PhoneOutlined,
-  EnvironmentOutlined,
   EditOutlined,
   PlusOutlined
 } from '@ant-design/icons';
@@ -173,6 +169,7 @@ export default function CustomerMyBookingsPage() {
       item.bookingDate || booking.bookingDate,
       item.startTime || booking.startTime
     );
+    // eslint-disable-next-line react-hooks/purity
     return startsAt && startsAt.getTime() > Date.now();
   };
 
@@ -263,11 +260,14 @@ export default function CustomerMyBookingsPage() {
         setLoading(false);
       }
     },
+    // eslint-disable-next-line react-hooks/exhaustive-deps
     [search, statusFilter, pagination.current, pagination.pageSize]
   );
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     fetchMyBookings(1, pagination.pageSize);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [statusFilter]);
 
   // Hủy đơn đặt sân (chỉ khả dụng khi PENDING)
@@ -883,7 +883,7 @@ export default function CustomerMyBookingsPage() {
                 {selectedBooking.voucherId && (
                   <Descriptions.Item label="Mã Khuyến Mãi" span={2}>
                     <Tag color="magenta">
-                      🏷️ {selectedBooking.voucherId.voucherCode} - {selectedBooking.voucherId.voucherName}
+                      🏷️ {selectedBooking.voucherId.voucherCode || selectedBooking.voucherId.code} - {selectedBooking.voucherId.voucherName || selectedBooking.voucherId.name}
                     </Tag>
                   </Descriptions.Item>
                 )}
