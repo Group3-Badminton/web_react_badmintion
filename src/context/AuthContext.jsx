@@ -5,6 +5,7 @@ import api from '../services/api';
 const AuthContext = createContext(null);
 
 export function AuthProvider({ children }) {
+  //lấy thông tin khi chạy lại chương trình
   const [user, setUser] = useState(() => {
     const saved = localStorage.getItem('bcms_user');
     try {
@@ -13,11 +14,11 @@ export function AuthProvider({ children }) {
       return null;
     }
   });
-
   const [token, setToken] = useState(() => localStorage.getItem('bcms_token') || null);
+  
   const [loading, setLoading] = useState(true);
 
-  // Xác minh phiên đăng nhập khi khởi chạy app hoặc khi F5
+  //xác thực phiên khi ngừi dùng f5
   useEffect(() => {
     const verifySession = async () => {
       const storedToken = localStorage.getItem('bcms_token');
@@ -25,9 +26,7 @@ export function AuthProvider({ children }) {
         setLoading(false);
         return;
       }
-
       try {
-        // Gọi API kiểm tra hồ sơ thực tế từ database
         const res = await api.get('/users/profile');
         if (res.data?.success && res.data?.data) {
           setUser(res.data.data);
@@ -97,7 +96,6 @@ export function AuthProvider({ children }) {
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }
-
 export function useAuth() {
   const context = useContext(AuthContext);
   if (!context) {
