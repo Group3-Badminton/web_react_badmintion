@@ -6,7 +6,6 @@ import {
   PhoneOutlined,
   LockOutlined,
   KeyOutlined,
-  ArrowRightOutlined,
   CheckCircleOutlined,
   RedoOutlined,
 } from "@ant-design/icons";
@@ -76,7 +75,7 @@ export default function RegisterPage() {
     }
   };
 
-  // BƯỚC 2: Gọi đúng hàm TÁI SỬ DỤNG verifyOtp để kích hoạt tài khoản
+  // BƯỚC 2: Gọi hàm verifyOtp để kích hoạt tài khoản
   const onFinishVerifyOtp = async (values) => {
     setLoading(true);
     setErrorMessage("");
@@ -106,18 +105,19 @@ export default function RegisterPage() {
 
   return (
     <div>
-      <div style={{ textAlign: "center", marginBottom: 24 }}>
+      {/* Tiêu đề ngắn gọn */}
+      <div style={{ textAlign: "center", marginBottom: 16 }}>
         <h2
           style={{
-            margin: "0 0 8px",
-            color: "#ffffff",
-            fontSize: 26,
+            margin: "0 0 4px",
+            color: "#0f172a",
+            fontSize: 22,
             fontWeight: 800,
           }}
         >
           {currentStep === 0 ? "Đăng Ký Tài Khoản" : "Xác Thực Kích Hoạt"}
         </h2>
-        <p style={{ color: "#94a3b8", fontSize: 14, margin: 0 }}>
+        <p style={{ color: "#64748b", fontSize: 13, margin: 0 }}>
           {currentStep === 0
             ? "Trở thành thành viên để đặt sân và nhận ưu đãi"
             : `Nhập mã xác thực 6 số gửi đến: ${email}`}
@@ -129,58 +129,65 @@ export default function RegisterPage() {
           message={errorMessage}
           type="error"
           showIcon
-          style={{ marginBottom: 20, borderRadius: 10 }}
+          style={{ marginBottom: 14, borderRadius: 8, padding: "8px 12px" }}
         />
       )}
-
-      {/* ==================== BƯỚC 1: FORM ĐIỀN THÔNG TIN ==================== */}
       {currentStep === 0 && (
         <Form
           layout="vertical"
           onFinish={onFinishRegister}
-          size="large"
           requiredMark={false}
         >
           <Form.Item
             name="fullName"
-            label={<span className="auth-form-label">Họ và tên</span>}
+            label={
+              <span style={{ fontWeight: 600, color: "#1e293b", fontSize: 13 }}>
+                Họ và tên
+              </span>
+            }
             rules={[
               { required: true, message: "Vui lòng nhập họ và tên của bạn!" },
             ]}
+            style={{ marginBottom: 10 }}
           >
             <Input
-              className="auth-glass-input"
               prefix={
-                <UserOutlined
-                  style={{ color: "rgba(255, 255, 255, 0.65)", marginRight: 6 }}
-                />
+                <UserOutlined style={{ color: "#94a3b8", marginRight: 6 }} />
               }
               placeholder="VD: Nguyễn Văn A"
+              style={{ height: 38, borderRadius: 8 }}
             />
           </Form.Item>
 
           <Form.Item
             name="email"
-            label={<span className="auth-form-label">Địa chỉ Email</span>}
+            label={
+              <span style={{ fontWeight: 600, color: "#1e293b", fontSize: 13 }}>
+                Địa chỉ Email
+              </span>
+            }
             rules={[
               { required: true, message: "Vui lòng nhập Email!" },
               { type: "email", message: "Định dạng Email không hợp lệ!" },
             ]}
+            style={{ marginBottom: 10 }}
           >
             <Input
-              className="auth-glass-input"
               prefix={
-                <MailOutlined
-                  style={{ color: "rgba(255, 255, 255, 0.65)", marginRight: 6 }}
-                />
+                <MailOutlined style={{ color: "#94a3b8", marginRight: 6 }} />
               }
               placeholder="VD: nguyenvana@gmail.com"
+              style={{ height: 38, borderRadius: 8 }}
             />
           </Form.Item>
 
           <Form.Item
             name="phone"
-            label={<span className="auth-form-label">Số điện thoại</span>}
+            label={
+              <span style={{ fontWeight: 600, color: "#1e293b", fontSize: 13 }}>
+                Số điện thoại
+              </span>
+            }
             rules={[
               { required: true, message: "Vui lòng nhập số điện thoại!" },
               {
@@ -188,40 +195,46 @@ export default function RegisterPage() {
                 message: "Số điện thoại phải gồm 10 chữ số hợp lệ!",
               },
             ]}
+            style={{ marginBottom: 10 }}
           >
             <Input
-              className="auth-glass-input"
               prefix={
-                <PhoneOutlined
-                  style={{ color: "rgba(255, 255, 255, 0.65)", marginRight: 6 }}
-                />
+                <PhoneOutlined style={{ color: "#94a3b8", marginRight: 6 }} />
               }
               placeholder="VD: 0912345678"
+              style={{ height: 38, borderRadius: 8 }}
             />
           </Form.Item>
 
           <Form.Item
             name="password"
-            label={<span className="auth-form-label">Mật khẩu</span>}
+            label={
+              <span style={{ fontWeight: 600, color: "#1e293b", fontSize: 13 }}>
+                Mật khẩu
+              </span>
+            }
             rules={[
               { required: true, message: "Vui lòng nhập mật khẩu!" },
               { min: 6, message: "Mật khẩu tối thiểu phải từ 6 ký tự!" },
             ]}
+            style={{ marginBottom: 10 }}
           >
             <Input.Password
-              className="auth-glass-input"
               prefix={
-                <LockOutlined
-                  style={{ color: "rgba(255, 255, 255, 0.65)", marginRight: 6 }}
-                />
+                <LockOutlined style={{ color: "#94a3b8", marginRight: 6 }} />
               }
               placeholder="Tối thiểu 6 ký tự"
+              style={{ height: 38, borderRadius: 8 }}
             />
           </Form.Item>
 
           <Form.Item
             name="confirmPassword"
-            label={<span className="auth-form-label">Xác nhận mật khẩu</span>}
+            label={
+              <span style={{ fontWeight: 600, color: "#1e293b", fontSize: 13 }}>
+                Xác nhận mật khẩu
+              </span>
+            }
             dependencies={["password"]}
             rules={[
               { required: true, message: "Vui lòng xác nhận lại mật khẩu!" },
@@ -236,42 +249,33 @@ export default function RegisterPage() {
                 },
               }),
             ]}
-            style={{ marginBottom: 24 }}
+            style={{ marginBottom: 16 }}
           >
             <Input.Password
-              className="auth-glass-input"
               prefix={
-                <LockOutlined
-                  style={{ color: "rgba(255, 255, 255, 0.65)", marginRight: 6 }}
-                />
+                <LockOutlined style={{ color: "#94a3b8", marginRight: 6 }} />
               }
               placeholder="Nhập lại mật khẩu ở trên"
+              style={{ height: 38, borderRadius: 8 }}
             />
           </Form.Item>
 
-          <Form.Item style={{ marginBottom: 12 }}>
+          <Form.Item style={{ marginBottom: 0 }}>
             <Button
               type="primary"
               htmlType="submit"
               block
               loading={loading}
               style={{
-                height: 48,
-                borderRadius: 24,
-                background: "linear-gradient(135deg, #bbf246 0%, #86efac 100%)",
-                border: "none",
-                color: "#092615",
-                fontSize: 16,
-                fontWeight: 800,
-                boxShadow: "0 0 25px rgba(187, 242, 70, 0.4)",
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "center",
-                gap: 8,
+                height: 40,
+                borderRadius: 8,
+                background: "#059669",
+                borderColor: "#059669",
+                fontSize: 15,
+                fontWeight: 700,
               }}
             >
-              <span>Đăng Ký</span>
-        
+              Đăng Ký
             </Button>
           </Form.Item>
         </Form>
@@ -282,29 +286,30 @@ export default function RegisterPage() {
         <Form
           layout="vertical"
           onFinish={onFinishVerifyOtp}
-          size="large"
           requiredMark={false}
         >
           <Form.Item
             name="otp"
             label={
-              <span className="auth-form-label">Nhập mã OTP (6 chữ số)</span>
+              <span style={{ fontWeight: 600, color: "#1e293b", fontSize: 13 }}>
+                Nhập mã OTP (6 chữ số)
+              </span>
             }
             rules={[
               { required: true, message: "Vui lòng nhập mã OTP!" },
               { len: 6, message: "Mã OTP gồm đúng 6 chữ số!" },
             ]}
+            style={{ marginBottom: 16 }}
           >
             <Input
-              className="auth-glass-input"
               maxLength={6}
               prefix={
-                <KeyOutlined
-                  style={{ color: "rgba(255, 255, 255, 0.65)", marginRight: 6 }}
-                />
+                <KeyOutlined style={{ color: "#94a3b8", marginRight: 6 }} />
               }
               placeholder="••••••"
               style={{
+                height: 44,
+                borderRadius: 8,
                 letterSpacing: "8px",
                 fontSize: "20px",
                 textAlign: "center",
@@ -312,37 +317,30 @@ export default function RegisterPage() {
             />
           </Form.Item>
 
-          <Form.Item style={{ marginTop: 24, marginBottom: 12 }}>
+          <Form.Item style={{ marginBottom: 10 }}>
             <Button
               type="primary"
               htmlType="submit"
               block
               loading={loading}
               style={{
-                height: 48,
-                borderRadius: 24,
-                background: "linear-gradient(135deg, #bbf246 0%, #86efac 100%)",
-                border: "none",
-                color: "#092615",
-                fontSize: 16,
-                fontWeight: 800,
-                boxShadow: "0 0 25px rgba(187, 242, 70, 0.4)",
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "center",
-                gap: 8,
+                height: 40,
+                borderRadius: 8,
+                background: "#059669",
+                borderColor: "#059669",
+                fontSize: 15,
+                fontWeight: 700,
               }}
             >
-              <span>Xác Thực & Kích Hoạt Tài Khoản</span>
-              <CheckCircleOutlined />
+              Xác Thực & Kích Hoạt Tài Khoản
             </Button>
           </Form.Item>
 
-          <div style={{ textAlign: "center", marginTop: 12 }}>
+          <div style={{ textAlign: "center" }}>
             <Button
               type="link"
               onClick={() => setCurrentStep(0)}
-              style={{ color: "#94a3b8", fontSize: 13 }}
+              style={{ color: "#64748b", fontSize: 13 }}
               icon={<RedoOutlined />}
             >
               Sửa lại thông tin đăng ký
@@ -352,12 +350,7 @@ export default function RegisterPage() {
       )}
 
       <Divider
-        style={{
-          margin: "24px 0 20px",
-          borderColor: "rgba(255, 255, 255, 0.15)",
-          color: "rgba(255, 255, 255, 0.5)",
-          fontSize: 13,
-        }}
+        style={{ margin: "16px 0 12px", color: "#94a3b8", fontSize: 13 }}
       >
         Hoặc
       </Divider>
@@ -365,14 +358,14 @@ export default function RegisterPage() {
       <div
         style={{
           textAlign: "center",
-          fontSize: 14,
-          color: "rgba(255, 255, 255, 0.85)",
+          fontSize: 13.5,
+          color: "#475569",
         }}
       >
         Đã có tài khoản thành viên?{" "}
         <Link
           to="/login"
-          style={{ color: "#4ade80", fontWeight: 700, textDecoration: "none" }}
+          style={{ color: "#059669", fontWeight: 700, textDecoration: "none" }}
         >
           Đăng nhập ngay
         </Link>

@@ -1,10 +1,6 @@
 import React, { useState } from "react";
-import { Form, Input, Button, Alert, Typography, Divider, message } from "antd";
-import {
-  UserOutlined,
-  LockOutlined,
-  ArrowRightOutlined,
-} from "@ant-design/icons";
+import { Form, Input, Button, Alert, Divider, message } from "antd";
+import { UserOutlined, LockOutlined } from "@ant-design/icons";
 import { Link, useNavigate, useLocation } from "react-router-dom";
 import { authService } from "../../services/authService";
 import { useAuth } from "../../context/AuthContext";
@@ -12,9 +8,9 @@ import { useAuth } from "../../context/AuthContext";
 export default function LoginPage() {
   const [loading, setLoading] = useState(false);
   const [errorMessage, setErrorMessage] = useState(() => {
-    const authErr = sessionStorage.getItem('bcms_auth_error');
+    const authErr = sessionStorage.getItem("bcms_auth_error");
     if (authErr) {
-      sessionStorage.removeItem('bcms_auth_error');
+      sessionStorage.removeItem("bcms_auth_error");
       return authErr;
     }
     return "";
@@ -22,6 +18,7 @@ export default function LoginPage() {
   const { loginSuccess } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
+
   const onFinish = async (values) => {
     setLoading(true);
     setErrorMessage("");
@@ -55,11 +52,12 @@ export default function LoginPage() {
 
   return (
     <div>
+      {/* Tiêu đề Form */}
       <div style={{ textAlign: "center", marginBottom: 28 }}>
         <h2
           style={{
             margin: "0 0 8px",
-            color: "#ffffff",
+            color: "#0f172a",
             fontSize: 26,
             fontWeight: 800,
           }}
@@ -74,7 +72,7 @@ export default function LoginPage() {
           description={errorMessage}
           type="error"
           showIcon
-          style={{ marginBottom: 20, borderRadius: 10 }}
+          style={{ marginBottom: 20, borderRadius: 8 }}
         />
       )}
 
@@ -87,7 +85,9 @@ export default function LoginPage() {
         <Form.Item
           name="account"
           label={
-            <span className="auth-form-label">Số điện thoại hoặc Email</span>
+            <span style={{ fontWeight: 600, color: "#334155" }}>
+              Số điện thoại hoặc Email
+            </span>
           }
           rules={[
             {
@@ -97,30 +97,28 @@ export default function LoginPage() {
           ]}
         >
           <Input
-            className="auth-glass-input"
             prefix={
-              <UserOutlined
-                style={{ color: "rgba(255, 255, 255, 0.65)", marginRight: 6 }}
-              />
+              <UserOutlined style={{ color: "#94a3b8", marginRight: 6 }} />
             }
             placeholder="VD: 0912345678 hoặc customer@gmail.com"
+            style={{ borderRadius: 8 }}
           />
         </Form.Item>
 
         <Form.Item
           name="password"
-          label={<span className="auth-form-label">Mật khẩu</span>}
+          label={
+            <span style={{ fontWeight: 600, color: "#334155" }}>Mật khẩu</span>
+          }
           rules={[{ required: true, message: "Vui lòng nhập mật khẩu!" }]}
           style={{ marginBottom: 12 }}
         >
           <Input.Password
-            className="auth-glass-input"
             prefix={
-              <LockOutlined
-                style={{ color: "rgba(255, 255, 255, 0.65)", marginRight: 6 }}
-              />
+              <LockOutlined style={{ color: "#94a3b8", marginRight: 6 }} />
             }
             placeholder="••••••••"
+            style={{ borderRadius: 8 }}
           />
         </Form.Item>
 
@@ -134,9 +132,9 @@ export default function LoginPage() {
           <Link
             to="/reset-Password"
             style={{
-              color: "#4ade80",
+              color: "#059669",
               fontSize: 13,
-              fontWeight: 500,
+              fontWeight: 600,
               textDecoration: "none",
             }}
           >
@@ -151,36 +149,15 @@ export default function LoginPage() {
             block
             loading={loading}
             style={{
-              height: 48,
-              borderRadius: 24,
-              background: "linear-gradient(135deg, #bbf246 0%, #86efac 100%)",
-              border: "none",
-              color: "#092615",
-              fontSize: 16,
-              fontWeight: 800,
-              boxShadow: "0 0 25px rgba(187, 242, 70, 0.4)",
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-              gap: 8,
+              height: 44,
+              borderRadius: 8,
+              background: "#059669",
+              borderColor: "#059669",
+              fontSize: 15,
+              fontWeight: 700,
             }}
           >
-            <span>Đăng Nhập</span>
-            <div
-              style={{
-                width: 26,
-                height: 26,
-                borderRadius: "50%",
-                background: "#092615",
-                color: "#bbf246",
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "center",
-                fontSize: 12,
-              }}
-            >
-              <ArrowRightOutlined />
-            </div>
+            Đăng Nhập
           </Button>
         </Form.Item>
       </Form>
@@ -188,8 +165,7 @@ export default function LoginPage() {
       <Divider
         style={{
           margin: "24px 0 20px",
-          borderColor: "rgba(255, 255, 255, 0.15)",
-          color: "rgba(255, 255, 255, 0.5)",
+          color: "#94a3b8",
           fontSize: 13,
         }}
       >
@@ -200,13 +176,17 @@ export default function LoginPage() {
         style={{
           textAlign: "center",
           fontSize: 14,
-          color: "rgba(255, 255, 255, 0.85)",
+          color: "#475569",
         }}
       >
         Chưa có tài khoản khách hàng?{" "}
         <Link
           to="/register"
-          style={{ color: "#4ade80", fontWeight: 700, textDecoration: "none" }}
+          style={{
+            color: "#059669",
+            fontWeight: 700,
+            textDecoration: "none",
+          }}
         >
           Đăng ký ngay
         </Link>

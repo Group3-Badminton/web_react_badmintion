@@ -16,7 +16,7 @@ export default function App() {
           colorInfo: '#059669',
           borderRadius: 8,
           fontFamily: "'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif"
-        },
+        },  
         components: {
           Menu: {
             itemSelectedBg: '#ecfdf5',
