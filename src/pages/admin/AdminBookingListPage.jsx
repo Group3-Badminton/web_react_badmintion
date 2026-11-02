@@ -1084,18 +1084,17 @@ export default function AdminBookingListPage() {
                   return (
                     <Tag
                       key={it._id || idx}
-                      color={isItemCancelled ? 'default' : isItemOverdue ? 'error' : 'geekblue'}
+                      color={isItemCancelled ? 'red' : isItemOverdue ? 'error' : 'geekblue'}
                       style={{
                         borderRadius: 4,
                         margin: 0,
                         fontSize: 11,
-                        textDecoration: isItemCancelled ? 'line-through' : undefined,
                         border: isItemOverdue ? '1px solid #fca5a5' : undefined
                       }}
                     >
                       <ClockCircleOutlined style={{ marginRight: 3 }} />
                       {cName}: {dayjs(itDate).format('DD/MM')} {it.startTime} - {it.endTime}
-                      {isItemOverdue ? ' (Quá giờ)' : ''}
+                      {isItemCancelled ? ' (Đã hủy)' : isItemOverdue ? ' (Quá giờ)' : ''}
                     </Tag>
                   );
                 })}
@@ -1968,7 +1967,6 @@ export default function AdminBookingListPage() {
                               <Tag
                                 color={isItemCancelled ? 'default' : isItemOverdue ? 'error' : 'blue'}
                                 style={{
-                                  textDecoration: isItemCancelled ? 'line-through' : undefined,
                                   border: isItemOverdue ? '1px solid #fca5a5' : undefined
                                 }}
                               >
@@ -2024,11 +2022,10 @@ export default function AdminBookingListPage() {
                       return (
                         <Tag
                           key={it._id || idx}
-                          color={isItemCancelled ? 'default' : isItemOverdue ? 'error' : 'geekblue'}
+                          color={isItemCancelled ? 'red' : isItemOverdue ? 'error' : 'geekblue'}
                           style={{
                             fontSize: 12,
                             margin: 0,
-                            textDecoration: isItemCancelled ? 'line-through' : undefined,
                             border: isItemOverdue ? '1px solid #fca5a5' : undefined
                           }}
                         >
@@ -2174,7 +2171,6 @@ export default function AdminBookingListPage() {
                                     style={{
                                       fontSize: 12,
                                       borderRadius: 4,
-                                      textDecoration: isItemCancelled ? 'line-through' : undefined,
                                       border: isItemOverdue ? '1px solid #fca5a5' : undefined
                                     }}
                                   >

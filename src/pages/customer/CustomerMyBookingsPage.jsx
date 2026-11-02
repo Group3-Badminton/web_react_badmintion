@@ -137,40 +137,71 @@ export default function CustomerMyBookingsPage() {
   const [editOrders, setEditOrders] = useState([]);
 
   const isPending = (status) => status === 'PENDING' || status === 'PENDING_APPROVAL';
-  const canCancelBooking = (booking) => {
-    if (!booking) {
-      return false;
+
+  const getCancelDisabledReason = (booking, item = null) => {
+    if (!booking) return '';
+    if (booking.status === 'CANCELLED') return 'Đơn đặt sân đã bị hủy.';
+    if (booking.status === 'REJECTED') return 'Đơn đặt sân đã bị từ chối.';
+    if (booking.status === 'COMPLETED') return 'Đơn đặt sân đã hoàn thành, không thể hủy.';
+    if (booking.status === 'CHECKED_IN') return 'Sân đang được sử dụng, không thể hủy sân này.';
+
+    if (item) {
+      if (item.status === 'CANCELLED') return 'Lịch sân này đã được hủy trước đó.';
+      const court = item.courtId;
+      if (court?.operationalStatus === 'IN_USE') {
+        return 'Sân đang được sử dụng, không thể hủy sân này.';
+      }
+      return '';
     }
-    if (!isCustomer) return isPending(booking.status);
-    if (!['PENDING', 'PENDING_APPROVAL', 'CONFIRMED'].includes(booking.status)) return false;
+
+    const items = booking.items?.length
+      ? booking.items.filter((it) => it.status !== 'CANCELLED')
+      : [booking];
+    if (items.length === 0) return 'Tất cả các lịch trong đơn đã bị hủy.';
+
+    const allInUse = items.every((it) => it.courtId?.operationalStatus === 'IN_USE');
+    if (allInUse) {
+      return 'Sân đang được sử dụng, không thể hủy sân này.';
+    }
+
+    return '';
+  };
+
+  const getDisabledHoursAndMinutesForOrder = (bookingDate) => {
+    if (!bookingDate || !bookingDate.isSame(dayjs(), 'day')) return {};
+    const currentHour = dayjs().hour();
+    const currentMinute = dayjs().minute();
+    return {
+      disabledHours: () => Array.from({ length: currentHour }, (_, i) => i),
+      disabledMinutes: (selectedHour) => {
+        if (selectedHour === currentHour) {
+          return Array.from({ length: currentMinute + 1 }, (_, i) => i);
+        }
+        return [];
+      }
+    };
+  };
+
+  const canCancelBooking = (booking) => {
+    if (!booking) return false;
+    if (['CANCELLED', 'COMPLETED', 'REJECTED'].includes(booking.status)) return false;
+    if (booking.status === 'CHECKED_IN') return false;
     const items = booking.items?.length
       ? booking.items.filter((item) => item.status !== 'CANCELLED')
       : [booking];
     if (items.length === 0) return false;
-    return items.every((item) => {
-      const startsAt = getBusinessStartDate(
-        item.bookingDate || booking.bookingDate,
-        item.startTime || booking.startTime
-      );
-      return startsAt && startsAt.getTime() > Date.now();
+    return items.some((item) => {
+      const court = item.courtId;
+      return court?.operationalStatus !== 'IN_USE';
     });
   };
 
   const canCancelBookingItem = (booking, item) => {
-    if (
-      !isCustomer ||
-      !item?._id ||
-      item.status === 'CANCELLED' ||
-      !['PENDING', 'PENDING_APPROVAL', 'CONFIRMED'].includes(booking?.status)
-    ) {
-      return false;
-    }
-    const startsAt = getBusinessStartDate(
-      item.bookingDate || booking.bookingDate,
-      item.startTime || booking.startTime
-    );
-    // eslint-disable-next-line react-hooks/purity
-    return startsAt && startsAt.getTime() > Date.now();
+    if (!item?._id || item.status === 'CANCELLED') return false;
+    if (['CANCELLED', 'COMPLETED', 'REJECTED'].includes(booking?.status)) return false;
+    if (booking?.status === 'CHECKED_IN') return false;
+    const court = item.courtId;
+    return court?.operationalStatus !== 'IN_USE';
   };
 
   const getCancellationItems = (booking) => booking.items?.length
@@ -341,6 +372,17 @@ export default function CustomerMyBookingsPage() {
       return;
     }
 
+    const now = dayjs();
+    const hasPastOrder = editOrders.some((order) => {
+      if (order.status === 'CANCELLED') return false;
+      const orderDateTime = dayjs(`${order.bookingDate.format('YYYY-MM-DD')} ${order.startTime.format('HH:mm')}`);
+      return !orderDateTime.isAfter(now);
+    });
+    if (hasPastOrder) {
+      message.warning('Không thể chọn thời gian bắt đầu trong quá khứ hoặc hiện tại!');
+      return;
+    }
+
     try {
       setSavingEdit(true);
       const res = await bookingService.changeBookingInfo(selectedBooking._id, {
@@ -393,9 +435,10 @@ export default function CustomerMyBookingsPage() {
               <Space wrap size={[4, 4]}>
                 {items.map((it, idx) => {
                   const cName = it.courtName || it.courtId?.courtName || `Sân #${idx + 1}`;
+                  const isItemCancelled = it.status === 'CANCELLED';
                   return (
-                    <Tag key={it._id || idx} color="success" style={{ fontWeight: 600, borderRadius: 6, margin: 0 }}>
-                      🏸 {cName}
+                    <Tag key={it._id || idx} color={isItemCancelled ? 'red' : 'success'} style={{ fontWeight: 600, borderRadius: 6, margin: 0 }}>
+                      🏸 {cName} {isItemCancelled ? '(Đã hủy)' : ''}
                     </Tag>
                   );
                 })}
@@ -431,10 +474,12 @@ export default function CustomerMyBookingsPage() {
               <Space direction="vertical" size={2}>
                 {items.map((it, idx) => {
                   const cName = it.courtName || it.courtId?.courtName || `Sân ${idx + 1}`;
+                  const isItemCancelled = it.status === 'CANCELLED';
                   return (
-                    <Tag key={it._id || idx} color="geekblue" style={{ fontSize: 11, borderRadius: 4, margin: 0 }}>
+                    <Tag key={it._id || idx} color={isItemCancelled ? 'red' : 'geekblue'} style={{ fontSize: 11, borderRadius: 4, margin: 0 }}>
                       <ClockCircleOutlined style={{ marginRight: 3 }} />
                       {cName}: {dayjs(it.bookingDate || record.bookingDate).format('DD/MM')} {it.startTime} - {it.endTime}
+                      {isItemCancelled ? ' (Đã hủy)' : ''}
                     </Tag>
                   );
                 })}
@@ -514,15 +559,23 @@ export default function CustomerMyBookingsPage() {
             </Button>
           </Tooltip>
 
-          {canCancelBooking(record) && (
-              <Button
-                size="small"
-                danger
-                loading={cancellingId === record._id}
-                onClick={() => confirmCancelBooking(record)}
-              >
-                Hủy
-              </Button>
+          {canCancelBooking(record) ? (
+            <Button
+              size="small"
+              danger
+              loading={cancellingId === record._id}
+              onClick={() => confirmCancelBooking(record)}
+            >
+              Hủy
+            </Button>
+          ) : (
+            <Tooltip title={getCancelDisabledReason(record)}>
+              <span>
+                <Button size="small" disabled>
+                  Hủy
+                </Button>
+              </span>
+            </Tooltip>
           )}
         </Space>
       )
@@ -702,7 +755,7 @@ export default function CustomerMyBookingsPage() {
         open={isDetailModalOpen}
         onCancel={() => setIsDetailModalOpen(false)}
         footer={[
-          canCancelBooking(selectedBooking) && (
+          canCancelBooking(selectedBooking) ? (
             <Button
               key="cancel-modal"
               danger
@@ -711,7 +764,15 @@ export default function CustomerMyBookingsPage() {
             >
               Hủy Đơn Này
             </Button>
-          ),
+          ) : selectedBooking ? (
+            <Tooltip key="cancel-modal-disabled" title={getCancelDisabledReason(selectedBooking)}>
+              <span>
+                <Button disabled danger>
+                  Hủy Đơn Này
+                </Button>
+              </span>
+            </Tooltip>
+          ) : null,
           <Button key="close" type="primary" onClick={() => setIsDetailModalOpen(false)} style={{ backgroundColor: '#009B60', borderColor: '#009B60' }}>
             Đóng
           </Button>
@@ -779,6 +840,7 @@ export default function CustomerMyBookingsPage() {
                             format="HH:mm"
                             value={order.startTime}
                             disabled={order.status === 'CANCELLED'}
+                            disabledTime={() => getDisabledHoursAndMinutesForOrder(order.bookingDate)}
                             minuteStep={15}
                             onChange={(startTime) => setEditOrders((orders) =>
                               orders.map((item, itemIndex) => itemIndex === index ? { ...item, startTime } : item)
@@ -956,7 +1018,7 @@ export default function CustomerMyBookingsPage() {
                             <Text strong style={{ fontSize: 15, color: '#0f172a' }}>
                               {(item.price || 0).toLocaleString('vi-VN')} đ
                             </Text>
-                            {canCancelBookingItem(selectedBooking, item) && (
+                            {canCancelBookingItem(selectedBooking, item) ? (
                               <div style={{ marginTop: 8 }}>
                                 <Button
                                   size="small"
@@ -967,7 +1029,17 @@ export default function CustomerMyBookingsPage() {
                                   Hủy lịch này
                                 </Button>
                               </div>
-                            )}
+                            ) : item.status !== 'CANCELLED' ? (
+                              <div style={{ marginTop: 8 }}>
+                                <Tooltip title={getCancelDisabledReason(selectedBooking, item)}>
+                                  <span>
+                                    <Button size="small" disabled>
+                                      Hủy lịch này
+                                    </Button>
+                                  </span>
+                                </Tooltip>
+                              </div>
+                            ) : null}
                           </div>
                         </div>
 

@@ -229,9 +229,40 @@ export default function CustomerBookingPage() {
     return courtSchedules[courtId] || { startTime: commonStartTime, endTime: commonEndTime };
   }, [courtSchedules, commonStartTime, commonEndTime]);
 
+  // Tiện ích vô hiệu hóa giờ/phút trong quá khứ nếu chọn ngày hôm nay
+  const getDisabledHoursAndMinutes = useCallback(() => {
+    const isToday = selectedDate.isSame(dayjs(), 'day');
+    if (!isToday) {
+      return {};
+    }
+    const currentH = dayjs().hour();
+    const currentM = dayjs().minute();
+    return {
+      disabledHours: () => {
+        const hours = [];
+        for (let i = 0; i < currentH; i++) {
+          hours.push(i);
+        }
+        return hours;
+      },
+      disabledMinutes: (selectedHour) => {
+        const minutes = [];
+        if (selectedHour === currentH) {
+          for (let i = 0; i <= currentM; i++) {
+            minutes.push(i);
+          }
+        }
+        return minutes;
+      }
+    };
+  }, [selectedDate]);
+
   // Kiểm tra tính hợp lệ của tất cả các khung giờ sân
   const areAllCourtsValid = useMemo(() => {
     if (selectedCourts.length === 0) return false;
+    const isToday = selectedDate.isSame(dayjs(), 'day');
+    const currentMinutesNow = dayjs().hour() * 60 + dayjs().minute();
+
     for (const c of selectedCourts) {
       const sch = getCourtSchedule(c._id);
       const sMin = parseTimeToMinutes(sch.startTime);
@@ -239,9 +270,13 @@ export default function CustomerBookingPage() {
       if (eMin <= sMin || (eMin - sMin) < 30) {
         return false;
       }
+      // Không cho phép đặt giờ bắt đầu trong quá khứ nếu là ngày hôm nay
+      if (isToday && sMin <= currentMinutesNow) {
+        return false;
+      }
     }
     return true;
-  }, [selectedCourts, getCourtSchedule]);
+  }, [selectedCourts, getCourtSchedule, selectedDate]);
 
   // Gọi Backend tính giá có thẩm quyền
   const fetchPriceCalculation = useCallback(async () => {
@@ -381,7 +416,17 @@ export default function CustomerBookingPage() {
     }
 
     if (!areAllCourtsValid) {
-      message.error('Khung giờ một số sân chưa hợp lệ. Vui lòng kiểm tra lại thời gian!');
+      const isToday = selectedDate.isSame(dayjs(), 'day');
+      const currentMinutesNow = dayjs().hour() * 60 + dayjs().minute();
+      const hasPastSlot = selectedCourts.some((c) => {
+        const sch = getCourtSchedule(c._id);
+        return isToday && parseTimeToMinutes(sch.startTime) <= currentMinutesNow;
+      });
+      if (hasPastSlot) {
+        message.error('Không thể đặt sân vào khung giờ đã qua trong ngày! Vui lòng chọn giờ sau thời điểm hiện tại.');
+      } else {
+        message.error('Khung giờ một số sân chưa hợp lệ (tối thiểu 30 phút). Vui lòng kiểm tra lại!');
+      }
       return;
     }
 
@@ -569,7 +614,29 @@ export default function CustomerBookingPage() {
                   </Text>
                   <DatePicker
                     value={selectedDate}
-                    onChange={(date) => setSelectedDate(date || dayjs())}
+                    onChange={(date) => {
+                      const newDate = date || dayjs();
+                      setSelectedDate(newDate);
+                      if (newDate.isSame(dayjs(), 'day')) {
+                        const currentH = dayjs().hour();
+                        const currentM = dayjs().minute();
+                        const nowMin = currentH * 60 + currentM;
+                        if (parseTimeToMinutes(commonStartTime) <= nowMin) {
+                          const nextHour = Math.min(22, currentH + 1);
+                          const nextStart = `${String(nextHour).padStart(2, '0')}:00`;
+                          const nextEnd = `${String(Math.min(23, nextHour + 2)).padStart(2, '0')}:00`;
+                          setCommonStartTime(nextStart);
+                          setCommonEndTime(nextEnd);
+                          setCourtSchedules((prev) => {
+                            const updated = { ...prev };
+                            selectedCourts.forEach((c) => {
+                              updated[c._id] = { startTime: nextStart, endTime: nextEnd };
+                            });
+                            return updated;
+                          });
+                        }
+                      }
+                    }}
                     disabledDate={(current) => current && current < dayjs().startOf('day')}
                     format="DD/MM/YYYY"
                     allowClear={false}
@@ -605,6 +672,7 @@ export default function CustomerBookingPage() {
                           onChange={(val, str) => {
                             if (str) setCommonStartTime(str);
                           }}
+                          disabledTime={getDisabledHoursAndMinutes}
                           format="HH:mm"
                           minuteStep={15}
                           needConfirm={false}
@@ -651,7 +719,10 @@ export default function CustomerBookingPage() {
                   const eMin = parseTimeToMinutes(sch.endTime);
                   const durMin = Math.max(0, eMin - sMin);
                   const durHours = durMin > 0 ? (durMin / 60).toFixed(1) : 0;
-                  const isValid = eMin > sMin && durMin >= 30;
+                  const isToday = selectedDate.isSame(dayjs(), 'day');
+                  const currentMinutesNow = dayjs().hour() * 60 + dayjs().minute();
+                  const isPastTime = isToday && sMin <= currentMinutesNow;
+                  const isValid = eMin > sMin && durMin >= 30 && !isPastTime;
 
                   // Lấy giá tạm tính từ Backend
                   const matchedBreakdown = (priceCalculation.courtBreakdowns || []).find(
@@ -682,6 +753,7 @@ export default function CustomerBookingPage() {
                           <TimePicker
                             value={dayjs(sch.startTime, 'HH:mm')}
                             onChange={(val, str) => handleCourtStartTimeChange(c._id, val, str)}
+                            disabledTime={getDisabledHoursAndMinutes}
                             format="HH:mm"
                             minuteStep={15}
                             needConfirm={false}
@@ -710,6 +782,10 @@ export default function CustomerBookingPage() {
                             {isValid ? (
                               <Tag color="green" style={{ margin: 0, fontWeight: 500 }}>
                                 {durHours}h ({durMin}p)
+                              </Tag>
+                            ) : isPastTime ? (
+                              <Tag color="error" style={{ margin: 0, fontWeight: 500 }}>
+                                Giờ đã qua
                               </Tag>
                             ) : (
                               <Tag color="error" style={{ margin: 0 }}>
