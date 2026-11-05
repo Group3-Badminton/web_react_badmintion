@@ -49,6 +49,28 @@ const parseTimeToMinutes = (timeStr) => {
 };
 
 // Helper: Chuyển đổi phút sang giờ HH:mm
+// Helper: Tự động tính khung giờ mặc định hợp lệ theo ngày (tránh khung giờ quá khứ)
+const getDefaultTimesForDate = (targetDate = dayjs()) => {
+  const isToday = dayjs(targetDate).isSame(dayjs(), 'day');
+  if (!isToday) {
+    return { startTime: '08:00', endTime: '10:00' };
+  }
+  const now = dayjs();
+  const currentH = now.hour();
+  const currentM = now.minute();
+
+  let nextStartH = currentM > 0 ? currentH + 1 : currentH;
+  if (nextStartH < 8) nextStartH = 8;
+  if (nextStartH >= 22) {
+    return { startTime: '21:00', endTime: '22:00' };
+  }
+  const nextEndH = Math.min(23, nextStartH + 2);
+  return {
+    startTime: `${String(nextStartH).padStart(2, '0')}:00`,
+    endTime: `${String(nextEndH).padStart(2, '0')}:00`
+  };
+};
+
 const formatMinutesToTime = (totalMinutes) => {
   const clamped = Math.max(0, Math.min(23 * 60 + 59, totalMinutes));
   const h = Math.floor(clamped / 60);
@@ -70,8 +92,9 @@ export default function CustomerBookingPage() {
 
   // Bước 2: Ngày & Khung giờ
   const [selectedDate, setSelectedDate] = useState(dayjs());
-  const [commonStartTime, setCommonStartTime] = useState('08:00');
-  const [commonEndTime, setCommonEndTime] = useState('10:00');
+  const initialTimes = useMemo(() => getDefaultTimesForDate(dayjs()), []);
+  const [commonStartTime, setCommonStartTime] = useState(initialTimes.startTime);
+  const [commonEndTime, setCommonEndTime] = useState(initialTimes.endTime);
   const [courtSchedules, setCourtSchedules] = useState({});
 
   // Bước 3: Ghi chú khách hàng
@@ -108,9 +131,10 @@ export default function CustomerBookingPage() {
           setCourts(activeCourts);
           if (activeCourts.length > 0) {
             // Mặc định chọn 1 sân đầu tiên
+            const defTimes = getDefaultTimesForDate(dayjs());
             setSelectedCourts([activeCourts[0]]);
             setCourtSchedules({
-              [activeCourts[0]._id]: { startTime: '08:00', endTime: '10:00' }
+              [activeCourts[0]._id]: { startTime: defTimes.startTime, endTime: defTimes.endTime }
             });
           }
         }
@@ -472,14 +496,15 @@ export default function CustomerBookingPage() {
   const handleResetAndBookAgain = () => {
     setIsSuccessModalOpen(false);
     setCreatedBooking(null);
+    const defTimes = getDefaultTimesForDate(selectedDate);
     if (courts.length > 0) {
       setSelectedCourts([courts[0]]);
       setCourtSchedules({
-        [courts[0]._id]: { startTime: '08:00', endTime: '10:00' }
+        [courts[0]._id]: { startTime: defTimes.startTime, endTime: defTimes.endTime }
       });
     }
-    setCommonStartTime('08:00');
-    setCommonEndTime('10:00');
+    setCommonStartTime(defTimes.startTime);
+    setCommonEndTime(defTimes.endTime);
     setAppliedVoucher(null);
     setVoucherCodeInput('');
     setNote('');
@@ -617,25 +642,16 @@ export default function CustomerBookingPage() {
                     onChange={(date) => {
                       const newDate = date || dayjs();
                       setSelectedDate(newDate);
-                      if (newDate.isSame(dayjs(), 'day')) {
-                        const currentH = dayjs().hour();
-                        const currentM = dayjs().minute();
-                        const nowMin = currentH * 60 + currentM;
-                        if (parseTimeToMinutes(commonStartTime) <= nowMin) {
-                          const nextHour = Math.min(22, currentH + 1);
-                          const nextStart = `${String(nextHour).padStart(2, '0')}:00`;
-                          const nextEnd = `${String(Math.min(23, nextHour + 2)).padStart(2, '0')}:00`;
-                          setCommonStartTime(nextStart);
-                          setCommonEndTime(nextEnd);
-                          setCourtSchedules((prev) => {
-                            const updated = { ...prev };
-                            selectedCourts.forEach((c) => {
-                              updated[c._id] = { startTime: nextStart, endTime: nextEnd };
-                            });
-                            return updated;
-                          });
-                        }
-                      }
+                      const defTimes = getDefaultTimesForDate(newDate);
+                      setCommonStartTime(defTimes.startTime);
+                      setCommonEndTime(defTimes.endTime);
+                      setCourtSchedules((prev) => {
+                        const updated = {};
+                        selectedCourts.forEach((c) => {
+                          updated[c._id] = { startTime: defTimes.startTime, endTime: defTimes.endTime };
+                        });
+                        return updated;
+                      });
                     }}
                     disabledDate={(current) => current && current < dayjs().startOf('day')}
                     format="DD/MM/YYYY"
@@ -803,7 +819,9 @@ export default function CustomerBookingPage() {
 
                       {!isValid && (
                         <div style={{ color: '#ef4444', fontSize: 11, marginTop: 6 }}>
-                          * Giờ kết thúc phải sau giờ bắt đầu tối thiểu 30 phút.
+                          {isPastTime
+                            ? '* Khung giờ này đã qua trong ngày. Vui lòng chọn giờ sau thời điểm hiện tại.'
+                            : '* Giờ kết thúc phải sau giờ bắt đầu tối thiểu 30 phút.'}
                         </div>
                       )}
                     </div>
@@ -1092,7 +1110,10 @@ export default function CustomerBookingPage() {
       {/* MODAL THÀNH CÔNG */}
       <Modal
         open={isSuccessModalOpen}
-        onCancel={() => setIsSuccessModalOpen(false)}
+        onCancel={() => {
+          setIsSuccessModalOpen(false);
+          handleResetAndBookAgain();
+        }}
         footer={null}
         width={560}
         centered
