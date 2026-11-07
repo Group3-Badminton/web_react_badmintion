@@ -213,12 +213,12 @@ export default function NotificationManagementPage() {
       key: 'createdAt',
       width: 170,
       render: (date) => (
-        <Space orientation="vertical" size={2}>
+        <Space direction="vertical" size={2}>
           <Text style={{ fontSize: 13 }}>
             <CalendarOutlined style={{ marginRight: 4, color: '#888' }} />
             {new Date(date).toLocaleDateString('vi-VN')}
           </Text>
-          <Text orientation="secondary" style={{ fontSize: 12, color: '#888' }}>
+          <Text type="secondary" style={{ fontSize: 12, color: '#888' }}>
             <ClockCircleOutlined style={{ marginRight: 4 }} />
             {new Date(date).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' })}
           </Text>
@@ -231,7 +231,7 @@ export default function NotificationManagementPage() {
       width: 140,
       align: 'center',
       render: (_, record) => (
-        <Space orientation="horizontal" size="small">
+        <Space direction="horizontal" size="small">
           <Button
             type="text"
             icon={<EyeOutlined style={{ color: '#009B60' }} />}
@@ -395,7 +395,7 @@ export default function NotificationManagementPage() {
           <div style={{ marginTop: 12 }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
               {renderTypeTag(selectedNotif.type)}
-              <Text orientation="secondary" style={{ fontSize: 12 }}>
+              <Text type="secondary" style={{ fontSize: 12 }}>
                 {new Date(selectedNotif.createdAt).toLocaleDateString('vi-VN')} {new Date(selectedNotif.createdAt).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' })}
               </Text>
             </div>
