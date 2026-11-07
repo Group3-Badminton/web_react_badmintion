@@ -34,7 +34,7 @@ import { useNavigate } from 'react-router-dom';
 import notificationService from '../../services/notificationService';
 
 const { Header } = Layout;
-const { Text, Paragraph } = Typography;
+const { Title, Text, Paragraph } = Typography;
 
 export default function AppHeader({ collapsed, setCollapsed }) {
   const { user, logout, isAdmin, isStaff, isCustomer } = useAuth();
@@ -269,7 +269,7 @@ export default function AppHeader({ collapsed, setCollapsed }) {
                     >
                       {item.message}
                     </Paragraph>
-                    <Text orientation="secondary" style={{ fontSize: 10, color: '#999' }}>
+                    <Text type="secondary" style={{ fontSize: 10, color: '#999' }}>
                       {new Date(item.createdAt).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' })} - {new Date(item.createdAt).toLocaleDateString('vi-VN')}
                     </Text>
                   </div>
@@ -379,7 +379,7 @@ export default function AppHeader({ collapsed, setCollapsed }) {
               <Tag color={selectedNotif.isRead ? 'default' : 'success'}>
                 {selectedNotif.isRead ? 'Đã đọc' : 'Chưa đọc'}
               </Tag>
-              <Text orientation="secondary" style={{ fontSize: 12 }}>
+              <Text type="secondary" style={{ fontSize: 12 }}>
                 {new Date(selectedNotif.createdAt).toLocaleDateString('vi-VN')} {new Date(selectedNotif.createdAt).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' })}
               </Text>
             </div>
