@@ -18,13 +18,13 @@ const EMAILJS_TEMPLATE_ID = "template_8bwu5in";
 const EMAILJS_PUBLIC_KEY = "xWKN2ZcMfxpmGDmHA";
 
 export default function RegisterPage() {
-  const [currentStep, setCurrentStep] = useState(0); // 0: Form Đăng ký, 1: Nhập OTP
+  const [currentStep, setCurrentStep] = useState(0);
   const [email, setEmail] = useState("");
+
   const [loading, setLoading] = useState(false);
   const [errorMessage, setErrorMessage] = useState("");
   const navigate = useNavigate();
 
-  // BƯỚC 1: Xử lý Đăng ký và gửi OTP qua Email
   const onFinishRegister = async (values) => {
     setLoading(true);
     setErrorMessage("");
@@ -32,24 +32,19 @@ export default function RegisterPage() {
     try {
       const res = await authService.register(values);
       if (res.success && res.data) {
-        const { otp, fullName } = res.data;
+        const { otp, fullName, otpExpiry } = res.data;
         setEmail(values.email);
 
-        const expiryTime = new Date(
-          Date.now() + 10 * 60 * 1000,
-        ).toLocaleTimeString("vi-VN", {
+        const expiryDate = otpExpiry ? new Date(otpExpiry) : new Date(Date.now() + 10 * 60 * 1000);
+        const expiryTime = expiryDate.toLocaleTimeString("vi-VN", {
           hour: "2-digit",
           minute: "2-digit",
         });
-
         // Gửi email qua EmailJS
         const templateParams = {
           email: values.email,
-          to_email: values.email,
           user_name: fullName || "Quý khách",
-          to_name: fullName || "Quý khách",
           otp: otp,
-          otp_code: otp,
           time: expiryTime,
         };
 
@@ -61,7 +56,7 @@ export default function RegisterPage() {
         );
 
         message.success("Mã OTP kích hoạt đã được gửi đến email của bạn!");
-        setCurrentStep(1); // Chuyển sang màn hình nhập OTP
+        setCurrentStep(1);
       }
     } catch (err) {
       setErrorMessage(
@@ -105,7 +100,6 @@ export default function RegisterPage() {
 
   return (
     <div>
-      {/* Tiêu đề ngắn gọn */}
       <div style={{ textAlign: "center", marginBottom: 16 }}>
         <h2
           style={{
@@ -280,8 +274,6 @@ export default function RegisterPage() {
           </Form.Item>
         </Form>
       )}
-
-      {/* ==================== BƯỚC 2: FORM NHẬP OTP XÁC THỰC ==================== */}
       {currentStep === 1 && (
         <Form
           layout="vertical"

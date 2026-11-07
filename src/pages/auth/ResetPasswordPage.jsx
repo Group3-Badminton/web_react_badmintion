@@ -24,7 +24,6 @@ export default function ResetPasswordPage() {
   const [errorMessage, setErrorMessage] = useState("");
   const navigate = useNavigate();
 
-  // BƯỚC 1: Xử lý Gửi mã OTP qua Email
   const onFinishStep1_Email = async (values) => {
     setLoading(true);
     setErrorMessage("");
@@ -33,22 +32,18 @@ export default function ResetPasswordPage() {
       const res = await authService.sendOtp(values.email);
 
       if (res.success && res.data) {
-        const { otp: generatedOtp, fullName } = res.data;
+        const { otp: generatedOtp, fullName, otpExpiry } = res.data;
         setEmail(values.email);
 
-        const expiryTime = new Date(
-          Date.now() + 10 * 60 * 1000,
-        ).toLocaleTimeString("vi-VN", {
+        const expiryDate = otpExpiry ? new Date(otpExpiry) : new Date(Date.now() + 10 * 60 * 1000);
+        const expiryTime = expiryDate.toLocaleTimeString("vi-VN", {
           hour: "2-digit",
           minute: "2-digit",
         });
         const templateParams = {
           email: values.email,
-          to_email: values.email,
           user_name: fullName || "Quý khách",
-          to_name: fullName || "Quý khách",
           otp: generatedOtp,
-          otp_code: generatedOtp,
           time: expiryTime,
         };
 
@@ -131,7 +126,6 @@ export default function ResetPasswordPage() {
 
   return (
     <div>
-      {/* Tiêu đề rõ ràng trên nền trắng */}
       <div style={{ textAlign: "center", marginBottom: 20 }}>
         <h2
           style={{
