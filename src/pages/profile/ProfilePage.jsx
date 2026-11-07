@@ -51,7 +51,7 @@ export default function ProfilePage() {
       }
     } catch (err) {
       message.error(
-        err.response?.data?.message || "Không thể tải thông tin hồ sơ."
+        err.response?.data?.message || "Không thể tải thông tin hồ sơ của bạn. Vui lòng thử lại sau."
       );
     } finally {
       setLoading(false);
@@ -69,7 +69,7 @@ export default function ProfilePage() {
       });
 
       if (res.success && res.data) {
-        message.success("Cập nhật thông tin cá nhân thành công!");
+        message.success("Thông tin hồ sơ của bạn đã được cập nhật thành công.");
         setProfileData(res.data);
 
         // Cập nhật thông tin mới vào AuthContext & localStorage để Header đổi tên theo
@@ -79,7 +79,7 @@ export default function ProfilePage() {
       }
     } catch (err) {
       message.error(
-        err.response?.data?.message || err.message || "Cập nhật thất bại."
+        err.response?.data?.message || err.message || "Không thể cập nhật hồ sơ vào lúc này. Vui lòng thử lại sau."
       );
     } finally {
       setSaving(false);

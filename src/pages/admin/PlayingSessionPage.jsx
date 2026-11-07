@@ -19,9 +19,13 @@ import {
   Divider,
   Alert,
   DatePicker,
+  TimePicker,
+  Checkbox,
   Popconfirm,
   Tooltip,
   Badge,
+  Segmented,
+  Empty,
   message
 } from 'antd';
 import {
@@ -43,7 +47,10 @@ import {
   ExclamationCircleOutlined,
   QrcodeOutlined,
   TagOutlined,
-  CoffeeOutlined
+  CoffeeOutlined,
+  UnorderedListOutlined,
+  BarChartOutlined,
+  AppstoreOutlined
 } from '@ant-design/icons';
 import dayjs from 'dayjs';
 import sessionService from '../../services/sessionService';
@@ -70,15 +77,59 @@ const getTomorrowStr = () => {
   return `${y}-${m}-${day}`;
 };
 
+const normalizeCourtType = (type) => {
+  if (!type) return 'STANDARD';
+  const t = String(type).trim().toUpperCase();
+  if (t === 'VIP' || t.includes('VIP') || t.includes('GỖ')) return 'VIP';
+  if (t === 'PREMIUM' || t.includes('PREMIUM') || t.includes('THI ĐẤU') || t.includes('PVC')) return 'PREMIUM';
+  return 'STANDARD';
+};
+
+const getCourtTypeName = (type) => {
+  const norm = normalizeCourtType(type);
+  if (norm === 'VIP') return 'Sân VIP';
+  if (norm === 'PREMIUM') return 'Sân Thi Đấu';
+  return 'Sân Tiêu Chuẩn';
+};
+
+const renderCourtTypeTag = (type) => {
+  const norm = normalizeCourtType(type);
+  if (norm === 'VIP') return <Tag color="gold">Sân VIP</Tag>;
+  if (norm === 'PREMIUM') return <Tag color="purple">Sân Thi Đấu</Tag>;
+  return <Tag color="green">Sân Tiêu Chuẩn</Tag>;
+};
+
+const START_OF_DAY_MIN = 360;
+const END_OF_DAY_MIN = 1380;
+const TOTAL_DAY_MIN = 1020;
+const TIMELINE_HOUR_MARKS = ['06:00', '08:00', '10:00', '12:00', '14:00', '16:00', '18:00', '20:00', '22:00', '23:00'];
+
+const parseTimeToMinutes = (tStr) => {
+  if (!tStr || typeof tStr !== 'string' || !tStr.includes(':')) return 0;
+  const [h, m] = tStr.split(':').map(Number);
+  return (h || 0) * 60 + (m || 0);
+};
+
+const getTimelinePosition = (startTimeStr, endTimeStr) => {
+  const sMin = Math.max(START_OF_DAY_MIN, Math.min(END_OF_DAY_MIN, parseTimeToMinutes(startTimeStr)));
+  const eMin = Math.max(START_OF_DAY_MIN, Math.min(END_OF_DAY_MIN, parseTimeToMinutes(endTimeStr)));
+  const leftPct = ((sMin - START_OF_DAY_MIN) / TOTAL_DAY_MIN) * 100;
+  const widthPct = Math.max(3, ((eMin - sMin) / TOTAL_DAY_MIN) * 100);
+  return { left: `${leftPct}%`, width: `${widthPct}%` };
+};
+
 export default function PlayingSessionPage() {
   const navigate = useNavigate();
-  const [activeTab, setActiveTab] = useState('operations');
+  const [activeTab, setActiveTab] = useState('live_status');
   const [courtsData, setCourtsData] = useState([]);
   const [currentTime, setCurrentTime] = useState(new Date());
 
   const [selectedDate, setSelectedDate] = useState(getTodayStr());
-  const [matrixData, setMatrixData] = useState({ courts: [], timeSlots: [], matrix: {} });
+  const [matrixData, setMatrixData] = useState({ courts: [], timeSlots: [], matrix: {}, bookings: [] });
   const [matrixLoading, setMatrixLoading] = useState(false);
+  const [scheduleViewMode, setScheduleViewMode] = useState('GRID');
+  const [gridStep, setGridStep] = useState(15);
+  const [courtScheduleFilter, setCourtScheduleFilter] = useState('ALL');
 
   const [bookingModalVisible, setBookingModalVisible] = useState(false);
   const [selectedSlotCell, setSelectedSlotCell] = useState(null);
@@ -99,11 +150,25 @@ export default function PlayingSessionPage() {
   const [checkInForm] = Form.useForm();
   const [earlyCheckInAlert, setEarlyCheckInAlert] = useState(null);
   const [acceptEarlyCheckInState, setAcceptEarlyCheckInState] = useState(false);
-  const selectedTimeSlotId = Form.useWatch('timeSlotId', checkInForm);
 
-  const getBookingCheckInState = (booking, slot) => {
+  const [walkInStartTime, setWalkInStartTime] = useState(dayjs());
+  const [walkInEndTime, setWalkInEndTime] = useState(dayjs().add(1, 'hour'));
+
+  const selectedBookingId = Form.useWatch('bookingId', checkInForm);
+
+  const getBookingCheckInState = (booking) => {
     if (!booking) return { canCheckIn: false, reason: '' };
-    const bDate = booking.bookingDate ? booking.bookingDate.split('T')[0] : selectedDate;
+    let bDate = selectedDate;
+    if (booking.bookingDate) {
+      if (typeof booking.bookingDate === 'string') {
+        bDate = booking.bookingDate.split('T')[0];
+      } else if (booking.bookingDate instanceof Date) {
+        const y = booking.bookingDate.getFullYear();
+        const m = String(booking.bookingDate.getMonth() + 1).padStart(2, '0');
+        const d = String(booking.bookingDate.getDate()).padStart(2, '0');
+        bDate = `${y}-${m}-${d}`;
+      }
+    }
     const today = getTodayStr();
     if (bDate < today) {
       return { canCheckIn: false, isPast: true, reason: 'Đã qua ngày' };
@@ -111,72 +176,27 @@ export default function PlayingSessionPage() {
     if (bDate > today) {
       return { canCheckIn: false, isFuture: true, reason: 'Chưa tới ngày' };
     }
-    const [eh, em] = (booking.endTime || slot?.endTime || '00:00').split(':').map(Number);
-    const [sh, sm] = (booking.startTime || slot?.startTime || '00:00').split(':').map(Number);
-    const sMin = sh * 60 + sm;
-    const eMin = eh * 60 + em;
+
+    const startTimeStr = booking.startTime || (Array.isArray(booking.items) && booking.items[0]?.startTime) || '00:00';
+    const endTimeStr = booking.endTime || (Array.isArray(booking.items) && booking.items[0]?.endTime) || '00:00';
+
+    const [sh, sm] = startTimeStr.split(':').map(Number);
+    const [eh, em] = endTimeStr.split(':').map(Number);
+    const sMin = (sh || 0) * 60 + (sm || 0);
+    const eMin = (eh || 0) * 60 + (em || 0);
     const nowMin = currentTime.getHours() * 60 + currentTime.getMinutes();
 
     if (nowMin >= eMin) {
-      return { canCheckIn: false, isPast: true, reason: 'Đã qua giờ' };
+      return { canCheckIn: false, isPast: true, startTime: startTimeStr, endTime: endTimeStr, reason: 'Đã qua giờ' };
     }
     if (sMin - nowMin > 15) {
-      return { canCheckIn: false, isFuture: true, reason: 'Chưa tới giờ' };
+      const earlyMin = sMin - nowMin;
+      return { canCheckIn: true, isEarly: true, earlyMinutes: earlyMin, startTime: startTimeStr, endTime: endTimeStr, reason: `Đến sớm ${earlyMin}p` };
     }
-    return { canCheckIn: true };
+    return { canCheckIn: true, isEarly: false, startTime: startTimeStr, endTime: endTimeStr };
   };
 
-  const getWalkInCalculationInfo = () => {
-    if (!selectedTimeSlotId) return null;
-    const slots = (availableTimeSlots && availableTimeSlots.length > 0) ? availableTimeSlots : (matrixData.timeSlots || []);
-    const slot = slots.find(s => s._id === selectedTimeSlotId);
-    if (!slot) return null;
 
-    const [sh, sm] = (slot.startTime || '08:00').split(':').map(Number);
-    const [eh, em] = (slot.endTime || '10:00').split(':').map(Number);
-    const slotStartTotalMin = sh * 60 + sm;
-    const slotEndTotalMin = eh * 60 + em;
-    const currentTotalMin = currentTime.getHours() * 60 + currentTime.getMinutes();
-
-    if (currentTotalMin >= slotEndTotalMin) {
-      return { isInvalid: true, message: 'Khung giờ này đã kết thúc trong quá khứ, không thể nhận sân!' };
-    }
-    if (slotStartTotalMin - currentTotalMin > 15) {
-      return { isInvalid: true, message: 'Chưa tới thời gian nhận sân cho ca đấu này! Chỉ mở trước tối đa 15 phút.' };
-    }
-
-    const isWeekend = currentTime.getDay() === 0 || currentTime.getDay() === 6;
-    const hourlyRate = isWeekend ? 140000 : 100000;
-
-    if (currentTotalMin >= slotStartTotalMin && currentTotalMin < slotEndTotalMin) {
-      const remainingMinutes = slotEndTotalMin - currentTotalMin;
-      const billedMinutes = Math.max(30, remainingMinutes);
-      const hours = Math.round((billedMinutes / 60) * 100) / 100;
-      const fee = Math.round((hourlyRate / 60) * billedMinutes);
-
-      return {
-        isProrated: true,
-        inTime: currentTime.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-        outTime: slot.endTime,
-        remainingMinutes,
-        billedMinutes,
-        hours,
-        fee
-      };
-    } else {
-      const slotHours = (slotEndTotalMin - slotStartTotalMin) / 60 || 2;
-      const fee = hourlyRate * slotHours;
-      return {
-        isProrated: false,
-        inTime: slot.startTime,
-        outTime: slot.endTime,
-        remainingMinutes: slotHours * 60,
-        billedMinutes: slotHours * 60,
-        hours: slotHours,
-        fee
-      };
-    }
-  };
 
   const [extendModalVisible, setExtendModalVisible] = useState(false);
   const [selectedSessionForExtend, setSelectedSessionForExtend] = useState(null);
@@ -210,20 +230,22 @@ export default function PlayingSessionPage() {
     return () => clearInterval(timer);
   }, []);
 
+
+
   useEffect(() => {
-    fetchMatrix(selectedDate);
+    fetchMatrix(selectedDate, 15);
     fetchLiveBoard();
     const pollInterval = setInterval(() => {
-      fetchMatrix(selectedDate);
+      fetchMatrix(selectedDate, 15);
       fetchLiveBoard(false);
     }, 15000);
     return () => clearInterval(pollInterval);
   }, [selectedDate]);
 
-  const fetchMatrix = async (date = selectedDate) => {
+  const fetchMatrix = async (date = selectedDate, step = 15) => {
     setMatrixLoading(true);
     try {
-      const res = await sessionService.getCourtMatrix(date);
+      const res = await sessionService.getCourtMatrix(date, step);
       if (res && res.data) {
         setMatrixData(res.data);
         if (res.data.timeSlots?.length > 0) {
@@ -269,18 +291,17 @@ export default function PlayingSessionPage() {
 
   const handleTabChange = (key) => {
     setActiveTab(key);
-    if (key === 'history') {
-      fetchHistorySessions(1);
-    } else if (key === 'operations') {
+    if (key === 'live_status') {
       fetchLiveBoard();
-      fetchMatrix(selectedDate);
+    } else if (key === 'schedule') {
+      fetchLiveBoard();
+      fetchMatrix(selectedDate, 15);
     }
   };
 
   const handleCellClick = async (court, slot, cell) => {
     const isToday = selectedDate === getTodayStr();
     const isPastDate = selectedDate < getTodayStr();
-    const isFutureDate = selectedDate > getTodayStr();
 
     const [sh, sm] = (slot.startTime || '00:00').split(':').map(Number);
     const [eh, em] = (slot.endTime || '00:00').split(':').map(Number);
@@ -289,30 +310,36 @@ export default function PlayingSessionPage() {
     const nowMin = currentTime.getHours() * 60 + currentTime.getMinutes();
 
     const isSlotPast = isPastDate || (isToday && slotEndMin <= nowMin);
-    const isSlotFutureTooFar = isFutureDate || (isToday && (slotStartMin - nowMin > 15));
+    const isSlotFuture = !isPastDate && (isToday ? (slotStartMin > nowMin + 15) : true);
 
     if (cell.status === 'AVAILABLE') {
       if (isSlotPast) {
         message.warning('Khung giờ này đã kết thúc trong quá khứ, không thể nhận sân!');
         return;
       }
-      if (isSlotFutureTooFar) {
-        message.warning('Chưa đến giờ nhận sân cho ca đấu này! Chỉ mở nhận sân trước giờ bắt đầu tối đa 15 phút.');
+
+      if (!isToday || isSlotFuture) {
+        message.warning('Khách vãng lai chỉ được nhận sân chơi ngay tại thời điểm hiện tại, không nhận thời điểm tương lai hoặc quá khứ!');
         return;
       }
 
       setSelectedCourtForCheckIn(court);
       setCheckInType('walkin');
       setEarlyCheckInAlert(null);
+      setAcceptEarlyCheckInState(false);
 
-      if (matrixData.timeSlots?.length > 0) {
-        setAvailableTimeSlots(matrixData.timeSlots);
-      } else {
-        try {
-          const tsRes = await bookingService.getTimeSlots();
-          setAvailableTimeSlots(tsRes?.data || []);
-        } catch (e) {}
-      }
+      const now = dayjs();
+      const m = now.minute();
+      const remainder = m % 15;
+      const minutesToAdd = remainder === 0 ? 0 : (15 - remainder);
+      const nowRounded = now.add(minutesToAdd, 'minute').second(0).millisecond(0);
+
+      const cellStart = dayjs().hour(sh).minute(sm).second(0).millisecond(0);
+      const startToUse = cellStart.isBefore(nowRounded) ? nowRounded : cellStart;
+      const endToUse = startToUse.add(1, 'hour').second(0).millisecond(0);
+
+      setWalkInStartTime(startToUse);
+      setWalkInEndTime(endToUse);
 
       try {
         const bRes = await bookingService.getAllBookings({ status: 'CONFIRMED', limit: 50 });
@@ -323,10 +350,8 @@ export default function PlayingSessionPage() {
       checkInForm.resetFields();
       checkInForm.setFieldsValue({
         courtId: court._id,
-        timeSlotId: slot._id,
-        walkInCustomerName: 'Khách vãng lai',
-        walkInCustomerPhone: '',
-        durationHours: 1
+        walkInCustomerName: '',
+        walkInCustomerPhone: ''
       });
       setCheckInModalVisible(true);
     } else if (cell.booking) {
@@ -340,6 +365,11 @@ export default function PlayingSessionPage() {
   const handleCheckInDirectFromBooking = async (bookingId, courtId, forceAcceptEarly = false) => {
     if (selectedSlotCell?.cell?.booking) {
       const bState = getBookingCheckInState(selectedSlotCell.cell.booking, selectedSlotCell.slot);
+      if (bState.isEarly && !forceAcceptEarly) {
+        setBookingModalVisible(false);
+        openCheckInModal(selectedSlotCell.court, 'booking', bookingId);
+        return;
+      }
       if (!bState.canCheckIn) {
         if (bState.isPast) {
           message.warning('Ca đấu này đã kết thúc trong quá khứ! Không thể nhận sân.');
@@ -399,48 +429,40 @@ export default function PlayingSessionPage() {
     }
   };
 
-  const openCheckInModal = async (court = null) => {
+  const openCheckInModal = async (court = null, defaultType = 'walkin', defaultBookingId = null) => {
     setSelectedCourtForCheckIn(court);
+    setCheckInType(defaultType);
     setEarlyCheckInAlert(null);
     setAcceptEarlyCheckInState(false);
     checkInForm.resetFields();
 
-    let allSlots = matrixData.timeSlots || [];
+    const now = dayjs();
+    const m = now.minute();
+    const remainder = m % 15;
+    const minutesToAdd = remainder === 0 ? 0 : (15 - remainder);
+    const startRounded = now.add(minutesToAdd, 'minute').second(0).millisecond(0);
+    setWalkInStartTime(startRounded);
+    setWalkInEndTime(startRounded.add(1, 'hour').second(0).millisecond(0));
+
     try {
       const res = await bookingService.getAllBookings({ status: 'CONFIRMED', limit: 50 });
       const bookings = res?.data?.bookings || res?.data || [];
       setConfirmedBookings(Array.isArray(bookings) ? bookings : []);
-
-      if (allSlots.length === 0) {
-        const tsRes = await bookingService.getTimeSlots();
-        allSlots = tsRes?.data || [];
-      }
-      setAvailableTimeSlots(allSlots);
     } catch (e) {
       setConfirmedBookings([]);
-      setAvailableTimeSlots(matrixData.timeSlots || []);
     }
 
-    const nowMin = currentTime.getHours() * 60 + currentTime.getMinutes();
-    const validCurrentSlot = allSlots.find((s) => {
-      const [sh, sm] = (s.startTime || '00:00').split(':').map(Number);
-      const [eh, em] = (s.endTime || '00:00').split(':').map(Number);
-      const sMin = sh * 60 + sm;
-      const eMin = eh * 60 + em;
-      return nowMin >= sMin - 15 && nowMin < eMin;
+    const firstAvailableCourt = (matrixData.courts || courtsData).find(c => {
+      const live = courtsData.find(cd => cd._id === c._id);
+      return live ? live.operationalStatus !== 'IN_USE' : c.operationalStatus !== 'IN_USE';
     });
 
     const initValues = {
-      walkInCustomerName: 'Khách vãng lai',
-      walkInCustomerPhone: '',
-      durationHours: 1
+      courtId: court ? court._id : (firstAvailableCourt?._id || matrixData.courts[0]?._id),
+      bookingId: defaultBookingId || undefined,
+      walkInCustomerName: '',
+      walkInCustomerPhone: ''
     };
-    if (court) {
-      initValues.courtId = court._id;
-    }
-    if (validCurrentSlot) {
-      initValues.timeSlotId = validCurrentSlot._id;
-    }
     checkInForm.setFieldsValue(initValues);
     setCheckInModalVisible(true);
   };
@@ -449,46 +471,43 @@ export default function PlayingSessionPage() {
     try {
       const values = await checkInForm.validateFields();
 
+
+
+      const durMin = (walkInEndTime.hour() * 60 + walkInEndTime.minute()) - (walkInStartTime.hour() * 60 + walkInStartTime.minute());
+
       if (checkInType === 'walkin') {
-        const slots = (availableTimeSlots && availableTimeSlots.length > 0) ? availableTimeSlots : (matrixData.timeSlots || []);
-        const slot = slots.find(s => s._id === values.timeSlotId);
-        if (slot) {
-          const [sh, sm] = (slot.startTime || '00:00').split(':').map(Number);
-          const [eh, em] = (slot.endTime || '00:00').split(':').map(Number);
-          const sMin = sh * 60 + sm;
-          const eMin = eh * 60 + em;
-          const nowMin = currentTime.getHours() * 60 + currentTime.getMinutes();
-          if (nowMin >= eMin) {
-            message.warning('Ca đấu đã kết thúc trong quá khứ! Vui lòng chọn ca hiện tại.');
-            return;
-          }
-          if (sMin - nowMin > 15) {
-            message.warning('Chưa đến giờ nhận sân cho ca đấu này! Chỉ mở nhận sân trước giờ bắt đầu tối đa 15 phút.');
-            return;
-          }
+        if (durMin < 60) {
+          message.warning('Thời lượng chơi tối thiểu cho khách vãng lai phải từ 1 tiếng (60 phút) trở lên!');
+          return;
         }
       } else if (checkInType === 'booking') {
-        const booking = confirmedBookings.find(b => b._id === values.bookingId);
+        const booking = confirmedBookings.find(b => String(b._id) === String(values.bookingId))
+          || (matrixData.bookings || []).find(b => String(b._id) === String(values.bookingId));
         if (booking) {
-          const bState = getBookingCheckInState(booking, null);
+          const bState = getBookingCheckInState(booking);
           if (!bState.canCheckIn) {
             message.warning(bState.reason || 'Đơn đặt sân này không thể nhận sân ở thời điểm hiện tại!');
+            return;
+          }
+          if (bState.isEarly && !acceptEarlyCheckInState && !forceAcceptEarly) {
+            message.warning(`Khách đến sớm hơn ${bState.earlyMinutes} phút. Vui lòng tick chọn 'Đồng ý nhận sân sớm' để tiếp tục!`);
             return;
           }
         }
       }
 
-      const isEarlyAccepted = typeof forceAcceptEarly === 'boolean' ? forceAcceptEarly : Boolean(acceptEarlyCheckInState);
+      const isEarlyAccepted = forceAcceptEarly === true || Boolean(acceptEarlyCheckInState);
       const targetCourtId = values.courtId || selectedCourtForCheckIn?._id;
 
       const payload = {
         isWalkIn: checkInType === 'walkin',
         bookingId: checkInType === 'booking' ? values.bookingId : undefined,
         courtId: targetCourtId ? String(targetCourtId) : undefined,
+        startTime: checkInType === 'walkin' ? walkInStartTime.format('HH:mm') : undefined,
+        endTime: checkInType === 'walkin' ? walkInEndTime.format('HH:mm') : undefined,
+        durationHours: checkInType === 'walkin' ? Number((durMin / 60).toFixed(2)) : 1,
         walkInCustomerName: values.walkInCustomerName || 'Khách vãng lai',
         walkInCustomerPhone: values.walkInCustomerPhone || '',
-        timeSlotId: values.timeSlotId,
-        durationHours: Number(values.durationHours) || 1,
         acceptEarlyCheckIn: Boolean(isEarlyAccepted),
         note: values.note || ''
       };
@@ -507,20 +526,77 @@ export default function PlayingSessionPage() {
       fetchMatrix(selectedDate);
     } catch (err) {
       if (err.errorFields) return;
-      const errorMsg = err.response?.data?.message || err.message || 'Không thể nhận sân';
+      const errorMsg = err.response?.data?.message || err.message || 'Không thể thực hiện thao tác';
       message.error(errorMsg);
     }
   };
 
   const openExtendModal = (session) => {
+    if (!session) return;
+    if (session.scheduledEndTime) {
+      const endMs = new Date(session.scheduledEndTime).getTime();
+      if (endMs <= currentTime.getTime()) {
+        message.warning('Ca chơi này đã hết giờ trong quá khứ, không thể gia hạn thêm! Vui lòng thực hiện Trả sân & Xuất hóa đơn.');
+        return;
+      }
+    }
     setSelectedSessionForExtend(session);
-    setExtendDuration(30);
     setExtendConflict(null);
+
+    const currentCourtId = (session.courtId?._id || session.courtId)?.toString();
+    const currentBookingId = (session.bookingId?._id || session.bookingId || session.booking?._id)?.toString();
+
+    let sessionEndMin = 0;
+    if (session.scheduledEndTime) {
+      const endD = new Date(session.scheduledEndTime);
+      sessionEndMin = endD.getHours() * 60 + endD.getMinutes();
+    } else if (session.booking?.endTime) {
+      const [eh, em] = session.booking.endTime.split(':').map(Number);
+      sessionEndMin = eh * 60 + em;
+    }
+
+    const courtBookings = (matrixData.bookings || [])
+      .filter((b) => {
+        const bCourtId = (b.courtId?._id || b.courtId)?.toString();
+        if (bCourtId !== currentCourtId) return false;
+        if (currentBookingId && b._id?.toString() === currentBookingId) return false;
+        if (!['CONFIRMED', 'CHECKED_IN'].includes(b.status)) return false;
+        return true;
+      })
+      .sort((a, b) => a.startTime.localeCompare(b.startTime));
+
+    const nextBooking = courtBookings.find((b) => {
+      const [bsh, bsm] = b.startTime.split(':').map(Number);
+      const bStartMin = bsh * 60 + bsm;
+      const [beh, bem] = b.endTime.split(':').map(Number);
+      const bEndMin = beh * 60 + bem;
+      return bEndMin > sessionEndMin;
+    });
+
+    let headroomMin = 999;
+    if (nextBooking) {
+      const [nbStartH, nbStartM] = nextBooking.startTime.split(':').map(Number);
+      const nbStartMin = nbStartH * 60 + nbStartM;
+      headroomMin = Math.max(0, nbStartMin - sessionEndMin);
+    }
+
+    if (headroomMin < 30) {
+      setExtendDuration(0);
+    } else if (headroomMin < 60) {
+      setExtendDuration(30);
+    } else {
+      setExtendDuration(30);
+    }
+
     setExtendModalVisible(true);
   };
 
   const handleExtendSubmit = async () => {
     if (!selectedSessionForExtend) return;
+    if (!extendDuration || extendDuration <= 0) {
+      message.error('Không thể gia hạn: Sân đã có ca tiếp theo hoặc không đủ thời gian tối thiểu 30 phút!');
+      return;
+    }
     try {
       const res = await sessionService.extendSession(selectedSessionForExtend._id, {
         extensionMinutes: extendDuration
@@ -543,10 +619,67 @@ export default function PlayingSessionPage() {
   const openSwitchCourtModal = (session) => {
     setSelectedSessionForSwitch(session);
     switchCourtForm.resetFields();
-    const vacantCourts = courtsData.filter(
-      (c) => c._id.toString() !== session.courtId?.toString() && c.operationalStatus === 'AVAILABLE'
-    );
-    setAvailableCourtsForSwitch(vacantCourts);
+
+    const currentCourtId = (session.courtId?._id || session.courtId)?.toString();
+    const currentCourt = courtsData.find((c) => c._id?.toString() === currentCourtId);
+    const currentType = normalizeCourtType(currentCourt?.courtType || session.courtId?.courtType);
+
+    const now = currentTime;
+    const nowH = String(now.getHours()).padStart(2, '0');
+    const nowM = String(now.getMinutes()).padStart(2, '0');
+    const nowHoursStr = `${nowH}:${nowM}`;
+
+    let endHoursStr = '23:59';
+    if (session.scheduledEndTime) {
+      const endD = new Date(session.scheduledEndTime);
+      endHoursStr = `${String(endD.getHours()).padStart(2, '0')}:${String(endD.getMinutes()).padStart(2, '0')}`;
+    } else if (session.bookingId?.endTime || session.booking?.endTime) {
+      endHoursStr = session.bookingId?.endTime || session.booking?.endTime;
+    }
+
+    const currentBookingId = (session.bookingId?._id || session.bookingId || session.booking?._id)?.toString();
+
+    const sameTypeCourts = courtsData
+      .filter(
+        (c) =>
+          c._id?.toString() !== currentCourtId &&
+          c.status === 'ACTIVE' &&
+          normalizeCourtType(c.courtType) === currentType
+      )
+      .map((court) => {
+        const isOccupied = court.operationalStatus === 'IN_USE';
+        if (isOccupied) {
+          return {
+            ...court,
+            hasConflict: true,
+            conflictReason: 'Đang có người chơi'
+          };
+        }
+
+        const overlappingBooking = (matrixData.bookings || []).find((b) => {
+          const bCourtId = (b.courtId?._id || b.courtId)?.toString();
+          if (bCourtId !== court._id?.toString()) return false;
+          if (currentBookingId && b._id?.toString() === currentBookingId) return false;
+          if (!['CONFIRMED', 'CHECKED_IN'].includes(b.status)) return false;
+          return b.startTime < endHoursStr && b.endTime > nowHoursStr;
+        });
+
+        if (overlappingBooking) {
+          return {
+            ...court,
+            hasConflict: true,
+            conflictReason: `Trùng lịch: Khách ${overlappingBooking.customerName || 'đặt trước'} (${overlappingBooking.startTime} - ${overlappingBooking.endTime})`
+          };
+        }
+
+        return {
+          ...court,
+          hasConflict: false,
+          conflictReason: null
+        };
+      });
+
+    setAvailableCourtsForSwitch(sameTypeCourts);
     setSwitchCourtModalVisible(true);
   };
 
@@ -566,9 +699,36 @@ export default function PlayingSessionPage() {
     }
   };
 
-  const openCheckOutModal = (session) => {
-    setSelectedSessionForCheckOut(session);
+  const openCheckOutModal = async (session, court = null) => {
+    if (!session) return;
+    const courtIdStr = (court?._id || session.courtId?._id || session.courtId)?.toString();
+    const courtObj = court 
+      || (typeof session.courtId === 'object' && session.courtId?.name ? session.courtId : null)
+      || courtsData.find(c => c._id?.toString() === courtIdStr)
+      || matrixData.courts?.find(c => c._id?.toString() === courtIdStr);
+
+    const initialSession = {
+      ...session,
+      courtName: courtObj?.name || session.courtName || session.courtId?.name || '',
+      courtId: courtObj || session.courtId
+    };
+    setSelectedSessionForCheckOut(initialSession);
     setCheckOutModalVisible(true);
+
+    if (session._id) {
+      try {
+        const res = await sessionService.getSessionById(session._id);
+        const fullSession = res?.data || res;
+        if (fullSession && fullSession._id) {
+          setSelectedSessionForCheckOut((prev) => ({
+            ...fullSession,
+            courtName: fullSession.courtId?.name || courtObj?.name || prev?.courtName || 'Sân thi đấu'
+          }));
+        }
+      } catch (e) {
+        console.error('Lỗi khi tải chi tiết ca chơi:', e);
+      }
+    }
   };
 
   const handleCheckOutSubmit = async () => {
@@ -686,7 +846,7 @@ export default function PlayingSessionPage() {
     return session.isNearEnd || (diffMin <= 10 && diffMin > 0);
   };
 
-  const renderMatrixCell = (court, slot, cell) => {
+  const renderMatrixCell = (court, slot, cell, spanCount = 1) => {
     const isAvailable = cell.status === 'AVAILABLE';
     const isLate = cell.isLate;
     const isInProgress = cell.status === 'IN_PROGRESS';
@@ -707,26 +867,66 @@ export default function PlayingSessionPage() {
     const isSlotFutureTooFar = isFutureDate || (isToday && (slotStartMin - nowMin > 15));
     const isSlotCurrent = isToday && (nowMin >= slotStartMin - 15) && (nowMin < slotEndMin);
 
+    let isNearEnd = false;
+    let isOvertime = false;
+    let remainingMin = null;
+    let sessionEndTime = null;
+
+    if (isInProgress) {
+      if (cell.session?.scheduledEndTime) {
+        sessionEndTime = new Date(cell.session.scheduledEndTime);
+      } else if (cell.booking?.endTime) {
+        const [beh, bem] = cell.booking.endTime.split(':').map(Number);
+        const now = currentTime;
+        sessionEndTime = new Date(now.getFullYear(), now.getMonth(), now.getDate(), beh, bem, 0, 0);
+      }
+
+      if (sessionEndTime) {
+        const diffMs = sessionEndTime.getTime() - currentTime.getTime();
+        const diffMin = diffMs / 60000;
+        if (diffMs <= 0) {
+          isOvertime = true;
+          isNearEnd = true;
+          remainingMin = 0;
+        } else if (diffMin <= 15) {
+          isNearEnd = true;
+          remainingMin = Math.ceil(diffMin);
+        } else {
+          remainingMin = Math.ceil(diffMin);
+        }
+      }
+    }
+
     let cellBg = '#ffffff';
     let cellBorder = '1.5px dashed #cbd5e1';
     let shadow = 'none';
 
     if (isAvailable) {
       if (isSlotPast) {
-        cellBg = '#f8fafc';
-        cellBorder = '1px dashed #cbd5e1';
+        cellBg = '#fbfcfd';
+        cellBorder = '1px solid #f1f5f9';
       } else if (isSlotCurrent) {
         cellBg = '#f0fdf4';
-        cellBorder = '1.5px dashed #10b981';
-        shadow = '0 1px 3px rgba(16, 185, 129, 0.15)';
+        cellBorder = '1.5px solid #86efac';
+        shadow = '0 1px 3px rgba(16, 185, 129, 0.1)';
       } else {
         cellBg = '#ffffff';
-        cellBorder = '1.5px dashed #94a3b8';
+        cellBorder = '1px solid #e2e8f0';
       }
     } else if (isInProgress) {
-      cellBg = '#f0fdf4';
-      cellBorder = '1.5px solid #10b981';
-      shadow = '0 1px 3px rgba(16, 185, 129, 0.15)';
+      if (isOvertime) {
+        cellBg = '#fef2f2';
+        cellBorder = '2px solid #ef4444';
+        shadow = '0 2px 8px rgba(239, 68, 68, 0.3)';
+      } else if (isNearEnd) {
+        cellBg = '#fff7ed';
+        cellBorder = '2px solid #f97316';
+        shadow = '0 2px 8px rgba(249, 115, 22, 0.25)';
+      } else {
+        cellBg = '#f0fdf4';
+        cellBorder = '1.5px solid #10b981';
+        shadow = '0 2px 4px rgba(16, 185, 129, 0.18)';
+      }
     } else if (isLate) {
       cellBg = '#fff7ed';
       cellBorder = '2px solid #ea580c';
@@ -734,37 +934,56 @@ export default function PlayingSessionPage() {
     } else if (isBooked) {
       cellBg = '#eff6ff';
       cellBorder = '1.5px solid #3b82f6';
-      shadow = '0 1px 3px rgba(59, 130, 246, 0.15)';
+      shadow = '0 2px 5px rgba(59, 130, 246, 0.18)';
     } else if (isCompleted) {
       cellBg = '#f8fafc';
       cellBorder = '1px solid #e2e8f0';
     }
 
+    const ROW_H = gridStep === 15 ? 44 : (gridStep === 30 ? 56 : 68);
+    const BORDER_SPACING = 0;
+    const cardHeight = spanCount > 1
+      ? (spanCount * ROW_H - 6)
+      : (ROW_H - 6);
+
     return (
       <td
         key={`${court._id}-${slot._id}`}
-        style={{ padding: '4px' }}
+        rowSpan={spanCount || 1}
+        style={{
+          width: 185,
+          minWidth: 185,
+          padding: '3px 4px',
+          verticalAlign: 'top',
+          height: spanCount > 1 ? (spanCount * ROW_H) : ROW_H,
+          boxSizing: 'border-box',
+          background: '#ffffff'
+        }}
         onClick={() => handleCellClick(court, slot, cell)}
       >
         <div
           style={{
             background: cellBg,
-            border: cellBorder,
+            border: isLate ? '2px solid #ea580c' : cellBorder,
             boxShadow: shadow,
             borderRadius: 8,
-            padding: '8px 10px',
-            minHeight: 82,
-            height: 82,
-            cursor: (isAvailable && isSlotPast) ? 'not-allowed' : 'pointer',
+            padding: isAvailable ? '0 6px' : '6px 8px',
+            height: cardHeight,
+            minHeight: cardHeight,
+            maxHeight: cardHeight,
+            boxSizing: 'border-box',
+            cursor: (isAvailable && !isSlotCurrent) ? 'default' : 'pointer',
             display: 'flex',
             flexDirection: 'column',
-            justifyContent: 'space-between',
-            transition: 'all 0.2s',
-            opacity: (isCompleted || (isAvailable && isSlotPast)) ? 0.65 : 1
+            justifyContent: isAvailable ? 'center' : 'space-between',
+            alignItems: isAvailable ? 'center' : 'stretch',
+            transition: 'all 0.15s ease',
+            position: 'relative',
+            zIndex: isLate ? 20 : 1
           }}
           onMouseEnter={(e) => {
-            if (!(isAvailable && isSlotPast)) {
-              e.currentTarget.style.transform = 'translateY(-2px)';
+            if (!isAvailable || isSlotCurrent) {
+              e.currentTarget.style.transform = 'translateY(-1px)';
             }
           }}
           onMouseLeave={(e) => {
@@ -772,87 +991,195 @@ export default function PlayingSessionPage() {
           }}
         >
           {isAvailable && (
-            <div style={{ textAlign: 'center', margin: 'auto' }}>
-              {isSlotPast ? (
-                <>
-                  <div style={{ fontSize: 12, fontWeight: 500, color: '#94a3b8' }}>Đã qua giờ</div>
-                </>
-              ) : isSlotCurrent ? (
-                <>
-                  <PlusOutlined style={{ fontSize: 16, color: '#009B60', marginBottom: 2 }} />
-                  <div style={{ fontSize: 12, fontWeight: 700, color: '#059669' }}>Trống</div>
-                  <div style={{ fontSize: 10, color: '#047857', fontWeight: 600 }}>Nhận sân ngay</div>
-                </>
-              ) : (
-                <>
-                  <div style={{ fontSize: 12, fontWeight: 600, color: '#64748b' }}>Trống</div>
-                  <div style={{ fontSize: 10, color: '#94a3b8' }}>Chưa tới giờ</div>
-                </>
+            isSlotCurrent ? (
+              <div style={{
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: 5,
+                width: '100%',
+                lineHeight: 1
+              }}>
+                <PlusOutlined style={{ fontSize: 12, color: '#009B60' }} />
+                <span style={{ fontSize: 11, fontWeight: 700, color: '#059669', whiteSpace: 'nowrap' }}>
+                  Trống (Hiện tại)
+                </span>
+              </div>
+            ) : null
+          )}
+
+          {isLate && (
+            <div style={{ display: 'flex', flexDirection: 'column', height: '100%', justifyContent: 'space-between' }}>
+              <div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 3 }}>
+                  <Tag color="volcano" style={{ fontSize: 10, lineHeight: '18px', padding: '0 4px', margin: 0, fontWeight: 800 }}>
+                    <ExclamationCircleOutlined style={{ marginRight: 3 }} /> Trễ {cell.lateMinutes}p ({cell.booking?.startTime} - {cell.booking?.endTime})
+                  </Tag>
+                  <PhoneOutlined style={{ color: '#ea580c', fontSize: 11 }} />
+                </div>
+                <div style={{ fontWeight: 800, fontSize: 12, color: '#9a3412', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                  {cell.booking?.customer?.fullName || cell.booking?.customerDisplayName || 'Khách đặt'}
+                  {cell.booking?.isWalkIn && (
+                    <Tag color="cyan" style={{ marginLeft: 3, fontSize: 9, padding: '0 2px', lineHeight: '14px' }}>VL</Tag>
+                  )}
+                </div>
+                <div style={{ fontSize: 11, color: '#c2410c', fontWeight: 600, marginTop: 1 }}>
+                  {cell.booking?.customer?.phone || cell.booking?.customerDisplayPhone || '--'}
+                </div>
+              </div>
+              <div style={{ display: 'flex', gap: 4, marginTop: 6 }} onClick={(e) => e.stopPropagation()}>
+                <Button
+                  size="small"
+                  icon={<PhoneOutlined />}
+                  style={{ flex: 1, fontSize: 11, height: 22, padding: '0 2px', fontWeight: 600, whiteSpace: 'nowrap' }}
+                  onClick={() => alert(`Gọi điện thoại cho khách: ${cell.booking?.customer?.phone || cell.booking?.customerDisplayPhone || 'Chưa có SĐT'}`)}
+                >
+                  Gọi
+                </Button>
+                <Button
+                  size="small"
+                  danger
+                  style={{ flex: 1, fontSize: 11, height: 22, padding: '0 2px', fontWeight: 600, whiteSpace: 'nowrap' }}
+                  onClick={() => {
+                    setSelectedSlotCell({ court, slot, cell });
+                    setCancelModalVisible(true);
+                  }}
+                >
+                  Hủy sân
+                </Button>
+              </div>
+            </div>
+          )}
+
+          {!isLate && isBooked && (
+            <div style={{ display: 'flex', flexDirection: 'column', height: '100%', justifyContent: 'space-between' }}>
+              <div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 2 }}>
+                  <Tag color="blue" style={{ fontSize: 10, lineHeight: '18px', padding: '0 5px', margin: 0, fontWeight: 700 }}>
+                    {cell.booking?.startTime && cell.booking?.endTime ? `${cell.booking.startTime} - ${cell.booking.endTime}` : 'Đã đặt'}
+                  </Tag>
+                  <span style={{ fontSize: 10, color: '#2563eb', fontWeight: 600 }}>
+                    #{cell.booking?.bookingCode?.slice(-4)}
+                  </span>
+                </div>
+                <div style={{ fontWeight: 700, fontSize: 12, color: '#1e40af', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                  {cell.booking?.customer?.fullName || cell.booking?.customerDisplayName || 'Khách đặt'}
+                  {cell.booking?.isWalkIn && (
+                    <Tag color="cyan" style={{ marginLeft: 3, fontSize: 9, padding: '0 2px', lineHeight: '14px' }}>VL</Tag>
+                  )}
+                </div>
+                <div style={{ fontSize: 11, color: '#64748b' }}>
+                  {cell.booking?.customer?.phone || cell.booking?.customerDisplayPhone || '--'}
+                </div>
+              </div>
+              {cell.status === 'CONFIRMED' && (
+                <div style={{ marginTop: 4 }} onClick={(e) => e.stopPropagation()}>
+                  <Button
+                    type="primary"
+                    size="small"
+                    icon={<PlayCircleOutlined />}
+                    style={{ background: '#009B60', borderColor: '#009B60', width: '100%', fontSize: 11, height: 24, fontWeight: 700 }}
+                    onClick={() => handleBookingCardClick(cell.booking, court)}
+                  >
+                    Check-in
+                  </Button>
+                </div>
               )}
             </div>
           )}
 
-          {isLate && (
-            <>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                <Tag color="volcano" style={{ fontSize: 10, lineHeight: '18px', padding: '0 5px', margin: 0, fontWeight: 700 }}>
-                  Trễ {cell.lateMinutes}p
-                </Tag>
-                <PhoneOutlined style={{ color: '#ea580c', fontSize: 12 }} />
-              </div>
-              <div style={{ fontWeight: 700, fontSize: 12, color: '#9a3412', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                {cell.booking?.customer?.fullName || cell.booking?.customerDisplayName || 'Khách đặt'}
-                {cell.booking?.isWalkIn && (
-                  <Tag color="cyan" style={{ marginLeft: 4, fontSize: 9, padding: '0 3px', lineHeight: '14px' }}>VL</Tag>
-                )}
-              </div>
-              <div style={{ fontSize: 11, color: '#c2410c', fontWeight: 600, display: 'flex', justifyContent: 'space-between' }}>
-                <span>{cell.booking?.customer?.phone || cell.booking?.customerDisplayPhone || '--'}</span>
-                <span style={{ fontSize: 10, color: '#dc2626', fontWeight: 500 }}>Chờ gọi</span>
-              </div>
-            </>
-          )}
-
-          {!isLate && isBooked && (
-            <>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                <Tag color="blue" style={{ fontSize: 10, lineHeight: '18px', padding: '0 5px', margin: 0 }}>
-                  Đã đặt
-                </Tag>
-                <span style={{ fontSize: 10, color: '#2563eb', fontWeight: 600 }}>
-                  {cell.booking?.bookingCode?.slice(-4)}
-                </span>
-              </div>
-              <div style={{ fontWeight: 700, fontSize: 12, color: '#1e40af', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                {cell.booking?.customer?.fullName || cell.booking?.customerDisplayName || 'Khách đặt'}
-                {cell.booking?.isWalkIn && (
-                  <Tag color="cyan" style={{ marginLeft: 4, fontSize: 9, padding: '0 3px', lineHeight: '14px' }}>VL</Tag>
-                )}
-              </div>
-              <div style={{ fontSize: 11, color: '#64748b' }}>
-                {cell.booking?.customer?.phone || cell.booking?.customerDisplayPhone || '--'}
-              </div>
-            </>
-          )}
-
           {isInProgress && (
-            <>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                <Tag color="green" style={{ fontSize: 10, lineHeight: '18px', padding: '0 5px', margin: 0, fontWeight: 700 }}>
-                  Đang chơi
-                </Tag>
-                <PlayCircleOutlined style={{ color: '#10b981', fontSize: 12 }} />
-              </div>
-              <div style={{ fontWeight: 700, fontSize: 12, color: '#065f46', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                {cell.session?.customerDisplayName || cell.booking?.customer?.fullName || cell.booking?.customerDisplayName || 'Khách đang chơi'}
-                {(cell.session?.isWalkIn || cell.booking?.isWalkIn) && (
-                  <Tag color="cyan" style={{ marginLeft: 4, fontSize: 9, padding: '0 3px', lineHeight: '14px' }}>VL</Tag>
+            <div style={{ display: 'flex', flexDirection: 'column', height: '100%', justifyContent: 'space-between' }}>
+              <div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 2 }}>
+                  <Tag
+                    color={isOvertime ? 'error' : (isNearEnd ? 'warning' : 'green')}
+                    style={{ fontSize: 10, lineHeight: '18px', padding: '0 5px', margin: 0, fontWeight: 700 }}
+                  >
+                    <PlayCircleOutlined style={{ marginRight: 3 }} />
+                    {(() => {
+                      if (cell.session?.scheduledStartTime && cell.session?.scheduledEndTime) {
+                        const sStr = dayjs(cell.session.scheduledStartTime).format('HH:mm');
+                        const eStr = dayjs(cell.session.scheduledEndTime).format('HH:mm');
+                        return `${sStr} - ${eStr}`;
+                      }
+                      if (cell.booking?.startTime && cell.booking?.endTime) {
+                        return `${cell.booking.startTime} - ${cell.booking.endTime}`;
+                      }
+                      return 'Đang chơi';
+                    })()}
+                  </Tag>
+                  {remainingMin !== null && (
+                    <span style={{
+                      fontSize: 10,
+                      color: isOvertime ? '#dc2626' : (isNearEnd ? '#ea580c' : '#059669'),
+                      fontWeight: 700
+                    }}>
+                      {isOvertime ? 'Hết giờ' : `Còn ${remainingMin}p`}
+                    </span>
+                  )}
+                </div>
+
+                {isNearEnd && sessionEndTime && (
+                  <div style={{
+                    background: isOvertime ? '#fee2e2' : '#ffedd5',
+                    color: isOvertime ? '#b91c1c' : '#c2410c',
+                    fontSize: 10,
+                    fontWeight: 700,
+                    padding: '2px 5px',
+                    borderRadius: 4,
+                    margin: '2px 0 4px 0',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'space-between',
+                    border: `1px solid ${isOvertime ? '#fca5a5' : '#fed7aa'}`
+                  }}>
+                    <span>{isOvertime ? '⚠ HẾT GIỜ:' : '⏳ SẮP HẾT GIỜ:'}</span>
+                    <span style={{ fontFamily: 'monospace', fontWeight: 800 }}>
+                      {formatCountdown(sessionEndTime)}
+                    </span>
+                  </div>
                 )}
+
+                <div style={{ fontWeight: 700, fontSize: 12, color: isOvertime ? '#991b1b' : (isNearEnd ? '#9a3412' : '#065f46'), overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                  {cell.session?.customerDisplayName || cell.booking?.customer?.fullName || cell.booking?.customerDisplayName || 'Khách đang chơi'}
+                  {(cell.session?.isWalkIn || cell.booking?.isWalkIn) && (
+                    <Tag color="cyan" style={{ marginLeft: 3, fontSize: 9, padding: '0 2px', lineHeight: '14px' }}>VL</Tag>
+                  )}
+                </div>
+                <div style={{ fontSize: 11, color: isOvertime ? '#dc2626' : (isNearEnd ? '#c2410c' : '#047857'), fontWeight: 600 }}>
+                  {cell.session?.sessionCode || cell.booking?.bookingCode || '--'}
+                </div>
               </div>
-              <div style={{ fontSize: 11, color: '#047857' }}>
-                {cell.session?.sessionCode || cell.booking?.bookingCode || '--'}
+              <div style={{ display: 'flex', gap: 4, marginTop: 4 }} onClick={(e) => e.stopPropagation()}>
+                {!isOvertime && (
+                  <Button
+                    size="small"
+                    style={{ flex: 1, fontSize: 11, height: 22, padding: '0 2px', fontWeight: 600, whiteSpace: 'nowrap' }}
+                    onClick={() => openExtendModal(cell.session || { courtId: court._id }, court)}
+                  >
+                    Gia hạn
+                  </Button>
+                )}
+                <Button
+                  size="small"
+                  type="primary"
+                  style={{
+                    flex: 1,
+                    background: isOvertime ? '#dc2626' : (isNearEnd ? '#ea580c' : '#009B60'),
+                    borderColor: isOvertime ? '#dc2626' : (isNearEnd ? '#ea580c' : '#009B60'),
+                    fontSize: 11,
+                    height: 22,
+                    padding: '0 2px',
+                    fontWeight: 700,
+                    whiteSpace: 'nowrap'
+                  }}
+                  onClick={() => openCheckOutModal(cell.session || { courtId: court._id }, court)}
+                >
+                  Trả sân
+                </Button>
               </div>
-            </>
+            </div>
           )}
 
           {isCompleted && (
@@ -864,6 +1191,31 @@ export default function PlayingSessionPage() {
         </div>
       </td>
     );
+  };
+
+  const handleTimelineTrackClick = (e, court) => {
+    if (e.target !== e.currentTarget && !e.target.classList.contains('timeline-track-bg')) return;
+    const rect = e.currentTarget.getBoundingClientRect();
+    const clickX = e.clientX - rect.left;
+    const pct = Math.max(0, Math.min(1, clickX / rect.width));
+    const clickMin = Math.round((START_OF_DAY_MIN + pct * TOTAL_DAY_MIN) / 15) * 15;
+    const h = Math.floor(clickMin / 60);
+    const m = clickMin % 60;
+    const clickedTime = dayjs().hour(h).minute(m);
+
+    openCheckInModal(court);
+    setCheckInType('walkin');
+    setWalkInStartTime(clickedTime);
+    setWalkInEndTime(clickedTime.add(1, 'hour'));
+  };
+
+  const handleBookingCardClick = (b, court) => {
+    const targetCourt = court || courtsData.find(c => c._id?.toString() === (b.courtId?._id || b.courtId)?.toString());
+    if (b.status === 'CONFIRMED') {
+      openCheckInModal(targetCourt, 'booking', b._id);
+    } else {
+      message.info(`Đơn đặt ${b.bookingCode} - ${b.customerName || b.customer?.fullName || 'Khách'} (${b.startTime} - ${b.endTime})`);
+    }
   };
 
   return (
@@ -885,16 +1237,12 @@ export default function PlayingSessionPage() {
           </Text>
         </div>
         <Space>
-          <Button icon={<ReloadOutlined />} onClick={() => { fetchLiveBoard(); fetchMatrix(selectedDate); }}>
-            Làm mới
-          </Button>
           <Button
             type="primary"
-            icon={<PlusOutlined />}
             style={{ background: '#009B60', borderColor: '#009B60' }}
-            onClick={() => openCheckInModal(null)}
+            onClick={() => openCheckInModal(null, 'walkin')}
           >
-            Nhận sân cho khách
+            Nhận sân khách vãng lai
           </Button>
         </Space>
       </div>
@@ -903,10 +1251,10 @@ export default function PlayingSessionPage() {
         <Tabs.TabPane
           tab={
             <span>
-              <TableOutlined /> Bảng điều hành sân & Lịch ca đấu
+              <TableOutlined /> Trạng thái sân thực tế
             </span>
           }
-          key="operations"
+          key="live_status"
         >
           <div style={{
             background: '#ffffff',
@@ -924,30 +1272,61 @@ export default function PlayingSessionPage() {
               flexWrap: 'wrap',
               gap: 10
             }}>
-              <div style={{ display: 'flex', alignItems: 'center' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
                 <span style={{ fontSize: 16, fontWeight: 700, color: '#0f172a' }}>
                   🏸 Trạng thái sân thực tế
                 </span>
+                <span style={{ fontSize: 12, color: '#64748b' }}>
+                  (Cập nhật thời gian thực)
+                </span>
               </div>
+              <Space wrap size="small">
+                <Tag color="default" style={{ padding: '3px 8px', borderRadius: 6, fontWeight: 600 }}>
+                  Tổng: {courtsData.length} sân
+                </Tag>
+                <Tag color="green" style={{ padding: '3px 8px', borderRadius: 6, fontWeight: 600 }}>
+                  Đang chơi: {courtsData.filter(c => c.operationalStatus === 'IN_USE').length}
+                </Tag>
+                <Tag color="blue" style={{ padding: '3px 8px', borderRadius: 6, fontWeight: 600 }}>
+                  Sẵn sàng: {courtsData.filter(c => c.operationalStatus !== 'IN_USE' && c.status !== 'INACTIVE').length}
+                </Tag>
+                {courtsData.some(c => c.activeSession && isSessionNearEnd(c.activeSession)) && (
+                  <Tag color="volcano" style={{ padding: '3px 8px', borderRadius: 6, fontWeight: 700 }}>
+                    ⚠️ Sắp hết giờ: {courtsData.filter(c => c.activeSession && isSessionNearEnd(c.activeSession)).length}
+                  </Tag>
+                )}
+              </Space>
             </div>
 
-            <Row gutter={[16, 16]}>
-              {courtsData.map((court) => {
+            {courtsData.length === 0 ? (
+              <div style={{ textAlign: 'center', padding: '60px 0', background: '#ffffff', borderRadius: 8, border: '1px solid #f1f5f9' }}>
+                <Empty description="Không có sân nào đang hoạt động hoặc chưa kết nối được máy chủ" />
+              </div>
+            ) : (
+              <Row gutter={[16, 16]} style={{ display: 'flex', flexWrap: 'wrap' }}>
+                {courtsData.map((court) => {
                 const session = court.activeSession;
-                const nearEnd = session && isSessionNearEnd(session);
+                const isExpired = session?.scheduledEndTime ? new Date(session.scheduledEndTime).getTime() <= currentTime.getTime() : false;
+                const nearEnd = session && !isExpired && isSessionNearEnd(session);
 
                 let borderColor = '#e2e8f0';
                 let badgeColor = 'blue';
                 let statusText = 'SẴN SÀNG';
 
                 if (court.operationalStatus === 'IN_USE') {
-                  borderColor = nearEnd ? '#ef4444' : '#10b981';
-                  badgeColor = nearEnd ? 'volcano' : 'green';
-                  statusText = nearEnd ? 'SẮP HẾT GIỜ' : 'ĐANG CHƠI';
-                } else if (court.operationalStatus === 'CLEANING') {
-                  borderColor = '#f59e0b';
-                  badgeColor = 'gold';
-                  statusText = 'ĐANG DỌN DẸP';
+                  if (isExpired) {
+                    borderColor = '#ef4444';
+                    badgeColor = 'error';
+                    statusText = 'HẾT GIỜ';
+                  } else if (nearEnd) {
+                    borderColor = '#f97316';
+                    badgeColor = 'volcano';
+                    statusText = 'SẮP HẾT GIỜ';
+                  } else {
+                    borderColor = '#10b981';
+                    badgeColor = 'green';
+                    statusText = 'ĐANG CHƠI';
+                  }
                 } else if (court.status === 'INACTIVE') {
                   borderColor = '#9ca3af';
                   badgeColor = 'default';
@@ -955,120 +1334,131 @@ export default function PlayingSessionPage() {
                 }
 
                 return (
-                  <Col xs={24} sm={12} lg={6} key={court._id}>
+                  <Col xs={24} sm={12} md={12} lg={8} xl={6} key={court._id} style={{ display: 'flex' }}>
                     <Card
                       size="small"
                       hoverable
                       style={{
+                        width: '100%',
+                        display: 'flex',
+                        flexDirection: 'column',
                         borderRadius: 10,
                         border: `1.5px solid ${borderColor}`,
                         boxShadow: nearEnd ? '0 0 12px rgba(239, 68, 68, 0.35)' : '0 1px 4px rgba(0,0,0,0.04)',
                         background: nearEnd ? '#fff5f5' : '#ffffff',
                         transition: 'all 0.25s ease'
                       }}
+                      bodyStyle={{
+                        flex: 1,
+                        display: 'flex',
+                        flexDirection: 'column',
+                        justifyContent: 'space-between',
+                        padding: 14
+                      }}
                       title={
                         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                          <span style={{ fontSize: 15, fontWeight: 700, color: '#1e293b' }}>{court.name}</span>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                            <span style={{ fontSize: 15, fontWeight: 700, color: '#1e293b' }}>{court.name}</span>
+                            {renderCourtTypeTag(court.courtType)}
+                          </div>
                           <Tag color={badgeColor} style={{ margin: 0, fontWeight: 600 }}>{statusText}</Tag>
                         </div>
                       }
                     >
                       {court.operationalStatus === 'IN_USE' && session ? (
-                        <div>
-                          {nearEnd && (
-                            <Alert
-                              message="⚠️ Sắp hết giờ chơi (< 10 phút)!"
-                              type="error"
-                              showIcon
-                              style={{ marginBottom: 10, padding: '4px 8px', fontSize: 11 }}
-                            />
-                          )}
-
-                          <div style={{
-                            background: nearEnd ? '#fee2e2' : '#f0fdf4',
-                            padding: '8px 12px',
-                            borderRadius: 6,
-                            textAlign: 'center',
-                            marginBottom: 10,
-                            border: `1px solid ${nearEnd ? '#fca5a5' : '#bbf7d0'}`
-                          }}>
-                            <div style={{ fontSize: 11, color: '#64748b', fontWeight: 600, letterSpacing: '0.5px' }}>
-                              THỜI GIAN CÒN LẠI
-                            </div>
+                        <div style={{ display: 'flex', flexDirection: 'column', height: '100%', justifyContent: 'space-between' }}>
+                          <div>
                             <div style={{
-                              fontSize: 20,
-                              fontWeight: 800,
-                              color: nearEnd ? '#dc2626' : '#15803d',
-                              fontFamily: 'monospace'
+                              background: isExpired ? '#fef2f2' : (nearEnd ? '#fee2e2' : '#f0fdf4'),
+                              border: `1px solid ${isExpired ? '#fca5a5' : (nearEnd ? '#fca5a5' : '#bbf7d0')}`,
+                              borderRadius: 8,
+                              padding: '8px 12px',
+                              marginBottom: 10,
+                              display: 'flex',
+                              alignItems: 'center',
+                              justifyContent: 'space-between'
                             }}>
-                              {formatCountdown(session.scheduledEndTime)}
+                              <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                                <ClockCircleOutlined style={{ color: isExpired ? '#dc2626' : (nearEnd ? '#dc2626' : '#16a34a'), fontSize: 15 }} />
+                                <span style={{ fontSize: 11, fontWeight: 700, color: isExpired ? '#991b1b' : (nearEnd ? '#991b1b' : '#166534'), textTransform: 'uppercase' }}>
+                                  {isExpired ? 'Đã hết giờ' : (nearEnd ? 'Sắp hết giờ' : 'Thời gian còn')}
+                                </span>
+                              </div>
+                              <div style={{
+                                fontSize: 16,
+                                fontWeight: 800,
+                                color: isExpired ? '#dc2626' : (nearEnd ? '#dc2626' : '#15803d'),
+                                fontFamily: 'monospace'
+                              }}>
+                                {formatCountdown(session.scheduledEndTime)}
+                              </div>
+                            </div>
+
+                            <div style={{ fontSize: 12, color: '#334155', display: 'flex', flexDirection: 'column', gap: 6, marginBottom: 14 }}>
+                              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                <span style={{ color: '#64748b' }}><UserOutlined style={{ marginRight: 4 }} />Khách:</span>
+                                <span style={{ fontWeight: 600, color: '#0f172a', maxWidth: 150, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                                  {session.customerDisplayName || session.bookingId?.customerId?.fullName || 'Khách vãng lai'}
+                                  {session.isWalkIn && <Tag color="cyan" style={{ marginLeft: 4, fontSize: 10, padding: '0 4px', margin: 0 }}>VL</Tag>}
+                                </span>
+                              </div>
+                              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                <span style={{ color: '#64748b' }}><FieldTimeOutlined style={{ marginRight: 4 }} />Khung giờ:</span>
+                                <span style={{ fontWeight: 600, color: '#0f172a' }}>
+                                  {session.bookingId?.startTime && session.bookingId?.endTime
+                                    ? `${session.bookingId.startTime} - ${session.bookingId.endTime}`
+                                    : (session.scheduledStartTime ? `${new Date(session.scheduledStartTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} - ${new Date(session.scheduledEndTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}` : '--')}
+                                  {session.extensions?.length > 0 && (
+                                    <Tag color="cyan" style={{ marginLeft: 4, fontSize: 10, padding: '0 4px', margin: 0 }}>
+                                      +{session.extensions.reduce((sum, e) => sum + e.extendedMinutes, 0)}p
+                                    </Tag>
+                                  )}
+                                </span>
+                              </div>
+                              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                <span style={{ color: '#64748b' }}><DollarOutlined style={{ marginRight: 4 }} />Tạm tính:</span>
+                                <span style={{ fontWeight: 700, color: '#009B60' }}>
+                                  {(session.totalAmount || 0).toLocaleString('vi-VN')} đ
+                                </span>
+                              </div>
                             </div>
                           </div>
 
-                          <div style={{ fontSize: 12, lineHeight: '20px', marginBottom: 12 }}>
-                            <div style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                              <UserOutlined style={{ marginRight: 5, color: '#6b7280' }} />
-                              <b>Khách:</b>{' '}
-                              <span style={{ fontWeight: 600, color: '#0f172a' }}>
-                                {session.customerDisplayName || session.bookingId?.customerId?.fullName || 'Khách vãng lai'}
-                              </span>
-                              {session.isWalkIn && (
-                                <Tag color="cyan" style={{ marginLeft: 4, fontSize: 10, lineHeight: '16px', padding: '0 4px' }}>
-                                  Khách vãng lai
-                                </Tag>
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginTop: 'auto' }}>
+                            <div style={{ display: 'flex', gap: 6 }}>
+                              <Button
+                                size="small"
+                                icon={<CoffeeOutlined />}
+                                onClick={() => navigate(`/admin/pos?sessionId=${session._id}`)}
+                                style={{
+                                  flex: 1,
+                                  background: '#f0fdf4',
+                                  borderColor: '#86efac',
+                                  color: '#166534',
+                                  fontWeight: 600,
+                                  fontSize: 12
+                                }}
+                              >
+                                + Dịch vụ / POS
+                              </Button>
+                              {!isExpired && (
+                                <Button
+                                  type="primary"
+                                  size="small"
+                                  icon={<FieldTimeOutlined />}
+                                  style={{ flex: 1, background: '#2563eb', borderColor: '#2563eb', fontWeight: 600, fontSize: 12 }}
+                                  onClick={() => openExtendModal(session)}
+                                >
+                                  + Gia hạn
+                                </Button>
                               )}
                             </div>
-                            <div>
-                              <ClockCircleOutlined style={{ marginRight: 5, color: '#6b7280' }} />
-                              <b>Khung:</b> {session.bookingId?.startTime && session.bookingId?.endTime
-                                ? `${session.bookingId.startTime} - ${session.bookingId.endTime}`
-                                : (session.scheduledStartTime ? `${new Date(session.scheduledStartTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} - ${new Date(session.scheduledEndTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}` : '--')}
-                            </div>
-                            <div>
-                              <DollarOutlined style={{ marginRight: 5, color: '#6b7280' }} />
-                              <b>Tạm tính:</b> <span style={{ color: '#009B60', fontWeight: 700 }}>{(session.totalAmount || 0).toLocaleString('vi-VN')} đ</span>
-                            </div>
-                            {session.extensions?.length > 0 && (
-                              <div style={{ marginTop: 2 }}>
-                                <Tag color="cyan" style={{ fontSize: 10, lineHeight: '16px', padding: '0 4px' }}>
-                                  Đã +{session.extensions.reduce((sum, e) => sum + e.extendedMinutes, 0)}p
-                                </Tag>
-                              </div>
-                            )}
-                          </div>
-
-                          <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-                            <Button
-                              size="small"
-                              icon={<CoffeeOutlined />}
-                              onClick={() => navigate(`/admin/pos?sessionId=${session._id}`)}
-                              style={{
-                                background: '#f0fdf4',
-                                borderColor: '#86efac',
-                                color: '#166534',
-                                fontWeight: 600,
-                                fontSize: 12
-                              }}
-                              block
-                            >
-                              + Nước uống & Phụ kiện (POS)
-                            </Button>
-                            <Button
-                              type="primary"
-                              size="small"
-                              icon={<FieldTimeOutlined />}
-                              style={{ background: '#2563eb', borderColor: '#2563eb', fontWeight: 600 }}
-                              onClick={() => openExtendModal(session)}
-                              block
-                            >
-                              + Gia hạn ca đấu
-                            </Button>
                             <div style={{ display: 'flex', gap: 6 }}>
                               <Button
                                 size="small"
                                 icon={<SwapOutlined />}
                                 onClick={() => openSwitchCourtModal(session)}
-                                style={{ flex: 1, fontSize: 12 }}
+                                style={{ flex: isExpired ? 'none' : 1, width: isExpired ? '80px' : 'auto', fontSize: 12 }}
                               >
                                 Đổi sân
                               </Button>
@@ -1078,59 +1468,55 @@ export default function PlayingSessionPage() {
                                 danger
                                 icon={<CheckOutlined />}
                                 onClick={() => openCheckOutModal(session)}
-                                style={{ flex: 1, fontSize: 12, fontWeight: 600 }}
+                                style={{ flex: 1, fontSize: 12, fontWeight: 700 }}
                               >
-                                Trả sân
+                                Trả sân {isExpired && '& Tính tiền'}
                               </Button>
                             </div>
                           </div>
                         </div>
-                      ) : court.operationalStatus === 'CLEANING' ? (
-                        <div style={{ textAlign: 'center', padding: '14px 0' }}>
-                          <ClockCircleOutlined style={{ fontSize: 32, color: '#f59e0b', marginBottom: 8 }} />
-                          <div style={{ fontWeight: 600, color: '#d97706', fontSize: 13, marginBottom: 4 }}>
-                            Đang dọn dẹp vệ sinh
+                      ) : (
+                        <div style={{ display: 'flex', flexDirection: 'column', height: '100%', justifyContent: 'space-between' }}>
+                          <div style={{ textAlign: 'center', padding: '16px 0 12px 0' }}>
+                            <CheckCircleOutlined style={{ fontSize: 36, color: '#10b981', marginBottom: 8 }} />
+                            <div style={{ fontWeight: 700, color: '#047857', fontSize: 14 }}>
+                              Sân trống sẵn sàng
+                            </div>
+                            <div style={{ fontSize: 12, color: '#64748b', marginTop: 4 }}>
+                              Chưa có khách chơi lúc này
+                            </div>
                           </div>
-                          <Text type="secondary" style={{ fontSize: 11 }}>
-                            Tự chuyển Sẵn sàng sau 10p
-                          </Text>
-                          <div style={{ marginTop: 12 }}>
+                          <div style={{ marginTop: 'auto' }}>
                             <Button
                               type="primary"
-                              size="small"
-                              style={{ background: '#f59e0b', borderColor: '#f59e0b', fontSize: 12 }}
-                              onClick={() => handleCompleteCleaning(court._id)}
+                              size="middle"
+                              icon={<PlayCircleOutlined />}
+                              style={{ background: '#009B60', borderColor: '#009B60', fontWeight: 600, height: 38 }}
+                              onClick={() => openCheckInModal(court)}
                               block
                             >
-                              Xác nhận dọn xong
+                              Nhận sân bắt đầu chơi
                             </Button>
                           </div>
-                        </div>
-                      ) : (
-                        <div style={{ textAlign: 'center', padding: '16px 0' }}>
-                          <CheckCircleOutlined style={{ fontSize: 34, color: '#10b981', marginBottom: 8 }} />
-                          <div style={{ fontWeight: 600, color: '#047857', fontSize: 13, marginBottom: 12 }}>
-                            Sân trống sẵn sàng
-                          </div>
-                          <Button
-                            type="primary"
-                            size="small"
-                            icon={<PlayCircleOutlined />}
-                            style={{ background: '#009B60', borderColor: '#009B60', fontWeight: 600 }}
-                            onClick={() => openCheckInModal(court)}
-                            block
-                          >
-                            Nhận sân bắt đầu chơi
-                          </Button>
                         </div>
                       )}
                     </Card>
                   </Col>
                 );
               })}
-            </Row>
+              </Row>
+            )}
           </div>
+        </Tabs.TabPane>
 
+        <Tabs.TabPane
+          tab={
+            <span>
+              <CalendarOutlined /> Lịch đặt & Ca đấu theo giờ
+            </span>
+          }
+          key="schedule"
+        >
           <div style={{
             background: '#ffffff',
             borderRadius: 12,
@@ -1149,7 +1535,7 @@ export default function PlayingSessionPage() {
               <Space wrap size="middle">
                 <span style={{ fontWeight: 700, color: '#0f172a', fontSize: 15 }}>
                   <CalendarOutlined style={{ marginRight: 6, color: '#009B60' }} />
-                  Lưới lịch đặt sân theo khung giờ:
+                  Lịch đặt & Ca đấu theo giờ:
                 </span>
                 <DatePicker
                   value={dayjs(selectedDate)}
@@ -1157,40 +1543,27 @@ export default function PlayingSessionPage() {
                     if (d) {
                       const dateStr = d.format('YYYY-MM-DD');
                       setSelectedDate(dateStr);
-                      fetchMatrix(dateStr);
+                      fetchMatrix(dateStr, 15);
                     }
                   }}
                   format="DD/MM/YYYY"
                   allowClear={false}
                   style={{ width: 140 }}
                 />
-                <Button
-                  size="middle"
-                  type={selectedDate === getTodayStr() ? 'primary' : 'default'}
-                  style={selectedDate === getTodayStr() ? { background: '#009B60', borderColor: '#009B60' } : {}}
-                  onClick={() => {
-                    const today = getTodayStr();
-                    setSelectedDate(today);
-                    fetchMatrix(today);
-                  }}
-                >
-                  Hôm nay
-                </Button>
-                <Button
-                  size="middle"
-                  type={selectedDate === getTomorrowStr() ? 'primary' : 'default'}
-                  style={selectedDate === getTomorrowStr() ? { background: '#009B60', borderColor: '#009B60' } : {}}
-                  onClick={() => {
-                    const tomorrow = getTomorrowStr();
-                    setSelectedDate(tomorrow);
-                    fetchMatrix(tomorrow);
-                  }}
-                >
-                  Ngày mai
-                </Button>
+                <Select
+                  value={courtScheduleFilter}
+                  onChange={setCourtScheduleFilter}
+                  style={{ width: 160 }}
+                  options={[
+                    { value: 'ALL', label: 'Tất cả loại sân' },
+                    { value: 'STANDARD', label: 'Sân Tiêu Chuẩn' },
+                    { value: 'VIP', label: 'Sân VIP' },
+                    { value: 'PREMIUM', label: 'Sân Thi Đấu' }
+                  ]}
+                />
                 <Button
                   icon={<ReloadOutlined />}
-                  onClick={() => { fetchLiveBoard(); fetchMatrix(selectedDate); }}
+                  onClick={() => { fetchLiveBoard(); fetchMatrix(selectedDate, 15); }}
                   loading={matrixLoading}
                 >
                   Tải lại
@@ -1198,183 +1571,301 @@ export default function PlayingSessionPage() {
               </Space>
             </div>
 
-            <div style={{
-              borderRadius: 8,
-              border: '1px solid #e2e8f0',
-              overflowX: 'auto',
-              padding: 8
-            }}>
-              {matrixLoading && matrixData.courts.length === 0 ? (
-                <div style={{ textAlign: 'center', padding: '40px 0', color: '#64748b' }}>
-                  Đang tải sơ đồ lịch sân...
-                </div>
-              ) : (
-                <table style={{ width: '100%', borderCollapse: 'separate', borderSpacing: 6, minWidth: 800 }}>
-                  <thead>
-                    <tr>
-                      <th style={{
-                        width: 130,
-                        padding: '10px 8px',
-                        background: '#f1f5f9',
-                        borderRadius: 8,
-                        color: '#334155',
-                        fontSize: 13,
-                        fontWeight: 700,
-                        textAlign: 'center',
-                        border: '1px solid #cbd5e1'
-                      }}>
-                        Khung giờ
-                      </th>
-                      {matrixData.courts.map((court) => (
-                        <th key={court._id} style={{
-                          minWidth: 160,
-                          padding: '10px 8px',
-                          background: '#009B60',
-                          color: '#ffffff',
-                          borderRadius: 8,
-                          fontSize: 14,
-                          fontWeight: 700,
-                          textAlign: 'center',
-                          boxShadow: '0 2px 4px rgba(0, 155, 96, 0.2)'
-                        }}>
-                          <div>{court.name}</div>
-                          <div style={{ fontSize: 11, fontWeight: 400, opacity: 0.9 }}>
-                            {court.operationalStatus === 'IN_USE' ? 'Đang có khách' : court.operationalStatus === 'CLEANING' ? 'Dọn dẹp' : 'Sẵn sàng'}
-                          </div>
-                        </th>
-                      ))}
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {matrixData.timeSlots.map((slot) => (
-                      <tr key={slot._id}>
-                        <td style={{
-                          padding: '8px',
-                          background: '#f8fafc',
-                          borderRadius: 8,
-                          textAlign: 'center',
-                          fontWeight: 700,
-                          color: '#1e293b',
-                          fontSize: 13,
-                          border: '1px solid #e2e8f0'
-                        }}>
-                          <FieldTimeOutlined style={{ marginRight: 4, color: '#009B60' }} />
-                          {slot.startTime} - {slot.endTime}
-                        </td>
-                        {matrixData.courts.map((court) => {
-                          const cell = (matrixData.matrix[court._id] || []).find((c) => c.timeSlotId === slot._id) || {
-                            status: 'AVAILABLE'
-                          };
-                          return renderMatrixCell(court, slot, cell);
-                        })}
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              )}
-            </div>
-          </div>
-        </Tabs.TabPane>
+            {matrixLoading && matrixData.courts.length === 0 ? (
+              <div style={{ textAlign: 'center', padding: '50px 0', color: '#64748b' }}>
+                Đang tải sơ đồ lịch sân...
+              </div>
+            ) : (
+              <div style={{
+                borderRadius: 8,
+                border: '1px solid #e2e8f0',
+                overflowX: 'auto',
+                overflowY: 'auto',
+                maxHeight: 'calc(100vh - 210px)',
+                padding: '6px',
+                background: '#ffffff'
+              }}>
+                {(() => {
+                  const displayedCourts = (matrixData.courts || []).filter((c) => {
+                    if (courtScheduleFilter === 'ALL') return true;
+                    return normalizeCourtType(c.courtType) === courtScheduleFilter;
+                  });
 
-        <Tabs.TabPane
-          tab={
-            <span>
-              <HistoryOutlined /> Lịch sử ca chơi
-            </span>
-          }
-          key="history"
-        >
-          <Table
-            dataSource={historySessions}
-            rowKey="_id"
-            loading={historyLoading}
-            pagination={{
-              current: pagination.page,
-              pageSize: pagination.limit,
-              total: pagination.total,
-              onChange: (page) => fetchHistorySessions(page)
-            }}
-            columns={[
-              {
-                title: 'Mã ca',
-                dataIndex: 'sessionCode',
-                key: 'sessionCode',
-                render: (code) => <Tag color="blue">{code}</Tag>
-              },
-              {
-                title: 'Sân',
-                dataIndex: ['courtId', 'name'],
-                key: 'courtName'
-              },
-              {
-                title: 'Khách hàng',
-                key: 'customer',
-                render: (_, r) => (
-                  <div>
-                    <span style={{ fontWeight: 600 }}>
-                      {r.customerDisplayName || r.bookingId?.customerId?.fullName || 'Khách vãng lai'}
-                    </span>
-                    {r.isWalkIn && (
-                      <Tag color="cyan" style={{ marginLeft: 6, fontSize: 10, lineHeight: '16px', padding: '0 4px' }}>
-                        Vãng lai
-                      </Tag>
-                    )}
-                  </div>
-                )
-              },
-              {
-                title: 'Giờ nhận sân',
-                dataIndex: 'checkInAt',
-                key: 'checkInAt',
-                render: (d) => d ? new Date(d).toLocaleTimeString('vi-VN') + ' ' + new Date(d).toLocaleDateString('vi-VN') : '--'
-              },
-              {
-                title: 'Giờ trả sân',
-                dataIndex: 'checkOutAt',
-                key: 'checkOutAt',
-                render: (d) => d ? new Date(d).toLocaleTimeString('vi-VN') + ' ' + new Date(d).toLocaleDateString('vi-VN') : '--'
-              },
-              {
-                title: 'Tổng tiền',
-                dataIndex: 'totalAmount',
-                key: 'totalAmount',
-                render: (v) => <b>{(v || 0).toLocaleString('vi-VN')} đ</b>
-              },
-              {
-                title: 'Trạng thái',
-                dataIndex: 'status',
-                key: 'status',
-                render: (st) => (
-                  <Tag color={st === 'COMPLETED' ? 'green' : st === 'IN_PROGRESS' ? 'processing' : 'default'}>
-                    {st === 'COMPLETED' ? 'Hoàn thành' : st === 'IN_PROGRESS' ? 'Đang chơi' : st}
-                  </Tag>
-                )
-              }
-            ]}
-          />
+                  if (displayedCourts.length === 0) {
+                    return (
+                      <div style={{ textAlign: 'center', padding: '40px 0', color: '#94a3b8' }}>
+                        {matrixData.courts?.length === 0 ? 'Không có sân nào trong hệ thống.' : 'Không có sân nào khớp với bộ lọc loại sân.'}
+                      </div>
+                    );
+                  }
+
+                  const TIME_COL_WIDTH = 135;
+                  const COURT_COL_WIDTH = 185;
+                  const tableCalculatedMinWidth = TIME_COL_WIDTH + displayedCourts.length * (COURT_COL_WIDTH + 6) + 12;
+
+                  return (
+                    <table style={{
+                      width: '100%',
+                      minWidth: `${tableCalculatedMinWidth}px`,
+                      borderCollapse: 'separate',
+                      borderSpacing: 0,
+                      tableLayout: 'fixed'
+                    }}>
+                      <colgroup>
+                        <col style={{ width: TIME_COL_WIDTH, minWidth: TIME_COL_WIDTH }} />
+                        {displayedCourts.map((court) => (
+                          <col key={`col-${court._id}`} style={{ width: COURT_COL_WIDTH, minWidth: COURT_COL_WIDTH }} />
+                        ))}
+                      </colgroup>
+                      <thead>
+                        <tr>
+                          <th style={{
+                            width: TIME_COL_WIDTH,
+                            minWidth: TIME_COL_WIDTH,
+                            padding: '4px',
+                            background: '#ffffff',
+                            position: 'sticky',
+                            top: 0,
+                            left: 0,
+                            zIndex: 40,
+                            borderRight: '2px solid #e2e8f0',
+                            borderBottom: '1px solid #e2e8f0',
+                            boxShadow: '4px 0 8px rgba(0, 0, 0, 0.05)',
+                            verticalAlign: 'middle'
+                          }}>
+                            <div style={{
+                              width: '100%',
+                              padding: '10px 8px',
+                              background: '#f1f5f9',
+                              borderRadius: 8,
+                              color: '#334155',
+                              fontSize: 13,
+                              fontWeight: 700,
+                              textAlign: 'center',
+                              border: '1px solid #cbd5e1',
+                              boxSizing: 'border-box'
+                            }}>
+                              Khung giờ
+                            </div>
+                          </th>
+                          {displayedCourts.map((court) => (
+                            <th key={court._id} style={{
+                              width: COURT_COL_WIDTH,
+                              minWidth: COURT_COL_WIDTH,
+                              padding: '4px',
+                              background: '#ffffff',
+                              position: 'sticky',
+                              top: 0,
+                              zIndex: 30,
+                              borderBottom: '1px solid #e2e8f0',
+                              verticalAlign: 'middle'
+                            }}>
+                              <div style={{
+                                padding: '8px 6px',
+                                background: '#009B60',
+                                color: '#ffffff',
+                                borderRadius: 8,
+                                fontSize: 14,
+                                fontWeight: 700,
+                                textAlign: 'center',
+                                boxShadow: '0 2px 4px rgba(0, 155, 96, 0.2)'
+                              }}>
+                                <div style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{court.name}</div>
+                                <div style={{ fontSize: 11, fontWeight: 400, opacity: 0.9 }}>
+                                  {renderCourtTypeTag(court.courtType)}
+                                </div>
+                                <div style={{ fontSize: 10, fontWeight: 500, opacity: 0.85, marginTop: 2 }}>
+                                  {court.operationalStatus === 'IN_USE' ? '● Đang có khách' : court.operationalStatus === 'CLEANING' ? '● Dọn dẹp' : '● Sẵn sàng'}
+                                </div>
+                              </div>
+                            </th>
+                          ))}
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {(() => {
+                          const isCurrentAvailableCell = (c, s) => {
+                            if (!c || c.status !== 'AVAILABLE') return false;
+                            if (!s) return false;
+                            const isToday = selectedDate === getTodayStr();
+                            if (!isToday) return false;
+                            const [sh, sm] = (s.startTime || '00:00').split(':').map(Number);
+                            const [eh, em] = (s.endTime || '00:00').split(':').map(Number);
+                            const sStartMin = sh * 60 + sm;
+                            const sEndMin = eh * 60 + em;
+                            const nowMin = currentTime.getHours() * 60 + currentTime.getMinutes();
+                            return (nowMin >= sStartMin - 15) && (nowMin < sEndMin);
+                          };
+
+                          return matrixData.timeSlots.map((slot, slotIndex) => {
+                            const isToday = selectedDate === getTodayStr();
+                            const [sh, sm] = (slot.startTime || '00:00').split(':').map(Number);
+                            const [eh, em] = (slot.endTime || '00:00').split(':').map(Number);
+                            const slotStartMin = sh * 60 + sm;
+                            const slotEndMin = eh * 60 + em;
+                            const nowMin = currentTime.getHours() * 60 + currentTime.getMinutes();
+                            const isCurrentSlot = isToday && nowMin >= slotStartMin && nowMin < slotEndMin;
+
+                            const rowHeight = gridStep === 15 ? 44 : (gridStep === 30 ? 56 : 68);
+
+                            return (
+                              <tr key={slot._id} style={{ height: rowHeight }}>
+                                <td style={{
+                                  width: 135,
+                                  minWidth: 135,
+                                  maxWidth: 135,
+                                  height: rowHeight,
+                                  maxHeight: rowHeight,
+                                  boxSizing: 'border-box',
+                                  padding: '3px 4px',
+                                  background: '#ffffff',
+                                  borderRight: '2px solid #e2e8f0',
+                                  boxShadow: '4px 0 8px rgba(0, 0, 0, 0.05)',
+                                  position: 'sticky',
+                                  left: 0,
+                                  zIndex: 20,
+                                  verticalAlign: 'middle'
+                                }}>
+                                  <div style={{
+                                    width: '100%',
+                                    height: '100%',
+                                    display: 'flex',
+                                    flexDirection: 'column',
+                                    alignItems: 'center',
+                                    justifyContent: 'center',
+                                    background: isCurrentSlot ? '#dcfce7' : '#f8fafc',
+                                    borderRadius: 8,
+                                    border: isCurrentSlot ? '1.5px solid #86efac' : '1px solid #e2e8f0',
+                                    boxSizing: 'border-box',
+                                    padding: '2px 4px'
+                                  }}>
+                                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 4 }}>
+                                      <ClockCircleOutlined style={{ color: isCurrentSlot ? '#15803d' : '#009B60', fontSize: 12 }} />
+                                      <span style={{ whiteSpace: 'nowrap', fontWeight: 700, color: isCurrentSlot ? '#15803d' : '#1e293b', fontSize: 12 }}>
+                                        {slot.startTime} - {slot.endTime}
+                                      </span>
+                                    </div>
+                                    {isCurrentSlot && (
+                                      <div style={{ fontSize: 10, color: '#16a34a', fontWeight: 700, marginTop: 2, whiteSpace: 'nowrap' }}>
+                                        ● Đang diễn ra
+                                      </div>
+                                    )}
+                                  </div>
+                                </td>
+                                {displayedCourts.map((court) => {
+                                  const courtCells = matrixData.matrix[court._id] || [];
+                                  const cell = courtCells[slotIndex] || { status: 'AVAILABLE' };
+
+                                  const getCellMergeKey = (c) => {
+                                    if (!c) return null;
+                                    if (c.session?._id) return `session_${c.session._id}`;
+                                    if (c.booking?._id) return `booking_${c.booking._id}_${c.booking.itemId || court._id}`;
+                                    return null;
+                                  };
+
+                                  const bookingKey = getCellMergeKey(cell);
+
+                                  if (bookingKey) {
+                                    const prevCell = slotIndex > 0 ? courtCells[slotIndex - 1] : null;
+                                    const prevKey = getCellMergeKey(prevCell);
+                                    if (prevKey === bookingKey) {
+                                      return null;
+                                    }
+
+                                    let spanCount = 1;
+                                    for (let nextIdx = slotIndex + 1; nextIdx < matrixData.timeSlots.length; nextIdx++) {
+                                      const nextCell = courtCells[nextIdx];
+                                      const nextKey = getCellMergeKey(nextCell);
+                                      if (nextKey === bookingKey) {
+                                        spanCount++;
+                                      } else {
+                                        break;
+                                      }
+                                    }
+                                    return renderMatrixCell(court, slot, cell, spanCount, slotIndex);
+                                  }
+
+                                  const isCurAvail = isCurrentAvailableCell(cell, slot);
+                                  if (isCurAvail) {
+                                    const prevCell = slotIndex > 0 ? courtCells[slotIndex - 1] : null;
+                                    const prevSlot = slotIndex > 0 ? matrixData.timeSlots[slotIndex - 1] : null;
+                                    const wasPrevCurAvail = isCurrentAvailableCell(prevCell, prevSlot);
+                                    if (wasPrevCurAvail) {
+                                      return null;
+                                    }
+
+                                    let spanCount = 1;
+                                    for (let nextIdx = slotIndex + 1; nextIdx < matrixData.timeSlots.length; nextIdx++) {
+                                      const nextCell = courtCells[nextIdx];
+                                      const nextSlot = matrixData.timeSlots[nextIdx];
+                                      if (isCurrentAvailableCell(nextCell, nextSlot)) {
+                                        spanCount++;
+                                      } else {
+                                        break;
+                                      }
+                                    }
+                                    return renderMatrixCell(court, slot, cell, spanCount, slotIndex);
+                                  }
+
+                                  return renderMatrixCell(court, slot, cell, 1, slotIndex);
+                                })}
+                              </tr>
+                            );
+                          });
+                        })()}
+                      </tbody>
+                    </table>
+                  );
+                })()}
+              </div>
+            )}
+          </div>
         </Tabs.TabPane>
       </Tabs>
 
       <Modal
-        title="Nhận Sân Bắt Đầu Ca Chơi"
+        title={checkInType === 'walkin' ? '⚡ Nhận Sân Khách Vãng Lai (Chơi Ngay)' : '📋 Nhận Sân Từ Đơn Đặt Trước'}
         open={checkInModalVisible}
         onCancel={() => setCheckInModalVisible(false)}
         onOk={() => handleCheckInSubmit(false)}
         okText="Xác nhận nhận sân"
         cancelText="Hủy"
-        okButtonProps={{ disabled: checkInType === 'walkin' && Boolean(getWalkInCalculationInfo()?.isInvalid) }}
-        width={620}
+        okButtonProps={{ disabled: checkInType === 'walkin' && walkInEndTime.diff(walkInStartTime, 'minute') < 60 }}
+        width={600}
       >
-        <div style={{ marginBottom: 14 }}>
+        <div style={{ marginBottom: 16 }}>
           <Radio.Group
             value={checkInType}
             onChange={(e) => setCheckInType(e.target.value)}
             buttonStyle="solid"
+            style={{ width: '100%', display: 'flex' }}
           >
-            <Radio.Button value="booking">Từ Đơn Đặt Trước</Radio.Button>
-            <Radio.Button value="walkin">Khách Vãng Lai Tại Quầy</Radio.Button>
+            <Radio.Button value="walkin" style={{ flex: 1, textAlign: 'center' }}>
+              ⚡ Khách vãng lai nhận sân ngay
+            </Radio.Button>
+            <Radio.Button value="booking" style={{ flex: 1, textAlign: 'center' }}>
+              📋 Nhận sân từ đơn đặt trước
+            </Radio.Button>
           </Radio.Group>
         </div>
+
+        {checkInType === 'walkin' && (
+          <div style={{
+            background: '#f0fdf4',
+            border: '1px solid #bbf7d0',
+            borderRadius: 6,
+            padding: '8px 12px',
+            marginBottom: 14,
+            fontSize: 12,
+            color: '#166534',
+            display: 'flex',
+            alignItems: 'center',
+            gap: 6
+          }}>
+            <ClockCircleOutlined style={{ color: '#16a34a', fontSize: 14 }} />
+            <span>Khách vãng lai chỉ nhận sân chơi ngay tại thời điểm hiện tại. Giờ bắt đầu đã tự động làm tròn lên 15 phút (<b>{walkInStartTime.format('HH:mm')}</b>) để chuẩn bị khởi động.</span>
+          </div>
+        )}
 
         {earlyCheckInAlert && (
           <Alert
@@ -1414,79 +1905,99 @@ export default function PlayingSessionPage() {
 
         <Form form={checkInForm} layout="vertical">
           {checkInType === 'booking' ? (
-            <Form.Item
-              name="bookingId"
-              label="Chọn đơn đặt sân đã xác nhận"
-              rules={[{ required: true, message: 'Vui lòng chọn đơn đặt sân!' }]}
-              style={{ marginBottom: 12 }}
-            >
-              <Select placeholder="Chọn khách hàng hoặc mã đơn...">
-                {confirmedBookings.map((b) => {
-                  const bState = getBookingCheckInState(b, null);
-                  return (
-                    <Option key={b._id} value={b._id} disabled={!bState.canCheckIn}>
-                      {b.bookingCode} - {b.customerId?.fullName || b.customerDisplayName || 'Khách đặt'} ({b.startTime} - {b.endTime} tại {b.courtId?.name || b.courtId?.courtName}) {!bState.canCheckIn ? `— [${bState.reason}]` : ''}
-                    </Option>
-                  );
-                })}
-              </Select>
-            </Form.Item>
+            <>
+              <Form.Item
+                name="bookingId"
+                label="Chọn đơn đặt sân đã xác nhận"
+                rules={[{ required: true, message: 'Vui lòng chọn đơn đặt sân!' }]}
+                style={{ marginBottom: 12 }}
+              >
+                <Select placeholder="Chọn khách hàng hoặc mã đơn..." onChange={() => setAcceptEarlyCheckInState(false)}>
+                  {confirmedBookings.map((b) => {
+                    const bState = getBookingCheckInState(b);
+                    const bStart = bState.startTime || b.startTime || (b.items && b.items[0]?.startTime) || '--';
+                    const bEnd = bState.endTime || b.endTime || (b.items && b.items[0]?.endTime) || '--';
+                    return (
+                      <Option key={b._id} value={b._id} disabled={!bState.canCheckIn}>
+                        {b.bookingCode} - {b.customerId?.fullName || b.customerDisplayName || 'Khách đặt'} ({bStart} - {bEnd} tại {b.courtId?.name || b.courtId?.courtName}) {!bState.canCheckIn ? `— [${bState.reason}]` : bState.isEarly ? `— [Đến sớm ${bState.earlyMinutes}p]` : ''}
+                      </Option>
+                    );
+                  })}
+                </Select>
+              </Form.Item>
+
+              {(() => {
+                const currentBookingVal = selectedBookingId || checkInForm.getFieldValue('bookingId');
+                const selB = confirmedBookings.find(b => String(b._id) === String(currentBookingVal))
+                  || (matrixData.bookings || []).find(b => String(b._id) === String(currentBookingVal));
+                const bState = selB ? getBookingCheckInState(selB) : null;
+                if (!bState || !bState.isEarly) return null;
+                const courtType = normalizeCourtType(selB?.courtId?.courtType);
+                const isWeekend = currentTime.getDay() === 0 || currentTime.getDay() === 6;
+                const curH = currentTime.getHours();
+                const isPeak = !isWeekend && (curH >= 17);
+                let hourlyRate = 80000;
+                let rateTag = <Tag color="green">Giờ thường</Tag>;
+                if (courtType === 'VIP') {
+                  hourlyRate = isWeekend ? 180000 : isPeak ? 160000 : 120000;
+                } else if (courtType === 'PREMIUM') {
+                  hourlyRate = isWeekend ? 220000 : isPeak ? 200000 : 160000;
+                } else {
+                  hourlyRate = isWeekend ? 140000 : isPeak ? 120000 : 80000;
+                }
+                if (isWeekend) rateTag = <Tag color="red">Cuối tuần</Tag>;
+                else if (isPeak) rateTag = <Tag color="orange">Giờ vàng tối</Tag>;
+                const earlyFee = Math.round((hourlyRate / 60) * bState.earlyMinutes);
+                const bStartDisplay = bState.startTime || selB.startTime || (selB.items && selB.items[0]?.startTime) || '--';
+                const bEndDisplay = bState.endTime || selB.endTime || (selB.items && selB.items[0]?.endTime) || '--';
+                return (
+                  <Alert
+                    type="warning"
+                    showIcon
+                    message={`Khách đến sớm hơn ${bState.earlyMinutes} phút`}
+                    description={
+                      <div>
+                        <div>Ca đặt dự kiến: <b>{bStartDisplay} - {bEndDisplay}</b>. Giờ hiện tại: <b>{currentTime.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</b>.</div>
+                        <div style={{ marginTop: 4, display: 'flex', alignItems: 'center', gap: 6 }}>
+                          <span>Áp dụng khung giá:</span> {rateTag} <span>({hourlyRate.toLocaleString('vi-VN')} đ/h)</span>
+                        </div>
+                        <div style={{ marginTop: 4 }}>
+                          Phụ phí nhận sân sớm ước tính: <b style={{ color: '#ea580c' }}>{earlyFee.toLocaleString('vi-VN')} đ</b>.
+                        </div>
+                        <div style={{ marginTop: 8 }}>
+                          <Checkbox
+                            checked={acceptEarlyCheckInState}
+                            onChange={(e) => setAcceptEarlyCheckInState(e.target.checked)}
+                          >
+                            <span style={{ fontWeight: 600, color: '#009B60' }}>
+                              Đồng ý nhận sân sớm cho khách (Early Check-in)
+                            </span>
+                          </Checkbox>
+                        </div>
+                      </div>
+                    }
+                    style={{ marginBottom: 14 }}
+                  />
+                );
+              })()}
+            </>
           ) : (
             <>
-              <Row gutter={16}>
-                <Col span={12}>
+              <Row gutter={16} style={{ marginBottom: 4 }}>
+                <Col span={24}>
                   <Form.Item
                     name="courtId"
-                    label="Chọn sân"
+                    label="Chọn sân thi đấu"
                     rules={[{ required: true, message: 'Vui lòng chọn sân!' }]}
                     style={{ marginBottom: 12 }}
                   >
                     <Select placeholder="Chọn sân...">
                       {((matrixData.courts && matrixData.courts.length > 0) ? matrixData.courts : courtsData).map(c => {
                         const liveCourt = courtsData.find(cd => cd._id === c._id);
-                        const isOccupied = liveCourt?.operationalStatus === 'IN_USE' || c.operationalStatus === 'IN_USE';
+                        const isOccupied = checkInType === 'walkin' && (liveCourt?.operationalStatus === 'IN_USE' || c.operationalStatus === 'IN_USE');
                         return (
                           <Option key={c._id} value={c._id} disabled={isOccupied}>
-                            {c.name || c.courtName} {isOccupied ? ' — [Đang bận]' : ''}
-                          </Option>
-                        );
-                      })}
-                    </Select>
-                  </Form.Item>
-                </Col>
-                <Col span={12}>
-                  <Form.Item
-                    name="timeSlotId"
-                    label="Khung giờ ca đấu"
-                    rules={[{ required: true, message: 'Vui lòng chọn khung giờ ca đấu!' }]}
-                    style={{ marginBottom: 12 }}
-                  >
-                    <Select placeholder="Chọn khung giờ..." popupMatchSelectWidth={false}>
-                      {((availableTimeSlots && availableTimeSlots.length > 0) ? availableTimeSlots : (matrixData.timeSlots || [])).map((slot) => {
-                        const [sh, sm] = (slot.startTime || '00:00').split(':').map(Number);
-                        const [endH, endM] = (slot.endTime || '00:00').split(':').map(Number);
-                        const slotStartMinutes = sh * 60 + sm;
-                        const slotEndMinutes = endH * 60 + endM;
-                        const nowMinutes = currentTime.getHours() * 60 + currentTime.getMinutes();
-
-                        const isPastDate = selectedDate < getTodayStr();
-                        const isFutureDate = selectedDate > getTodayStr();
-                        const isToday = selectedDate === getTodayStr();
-
-                        const isPast = isPastDate || (isToday && slotEndMinutes <= nowMinutes);
-                        const isFuture = isFutureDate || (isToday && (slotStartMinutes - nowMinutes > 15));
-                        const isDisabled = isPast || isFuture;
-
-                        const cleanLabel = slot.label ? slot.label.replace(/\s*\([^)]*\)/g, '').trim() : '';
-                        const displayTitle = cleanLabel ? `${slot.startTime} - ${slot.endTime} • ${cleanLabel}` : `${slot.startTime} - ${slot.endTime}`;
-
-                        let statusTag = '';
-                        if (isPast) statusTag = ' — [Đã qua giờ]';
-                        else if (isFuture) statusTag = ' — [Chưa tới giờ]';
-
-                        return (
-                          <Option key={slot._id} value={slot._id} disabled={isDisabled}>
-                            {displayTitle}{statusTag}
+                            {c.name || c.courtName} {isOccupied ? ' — [Đang có khách]' : ''}
                           </Option>
                         );
                       })}
@@ -1494,6 +2005,138 @@ export default function PlayingSessionPage() {
                   </Form.Item>
                 </Col>
               </Row>
+
+              <Row gutter={16} style={{ marginBottom: 8 }}>
+                <Col span={12}>
+                  <label style={{ display: 'block', marginBottom: 4, fontWeight: 600, fontSize: 13 }}>Giờ bắt đầu (Hiện tại):</label>
+                  <TimePicker
+                    format="HH:mm"
+                    value={walkInStartTime}
+                    disabled
+                    style={{ width: '100%', height: 38, background: '#f8fafc', fontWeight: 700 }}
+                  />
+                </Col>
+                <Col span={12}>
+                  <label style={{ display: 'block', marginBottom: 4, fontWeight: 600, fontSize: 13 }}>Giờ kết thúc:</label>
+                  <TimePicker
+                    format="HH:mm"
+                    minuteStep={15}
+                    value={walkInEndTime}
+                    onChange={(val) => {
+                      if (val) {
+                        const sMin = walkInStartTime.hour() * 60 + walkInStartTime.minute();
+                        const eMin = val.hour() * 60 + val.minute();
+                        if (eMin - sMin < 60) {
+                          message.warning('Khách vãng lai tối thiểu phải từ 1 tiếng (60 phút) trở lên!');
+                          setWalkInEndTime(walkInStartTime.add(1, 'hour').second(0).millisecond(0));
+                        } else {
+                          setWalkInEndTime(val.second(0).millisecond(0));
+                        }
+                      }
+                    }}
+                    style={{ width: '100%', height: 38 }}
+                    allowClear={false}
+                  />
+                </Col>
+              </Row>
+
+              {(() => {
+                const sMin = walkInStartTime.hour() * 60 + walkInStartTime.minute();
+                const eMin = walkInEndTime.hour() * 60 + walkInEndTime.minute();
+                const currentDurMin = eMin - sMin;
+                return (
+                  <div style={{ display: 'flex', gap: 6, marginBottom: 14, alignItems: 'center', flexWrap: 'wrap' }}>
+                    <span style={{ fontSize: 12, color: '#64748b' }}>Chọn nhanh:</span>
+                    {[
+                      { label: '1 giờ', mins: 60 },
+                      { label: '1.5 giờ', mins: 90 },
+                      { label: '2 giờ', mins: 120 },
+                      { label: '2.5 giờ', mins: 150 },
+                      { label: '3 giờ', mins: 180 }
+                    ].map((preset, idx) => {
+                      const isSelected = currentDurMin === preset.mins;
+                      return (
+                        <Button
+                          key={idx}
+                          size="small"
+                          type={isSelected ? 'primary' : 'default'}
+                          onClick={() => setWalkInEndTime(walkInStartTime.add(preset.mins, 'minute').second(0).millisecond(0))}
+                          style={{
+                            fontSize: 12,
+                            ...(isSelected ? { background: '#009B60', borderColor: '#009B60', fontWeight: 700 } : {})
+                          }}
+                        >
+                          {preset.label}
+                        </Button>
+                      );
+                    })}
+                  </div>
+                );
+              })()}
+
+              {(() => {
+                const sMin = walkInStartTime.hour() * 60 + walkInStartTime.minute();
+                const eMin = walkInEndTime.hour() * 60 + walkInEndTime.minute();
+                const durMin = eMin - sMin;
+                const isValidDur = durMin >= 60;
+                const isWeekend = currentTime.getDay() === 0 || currentTime.getDay() === 6;
+                const startH = walkInStartTime.hour();
+                const isPeak = !isWeekend && (startH >= 17);
+                const chosenCourtId = checkInForm.getFieldValue('courtId') || selectedCourtForCheckIn?._id;
+                const targetCourt = courtsData.find(c => c._id?.toString() === chosenCourtId?.toString());
+                const courtType = normalizeCourtType(targetCourt?.courtType);
+                let hourlyRate = 80000;
+                let rateTag = <Tag color="green">Giờ thường</Tag>;
+                if (courtType === 'VIP') {
+                  hourlyRate = isWeekend ? 180000 : isPeak ? 160000 : 120000;
+                } else if (courtType === 'PREMIUM') {
+                  hourlyRate = isWeekend ? 220000 : isPeak ? 200000 : 160000;
+                } else {
+                  hourlyRate = isWeekend ? 140000 : isPeak ? 120000 : 80000;
+                }
+                if (isWeekend) rateTag = <Tag color="red">Cuối tuần</Tag>;
+                else if (isPeak) rateTag = <Tag color="orange">Giờ vàng tối</Tag>;
+                const fee = isValidDur ? Math.round((hourlyRate / 60) * durMin) : 0;
+                if (!isValidDur) {
+                  return (
+                    <Alert
+                      type="warning"
+                      showIcon
+                      message="Thời lượng không hợp lệ"
+                      description="Thời gian chơi tối thiểu cho khách vãng lai phải từ 1 tiếng (60 phút) trở lên và giờ kết thúc phải sau giờ bắt đầu!"
+                      style={{ marginBottom: 12 }}
+                    />
+                  );
+                }
+                return (
+                  <div style={{ background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: 8, padding: '10px 14px', marginBottom: 12 }}>
+                    <Row gutter={16} align="middle">
+                      <Col span={14}>
+                        <div style={{ fontSize: 13, marginBottom: 2 }}>
+                          <span style={{ color: '#64748b' }}>Khung giờ: </span>
+                          <b>{walkInStartTime.format('HH:mm')}</b>
+                          <span style={{ color: '#94a3b8', margin: '0 6px' }}>–</span>
+                          <b style={{ color: '#2563eb' }}>{walkInEndTime.format('HH:mm')}</b>
+                          <Tag color="blue" style={{ marginLeft: 8, fontSize: 11, padding: '0 6px', lineHeight: '18px' }}>
+                            {durMin} phút ({(durMin / 60).toFixed(1)}h)
+                          </Tag>
+                        </div>
+                        <div style={{ fontSize: 12, marginTop: 4, display: 'flex', alignItems: 'center', gap: 6 }}>
+                          <span style={{ color: '#475569' }}>Áp dụng:</span>
+                          {rateTag}
+                          <span style={{ color: '#64748b', fontSize: 11 }}>({hourlyRate.toLocaleString('vi-VN')} đ/h)</span>
+                        </div>
+                      </Col>
+                      <Col span={10} style={{ textAlign: 'right' }}>
+                        <div style={{ fontSize: 11, color: '#64748b', textTransform: 'uppercase', fontWeight: 600 }}>Tạm tính tiền sân</div>
+                        <div style={{ fontSize: 17, fontWeight: 800, color: '#009B60' }}>
+                          {fee.toLocaleString('vi-VN')} đ
+                        </div>
+                      </Col>
+                    </Row>
+                  </div>
+                );
+              })()}
 
               <Row gutter={16}>
                 <Col span={12}>
@@ -1503,68 +2146,19 @@ export default function PlayingSessionPage() {
                     rules={[{ required: true, message: 'Vui lòng nhập tên khách!' }]}
                     style={{ marginBottom: 12 }}
                   >
-                    <Input placeholder="Nhập họ và tên..." />
+                    <Input placeholder="Nhập họ và tên khách..." />
                   </Form.Item>
                 </Col>
                 <Col span={12}>
-                  <Form.Item name="walkInCustomerPhone" label="Số điện thoại" style={{ marginBottom: 12 }}>
-                    <Input placeholder="0987654321 (tùy chọn)" />
+                  <Form.Item
+                    name="walkInCustomerPhone"
+                    label="Số điện thoại"
+                    style={{ marginBottom: 12 }}
+                  >
+                    <Input placeholder="0987654321..." />
                   </Form.Item>
                 </Col>
               </Row>
-
-              {checkInType === 'walkin' && (() => {
-                const info = getWalkInCalculationInfo();
-                if (!info) return null;
-                if (info.isInvalid) {
-                  return (
-                    <Alert
-                      message={info.message}
-                      type="warning"
-                      showIcon
-                      style={{ marginBottom: 12 }}
-                    />
-                  );
-                }
-                return (
-                  <div style={{
-                    background: '#f8fafc',
-                    border: '1px solid #e2e8f0',
-                    borderRadius: 8,
-                    padding: '10px 14px',
-                    marginBottom: 12
-                  }}>
-                    <Row gutter={16} align="middle">
-                      <Col span={14}>
-                        <div style={{ fontSize: 13, marginBottom: 2 }}>
-                          <span style={{ color: '#64748b' }}>Giờ chơi: </span>
-                          <b>{info.inTime}</b>
-                          <span style={{ color: '#94a3b8', margin: '0 6px' }}>–</span>
-                          <b style={{ color: '#2563eb' }}>{info.outTime}</b>
-                          <Tag color="blue" style={{ marginLeft: 8, fontSize: 11, padding: '0 6px', lineHeight: '18px' }}>
-                            {info.billedMinutes} phút
-                          </Tag>
-                        </div>
-                        {info.isProrated ? (
-                          <div style={{ fontSize: 11, color: '#059669', fontStyle: 'italic' }}>
-                            ✓ Khách vào giữa ca: Tự động tính cước theo giờ thực tế
-                          </div>
-                        ) : (
-                          <div style={{ fontSize: 11, color: '#94a3b8' }}>
-                            Trọn ca thi đấu tiêu chuẩn
-                          </div>
-                        )}
-                      </Col>
-                      <Col span={10} style={{ textAlign: 'right' }}>
-                        <div style={{ fontSize: 11, color: '#64748b', textTransform: 'uppercase', fontWeight: 600 }}>Tạm tính tiền sân</div>
-                        <div style={{ fontSize: 17, fontWeight: 800, color: '#009B60' }}>
-                          {info.fee.toLocaleString('vi-VN')} đ
-                        </div>
-                      </Col>
-                    </Row>
-                  </div>
-                );
-              })()}
             </>
           )}
 
@@ -1581,67 +2175,201 @@ export default function PlayingSessionPage() {
         onOk={handleExtendSubmit}
         okText="Xác nhận gia hạn"
         cancelText="Đóng"
+        okButtonProps={{ disabled: !extendDuration || extendDuration <= 0 }}
       >
-        {selectedSessionForExtend && (
-          <div>
-            <p><b>Mã ca:</b> {selectedSessionForExtend.sessionCode}</p>
-            <p><b>Thời gian kết thúc hiện tại:</b> {selectedSessionForExtend.scheduledEndTime ? new Date(selectedSessionForExtend.scheduledEndTime).toLocaleTimeString('vi-VN') : '--'}</p>
-            <Divider />
+        {selectedSessionForExtend && (() => {
+          const currentCourtId = (selectedSessionForExtend.courtId?._id || selectedSessionForExtend.courtId)?.toString();
+          const currentBookingId = (selectedSessionForExtend.bookingId?._id || selectedSessionForExtend.bookingId || selectedSessionForExtend.booking?._id)?.toString();
 
-            <div style={{ marginBottom: 16 }}>
-              <label style={{ display: 'block', marginBottom: 8, fontWeight: 600 }}>
-                Thời gian gia hạn thêm:
-              </label>
-              <Radio.Group
-                value={extendDuration}
-                onChange={(e) => setExtendDuration(e.target.value)}
-                buttonStyle="solid"
-                size="large"
-              >
-                <Radio.Button value={30}>+ 30 Phút (+50.000 đ)</Radio.Button>
-                <Radio.Button value={60}>+ 60 Phút (+100.000 đ)</Radio.Button>
-              </Radio.Group>
-            </div>
+          let sessionEndMin = 0;
+          let sessionEndTimeDisplay = '--';
+          if (selectedSessionForExtend.scheduledEndTime) {
+            const endD = new Date(selectedSessionForExtend.scheduledEndTime);
+            sessionEndMin = endD.getHours() * 60 + endD.getMinutes();
+            sessionEndTimeDisplay = `${String(endD.getHours()).padStart(2, '0')}:${String(endD.getMinutes()).padStart(2, '0')}`;
+          } else if (selectedSessionForExtend.booking?.endTime) {
+            const [eh, em] = selectedSessionForExtend.booking.endTime.split(':').map(Number);
+            sessionEndMin = eh * 60 + em;
+            sessionEndTimeDisplay = selectedSessionForExtend.booking.endTime;
+          }
 
-            {extendConflict && (
-              <Alert
-                message="Xung đột lịch với ca tiếp theo"
-                description={
-                  <div>
-                    <p>{extendConflict.message}</p>
-                    <p>Các sân trống có thể chuyển đổi: {extendConflict.alternateCourts?.map(c => c.name).join(', ')}</p>
+          const courtBookings = (matrixData.bookings || [])
+            .filter((b) => {
+              const bCourtId = (b.courtId?._id || b.courtId)?.toString();
+              if (bCourtId !== currentCourtId) return false;
+              if (currentBookingId && b._id?.toString() === currentBookingId) return false;
+              if (!['CONFIRMED', 'CHECKED_IN'].includes(b.status)) return false;
+              return true;
+            })
+            .sort((a, b) => a.startTime.localeCompare(b.startTime));
+
+          const nextBooking = courtBookings.find((b) => {
+            const [bsh, bsm] = b.startTime.split(':').map(Number);
+            const bStartMin = bsh * 60 + bsm;
+            const [beh, bem] = b.endTime.split(':').map(Number);
+            const bEndMin = beh * 60 + bem;
+            return bEndMin > sessionEndMin;
+          });
+
+          let headroomMin = 999;
+          if (nextBooking) {
+            const [nbStartH, nbStartM] = nextBooking.startTime.split(':').map(Number);
+            const nbStartMin = nbStartH * 60 + nbStartM;
+            headroomMin = Math.max(0, nbStartMin - sessionEndMin);
+          }
+
+          const isSessionExpired = selectedSessionForExtend.scheduledEndTime ? new Date(selectedSessionForExtend.scheduledEndTime).getTime() <= currentTime.getTime() : false;
+          const canExtend30 = !isSessionExpired && headroomMin >= 30;
+          const canExtend60 = !isSessionExpired && headroomMin >= 60;
+          const cannotExtendAny = isSessionExpired || !canExtend30;
+
+          return (
+            <div>
+              <div style={{ background: '#f8fafc', padding: '12px 16px', borderRadius: 8, border: '1px solid #e2e8f0', marginBottom: 16 }}>
+                <p style={{ margin: '4px 0' }}><b>Mã ca:</b> {selectedSessionForExtend.sessionCode}</p>
+                <p style={{ margin: '4px 0' }}>
+                  <b>Thời gian kết thúc hiện tại:</b> <Tag color="blue" style={{ fontSize: 13, fontWeight: 700 }}>{sessionEndTimeDisplay}</Tag>
+                </p>
+                {nextBooking ? (
+                  <p style={{ margin: '4px 0', color: headroomMin < 60 ? '#b91c1c' : '#475569' }}>
+                    <b>Ca tiếp theo của sân:</b> Khách {nextBooking.customerName || 'đặt trước'} ({nextBooking.startTime} - {nextBooking.endTime})
+                  </p>
+                ) : (
+                  <p style={{ margin: '4px 0', color: '#16a34a' }}>
+                    <b>Lịch sân tiếp theo:</b> Sân còn trống đến hết ngày, thoải mái gia hạn.
+                  </p>
+                )}
+              </div>
+
+              {cannotExtendAny ? (
+                <Alert
+                  message={isSessionExpired ? "Ca chơi đã hết giờ trong quá khứ" : "Không thể gia hạn thêm cho ca này"}
+                  description={
+                    isSessionExpired
+                      ? "Ca chơi này đã kết thúc thời gian thi đấu đăng ký. Hệ thống không cho phép gia hạn thêm cho ca đã hết giờ! Vui lòng bấm 'Trả sân' để thanh toán và kết thúc ca."
+                      : (nextBooking
+                          ? `Sân đã có ca tiếp theo của khách "${nextBooking.customerName || 'đặt trước'}" bắt đầu lúc ${nextBooking.startTime}. Theo quy định, không được phép gia hạn qua giờ của ca sau!`
+                          : 'Không đủ thời lượng tối thiểu 30 phút để gia hạn.')
+                  }
+                  type="error"
+                  showIcon
+                  style={{ marginBottom: 16 }}
+                />
+              ) : (
+                <>
+                  <div style={{ marginBottom: 16 }}>
+                    <label style={{ display: 'block', marginBottom: 8, fontWeight: 600 }}>
+                      Thời gian gia hạn thêm:
+                    </label>
+                    <Radio.Group
+                      value={extendDuration}
+                      onChange={(e) => setExtendDuration(e.target.value)}
+                      buttonStyle="solid"
+                      size="large"
+                    >
+                      <Radio.Button value={30} disabled={!canExtend30}>
+                        + 30 Phút (+50.000 đ)
+                      </Radio.Button>
+                      <Radio.Button value={60} disabled={!canExtend60}>
+                        + 60 Phút (+100.000 đ) {!canExtend60 && '(Trùng ca sau)'}
+                      </Radio.Button>
+                    </Radio.Group>
                   </div>
-                }
-                type="warning"
-                showIcon
-              />
-            )}
-          </div>
-        )}
+
+                  {!canExtend60 && canExtend30 && (
+                    <Alert
+                      message="Giới hạn thời gian gia hạn"
+                      description={`Ca tiếp theo bắt đầu lúc ${nextBooking.startTime}. Sân chỉ còn trống ${headroomMin} phút, do đó chỉ được gia hạn tối đa 30 phút.`}
+                      type="warning"
+                      showIcon
+                      style={{ marginBottom: 16 }}
+                    />
+                  )}
+                </>
+              )}
+
+              {extendConflict && (
+                <Alert
+                  message="Xung đột lịch với ca tiếp theo"
+                  description={extendConflict.message}
+                  type="warning"
+                  showIcon
+                  style={{ marginTop: 12 }}
+                />
+              )}
+            </div>
+          );
+        })()}
       </Modal>
 
       <Modal
-        title="Chuyển Ca Chơi Sang Sân Khác"
+        title="Chuyển Ca Chơi Sang Sân Khác (Đổi Sân)"
         open={switchCourtModalVisible}
         onCancel={() => setSwitchCourtModalVisible(false)}
         onOk={handleSwitchCourtSubmit}
         okText="Chuyển sân"
         cancelText="Hủy"
+        okButtonProps={{ disabled: availableCourtsForSwitch.filter((c) => !c.hasConflict).length === 0 }}
       >
+        {selectedSessionForSwitch && (
+          <div style={{ marginBottom: 16 }}>
+            <div style={{ background: '#f8fafc', padding: '10px 14px', borderRadius: 8, border: '1px solid #e2e8f0', marginBottom: 12 }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
+                <span><b>Mã ca:</b> {selectedSessionForSwitch.sessionCode}</span>
+                <span><b>Khách:</b> {selectedSessionForSwitch.customerDisplayName || selectedSessionForSwitch.bookingId?.customerId?.fullName || 'Khách chơi'}</span>
+              </div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                <span><b>Sân hiện tại:</b> {selectedSessionForSwitch.courtId?.name}</span>
+                {renderCourtTypeTag(selectedSessionForSwitch.courtId?.courtType)}
+              </div>
+            </div>
+
+            <Alert
+              type="info"
+              showIcon
+              message={
+                <span>
+                  Quy tắc đổi sân: Chỉ được phép đổi sang các sân <b>cùng loại ({getCourtTypeName(selectedSessionForSwitch.courtId?.courtType)})</b> và <b>không có lịch đặt trùng giờ</b> trong suốt thời gian chơi còn lại của ca.
+                </span>
+              }
+              style={{ marginBottom: 14 }}
+            />
+
+            {availableCourtsForSwitch.filter((c) => !c.hasConflict).length === 0 && (
+              <Alert
+                type="warning"
+                showIcon
+                message="Không có sân trống phù hợp"
+                description={`Hiện tại tất cả các sân ${getCourtTypeName(selectedSessionForSwitch.courtId?.courtType)} khác đều đang có người chơi hoặc đã có lịch đặt trước trùng với giờ chơi của ca này.`}
+                style={{ marginBottom: 14 }}
+              />
+            )}
+          </div>
+        )}
+
         <Form form={switchCourtForm} layout="vertical">
           <Form.Item
             name="newCourtId"
-            label="Chọn sân mới"
+            label="Chọn sân mới cùng loại"
             rules={[{ required: true, message: 'Vui lòng chọn sân mới!' }]}
           >
-            <Select placeholder="Chọn sân khả dụng...">
+            <Select
+              placeholder={availableCourtsForSwitch.filter((c) => !c.hasConflict).length > 0 ? "Chọn sân khả dụng..." : "Không có sân khả dụng cùng loại"}
+              disabled={availableCourtsForSwitch.filter((c) => !c.hasConflict).length === 0}
+            >
               {availableCourtsForSwitch.map((c) => (
-                <Option key={c._id} value={c._id}>{c.name}</Option>
+                <Option key={c._id} value={c._id} disabled={c.hasConflict}>
+                  {c.name} ({getCourtTypeName(c.courtType)}) {c.hasConflict ? ` [⚠ ${c.conflictReason}]` : ' [✓ Trống]'}
+                </Option>
               ))}
             </Select>
           </Form.Item>
-          <Form.Item name="reason" label="Lý do chuyển sân">
-            <Input placeholder="Ví dụ: Đèn sân chập chờn / Nhường sân ca sau..." />
+          <Form.Item
+            name="reason"
+            label="Lý do chuyển sân"
+            rules={[{ required: true, message: 'Vui lòng nhập lý do đổi sân!' }]}
+          >
+            <Input placeholder="Ví dụ: Đèn sân chập chờn / Khách yêu cầu đổi..." />
           </Form.Item>
         </Form>
       </Modal>
@@ -1659,7 +2387,7 @@ export default function PlayingSessionPage() {
           <div>
             <div style={{ background: '#f9fafb', padding: 14, borderRadius: 8, marginBottom: 16 }}>
               <p style={{ margin: '4px 0' }}><b>Mã ca:</b> {selectedSessionForCheckOut.sessionCode}</p>
-              <p style={{ margin: '4px 0' }}><b>Sân:</b> {selectedSessionForCheckOut.courtId?.name}</p>
+              <p style={{ margin: '4px 0' }}><b>Sân:</b> {selectedSessionForCheckOut.courtName || selectedSessionForCheckOut.courtId?.name || (courtsData.find(c => c._id?.toString() === (selectedSessionForCheckOut.courtId?._id || selectedSessionForCheckOut.courtId)?.toString())?.name) || 'Sân thi đấu'}</p>
               <p style={{ margin: '4px 0' }}><b>Tiền giờ cơ sở:</b> {(selectedSessionForCheckOut.baseCourtFee || 0).toLocaleString('vi-VN')} đ</p>
               {selectedSessionForCheckOut.earlyCheckInFee > 0 && (
                 <p style={{ margin: '4px 0', color: '#f59e0b' }}>
@@ -1682,7 +2410,7 @@ export default function PlayingSessionPage() {
             />
 
             <p style={{ fontSize: 13, color: '#6b7280' }}>
-              Sau khi xác nhận, sân sẽ chuyển sang trạng thái <b>ĐANG DỌN DẸP</b> và hệ thống sẽ tự động tạo hóa đơn thanh toán tại quầy.
+              Sau khi xác nhận, sân sẽ lập tức chuyển sang trạng thái <b>SẴN SÀNG</b> và hệ thống sẽ tự động tạo hóa đơn thanh toán tại quầy.
             </p>
           </div>
         )}
@@ -1745,6 +2473,12 @@ export default function PlayingSessionPage() {
                   <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4, color: '#ea580c' }}>
                     <span>Bồi thường đồ thuê:</span>
                     <span>+ {(checkoutInvoice.sessionDetails.rentalDamageFee).toLocaleString('vi-VN')} đ</span>
+                  </div>
+                )}
+                {checkoutInvoice.sessionDetails?.prepaidDeposit > 0 && (
+                  <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4, color: '#059669', fontWeight: 600 }}>
+                    <span>Đã thanh toán trước (Đặt cọc/Online):</span>
+                    <span>- {(checkoutInvoice.sessionDetails.prepaidDeposit).toLocaleString('vi-VN')} đ</span>
                   </div>
                 )}
                 {Array.isArray(checkoutInvoice.items) && checkoutInvoice.items.length > 0 && (
@@ -1897,7 +2631,7 @@ export default function PlayingSessionPage() {
                 description={
                   <div>
                     <p style={{ margin: '6px 0 10px 0', color: '#7c2d12', fontSize: 13, lineHeight: '20px' }}>
-                      Hệ thống <b>không tự động hủy đơn</b> khi khách đến trễ. Nhân viên vui lòng gọi điện thoại cho khách theo số bên dưới để xác nhận tình trạng. Chỉ khi xác nhận khách chắc chắn không đến, nhân viên mới thực hiện hủy đơn.
+                      Đơn đặt sân sẽ <b>tự động hủy sau 15 phút</b> nếu khách không đến nhận sân. Nhân viên vui lòng gọi điện thoại nhắc khách trước khi hết thời gian giữ sân.
                     </p>
                     <Button
                       type="primary"
@@ -1983,14 +2717,6 @@ export default function PlayingSessionPage() {
               const bCheckInState = getBookingCheckInState(selectedSlotCell.cell.booking, selectedSlotCell.slot);
               return (
                 <>
-                  {bCheckInState.isPast && (
-                    <Alert
-                      message="Ca đấu này đã kết thúc trong quá khứ. Không thể nhận sân."
-                      type="error"
-                      showIcon
-                      style={{ marginBottom: 16 }}
-                    />
-                  )}
                   {bCheckInState.isFuture && (
                     <Alert
                       message="Chưa đến thời gian nhận sân cho ca đấu này. Hệ thống chỉ cho phép nhận sân trước giờ bắt đầu tối đa 15 phút."

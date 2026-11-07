@@ -171,7 +171,7 @@ export default function AppHeader({ collapsed, setCollapsed }) {
     Modal.confirm({
       title: 'Xác nhận đăng xuất',
       icon: <ExclamationCircleOutlined style={{ color: '#ff4d4f' }} />,
-      content: 'Bạn có chắc chắn muốn đăng xuất khỏi hệ thống không?',
+      content: 'Bạn có chắc chắn muốn đăng xuất không?',
       okText: 'Đăng xuất',
       okType: 'danger',
       cancelText: 'Hủy',
@@ -179,10 +179,10 @@ export default function AppHeader({ collapsed, setCollapsed }) {
       onOk: async () => {
         try {
           await logout();
-          message.success('Đăng xuất thành công!');
+          message.success('Đăng xuất thành công.');
           navigate('/login');
         } catch (error) {
-          message.error('Có lỗi xảy ra khi đăng xuất. Vui lòng thử lại.');
+          message.error('Đã có lỗi xảy ra trong quá trình đăng xuất. Vui lòng thử lại.');
         }
       }
     });
