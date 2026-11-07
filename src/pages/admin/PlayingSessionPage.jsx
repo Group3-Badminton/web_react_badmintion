@@ -25,6 +25,7 @@ import {
   Tooltip,
   Badge,
   Segmented,
+  Empty,
   message
 } from 'antd';
 import {
@@ -157,7 +158,17 @@ export default function PlayingSessionPage() {
 
   const getBookingCheckInState = (booking) => {
     if (!booking) return { canCheckIn: false, reason: '' };
-    const bDate = booking.bookingDate ? booking.bookingDate.split('T')[0] : selectedDate;
+    let bDate = selectedDate;
+    if (booking.bookingDate) {
+      if (typeof booking.bookingDate === 'string') {
+        bDate = booking.bookingDate.split('T')[0];
+      } else if (booking.bookingDate instanceof Date) {
+        const y = booking.bookingDate.getFullYear();
+        const m = String(booking.bookingDate.getMonth() + 1).padStart(2, '0');
+        const d = String(booking.bookingDate.getDate()).padStart(2, '0');
+        bDate = `${y}-${m}-${d}`;
+      }
+    }
     const today = getTodayStr();
     if (bDate < today) {
       return { canCheckIn: false, isPast: true, reason: 'Đã qua ngày' };
@@ -165,20 +176,24 @@ export default function PlayingSessionPage() {
     if (bDate > today) {
       return { canCheckIn: false, isFuture: true, reason: 'Chưa tới ngày' };
     }
-    const [eh, em] = (booking.endTime || '00:00').split(':').map(Number);
-    const [sh, sm] = (booking.startTime || '00:00').split(':').map(Number);
-    const sMin = sh * 60 + sm;
-    const eMin = eh * 60 + em;
+
+    const startTimeStr = booking.startTime || (Array.isArray(booking.items) && booking.items[0]?.startTime) || '00:00';
+    const endTimeStr = booking.endTime || (Array.isArray(booking.items) && booking.items[0]?.endTime) || '00:00';
+
+    const [sh, sm] = startTimeStr.split(':').map(Number);
+    const [eh, em] = endTimeStr.split(':').map(Number);
+    const sMin = (sh || 0) * 60 + (sm || 0);
+    const eMin = (eh || 0) * 60 + (em || 0);
     const nowMin = currentTime.getHours() * 60 + currentTime.getMinutes();
 
     if (nowMin >= eMin) {
-      return { canCheckIn: false, isPast: true, reason: 'Đã qua giờ' };
+      return { canCheckIn: false, isPast: true, startTime: startTimeStr, endTime: endTimeStr, reason: 'Đã qua giờ' };
     }
     if (sMin - nowMin > 15) {
       const earlyMin = sMin - nowMin;
-      return { canCheckIn: true, isEarly: true, earlyMinutes: earlyMin, reason: `Đến sớm ${earlyMin}p` };
+      return { canCheckIn: true, isEarly: true, earlyMinutes: earlyMin, startTime: startTimeStr, endTime: endTimeStr, reason: `Đến sớm ${earlyMin}p` };
     }
-    return { canCheckIn: true, isEarly: false };
+    return { canCheckIn: true, isEarly: false, startTime: startTimeStr, endTime: endTimeStr };
   };
 
 
@@ -350,6 +365,11 @@ export default function PlayingSessionPage() {
   const handleCheckInDirectFromBooking = async (bookingId, courtId, forceAcceptEarly = false) => {
     if (selectedSlotCell?.cell?.booking) {
       const bState = getBookingCheckInState(selectedSlotCell.cell.booking, selectedSlotCell.slot);
+      if (bState.isEarly && !forceAcceptEarly) {
+        setBookingModalVisible(false);
+        openCheckInModal(selectedSlotCell.court, 'booking', bookingId);
+        return;
+      }
       if (!bState.canCheckIn) {
         if (bState.isPast) {
           message.warning('Ca đấu này đã kết thúc trong quá khứ! Không thể nhận sân.');
@@ -409,7 +429,7 @@ export default function PlayingSessionPage() {
     }
   };
 
-  const openCheckInModal = async (court = null, defaultType = 'walkin') => {
+  const openCheckInModal = async (court = null, defaultType = 'walkin', defaultBookingId = null) => {
     setSelectedCourtForCheckIn(court);
     setCheckInType(defaultType);
     setEarlyCheckInAlert(null);
@@ -439,6 +459,7 @@ export default function PlayingSessionPage() {
 
     const initValues = {
       courtId: court ? court._id : (firstAvailableCourt?._id || matrixData.courts[0]?._id),
+      bookingId: defaultBookingId || undefined,
       walkInCustomerName: '',
       walkInCustomerPhone: ''
     };
@@ -460,7 +481,8 @@ export default function PlayingSessionPage() {
           return;
         }
       } else if (checkInType === 'booking') {
-        const booking = confirmedBookings.find(b => b._id === values.bookingId);
+        const booking = confirmedBookings.find(b => String(b._id) === String(values.bookingId))
+          || (matrixData.bookings || []).find(b => String(b._id) === String(values.bookingId));
         if (booking) {
           const bState = getBookingCheckInState(booking);
           if (!bState.canCheckIn) {
@@ -474,7 +496,7 @@ export default function PlayingSessionPage() {
         }
       }
 
-      const isEarlyAccepted = typeof forceAcceptEarly === 'boolean' ? forceAcceptEarly : Boolean(acceptEarlyCheckInState);
+      const isEarlyAccepted = forceAcceptEarly === true || Boolean(acceptEarlyCheckInState);
       const targetCourtId = values.courtId || selectedCourtForCheckIn?._id;
 
       const payload = {
@@ -510,6 +532,14 @@ export default function PlayingSessionPage() {
   };
 
   const openExtendModal = (session) => {
+    if (!session) return;
+    if (session.scheduledEndTime) {
+      const endMs = new Date(session.scheduledEndTime).getTime();
+      if (endMs <= currentTime.getTime()) {
+        message.warning('Ca chơi này đã hết giờ trong quá khứ, không thể gia hạn thêm! Vui lòng thực hiện Trả sân & Xuất hóa đơn.');
+        return;
+      }
+    }
     setSelectedSessionForExtend(session);
     setExtendConflict(null);
 
@@ -669,9 +699,36 @@ export default function PlayingSessionPage() {
     }
   };
 
-  const openCheckOutModal = (session) => {
-    setSelectedSessionForCheckOut(session);
+  const openCheckOutModal = async (session, court = null) => {
+    if (!session) return;
+    const courtIdStr = (court?._id || session.courtId?._id || session.courtId)?.toString();
+    const courtObj = court 
+      || (typeof session.courtId === 'object' && session.courtId?.name ? session.courtId : null)
+      || courtsData.find(c => c._id?.toString() === courtIdStr)
+      || matrixData.courts?.find(c => c._id?.toString() === courtIdStr);
+
+    const initialSession = {
+      ...session,
+      courtName: courtObj?.name || session.courtName || session.courtId?.name || '',
+      courtId: courtObj || session.courtId
+    };
+    setSelectedSessionForCheckOut(initialSession);
     setCheckOutModalVisible(true);
+
+    if (session._id) {
+      try {
+        const res = await sessionService.getSessionById(session._id);
+        const fullSession = res?.data || res;
+        if (fullSession && fullSession._id) {
+          setSelectedSessionForCheckOut((prev) => ({
+            ...fullSession,
+            courtName: fullSession.courtId?.name || courtObj?.name || prev?.courtName || 'Sân thi đấu'
+          }));
+        }
+      } catch (e) {
+        console.error('Lỗi khi tải chi tiết ca chơi:', e);
+      }
+    }
   };
 
   const handleCheckOutSubmit = async () => {
@@ -1040,7 +1097,17 @@ export default function PlayingSessionPage() {
                     style={{ fontSize: 10, lineHeight: '18px', padding: '0 5px', margin: 0, fontWeight: 700 }}
                   >
                     <PlayCircleOutlined style={{ marginRight: 3 }} />
-                    {cell.booking?.startTime && cell.booking?.endTime ? `${cell.booking.startTime} - ${cell.booking.endTime}` : 'Đang chơi'}
+                    {(() => {
+                      if (cell.session?.scheduledStartTime && cell.session?.scheduledEndTime) {
+                        const sStr = dayjs(cell.session.scheduledStartTime).format('HH:mm');
+                        const eStr = dayjs(cell.session.scheduledEndTime).format('HH:mm');
+                        return `${sStr} - ${eStr}`;
+                      }
+                      if (cell.booking?.startTime && cell.booking?.endTime) {
+                        return `${cell.booking.startTime} - ${cell.booking.endTime}`;
+                      }
+                      return 'Đang chơi';
+                    })()}
                   </Tag>
                   {remainingMin !== null && (
                     <span style={{
@@ -1085,13 +1152,15 @@ export default function PlayingSessionPage() {
                 </div>
               </div>
               <div style={{ display: 'flex', gap: 4, marginTop: 4 }} onClick={(e) => e.stopPropagation()}>
-                <Button
-                  size="small"
-                  style={{ flex: 1, fontSize: 11, height: 22, padding: '0 2px', fontWeight: 600, whiteSpace: 'nowrap' }}
-                  onClick={() => openExtendModal(cell.session || { courtId: court._id })}
-                >
-                  Gia hạn
-                </Button>
+                {!isOvertime && (
+                  <Button
+                    size="small"
+                    style={{ flex: 1, fontSize: 11, height: 22, padding: '0 2px', fontWeight: 600, whiteSpace: 'nowrap' }}
+                    onClick={() => openExtendModal(cell.session || { courtId: court._id }, court)}
+                  >
+                    Gia hạn
+                  </Button>
+                )}
                 <Button
                   size="small"
                   type="primary"
@@ -1105,7 +1174,7 @@ export default function PlayingSessionPage() {
                     fontWeight: 700,
                     whiteSpace: 'nowrap'
                   }}
-                  onClick={() => openCheckOutModal(cell.session || { courtId: court._id })}
+                  onClick={() => openCheckOutModal(cell.session || { courtId: court._id }, court)}
                 >
                   Trả sân
                 </Button>
@@ -1143,9 +1212,7 @@ export default function PlayingSessionPage() {
   const handleBookingCardClick = (b, court) => {
     const targetCourt = court || courtsData.find(c => c._id?.toString() === (b.courtId?._id || b.courtId)?.toString());
     if (b.status === 'CONFIRMED') {
-      openCheckInModal(targetCourt);
-      setCheckInType('booking');
-      checkInForm.setFieldsValue({ bookingId: b._id });
+      openCheckInModal(targetCourt, 'booking', b._id);
     } else {
       message.info(`Đơn đặt ${b.bookingCode} - ${b.customerName || b.customer?.fullName || 'Khách'} (${b.startTime} - ${b.endTime})`);
     }
@@ -1231,19 +1298,35 @@ export default function PlayingSessionPage() {
               </Space>
             </div>
 
-            <Row gutter={[16, 16]} style={{ display: 'flex', flexWrap: 'wrap' }}>
-              {courtsData.map((court) => {
+            {courtsData.length === 0 ? (
+              <div style={{ textAlign: 'center', padding: '60px 0', background: '#ffffff', borderRadius: 8, border: '1px solid #f1f5f9' }}>
+                <Empty description="Không có sân nào đang hoạt động hoặc chưa kết nối được máy chủ" />
+              </div>
+            ) : (
+              <Row gutter={[16, 16]} style={{ display: 'flex', flexWrap: 'wrap' }}>
+                {courtsData.map((court) => {
                 const session = court.activeSession;
-                const nearEnd = session && isSessionNearEnd(session);
+                const isExpired = session?.scheduledEndTime ? new Date(session.scheduledEndTime).getTime() <= currentTime.getTime() : false;
+                const nearEnd = session && !isExpired && isSessionNearEnd(session);
 
                 let borderColor = '#e2e8f0';
                 let badgeColor = 'blue';
                 let statusText = 'SẴN SÀNG';
 
                 if (court.operationalStatus === 'IN_USE') {
-                  borderColor = nearEnd ? '#ef4444' : '#10b981';
-                  badgeColor = nearEnd ? 'volcano' : 'green';
-                  statusText = nearEnd ? 'SẮP HẾT GIỜ' : 'ĐANG CHƠI';
+                  if (isExpired) {
+                    borderColor = '#ef4444';
+                    badgeColor = 'error';
+                    statusText = 'HẾT GIỜ';
+                  } else if (nearEnd) {
+                    borderColor = '#f97316';
+                    badgeColor = 'volcano';
+                    statusText = 'SẮP HẾT GIỜ';
+                  } else {
+                    borderColor = '#10b981';
+                    badgeColor = 'green';
+                    statusText = 'ĐANG CHƠI';
+                  }
                 } else if (court.status === 'INACTIVE') {
                   borderColor = '#9ca3af';
                   badgeColor = 'default';
@@ -1286,8 +1369,8 @@ export default function PlayingSessionPage() {
                         <div style={{ display: 'flex', flexDirection: 'column', height: '100%', justifyContent: 'space-between' }}>
                           <div>
                             <div style={{
-                              background: nearEnd ? '#fee2e2' : '#f0fdf4',
-                              border: `1px solid ${nearEnd ? '#fca5a5' : '#bbf7d0'}`,
+                              background: isExpired ? '#fef2f2' : (nearEnd ? '#fee2e2' : '#f0fdf4'),
+                              border: `1px solid ${isExpired ? '#fca5a5' : (nearEnd ? '#fca5a5' : '#bbf7d0')}`,
                               borderRadius: 8,
                               padding: '8px 12px',
                               marginBottom: 10,
@@ -1296,15 +1379,15 @@ export default function PlayingSessionPage() {
                               justifyContent: 'space-between'
                             }}>
                               <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                                <ClockCircleOutlined style={{ color: nearEnd ? '#dc2626' : '#16a34a', fontSize: 15 }} />
-                                <span style={{ fontSize: 11, fontWeight: 700, color: nearEnd ? '#991b1b' : '#166534', textTransform: 'uppercase' }}>
-                                  {nearEnd ? 'Sắp hết giờ' : 'Thời gian còn'}
+                                <ClockCircleOutlined style={{ color: isExpired ? '#dc2626' : (nearEnd ? '#dc2626' : '#16a34a'), fontSize: 15 }} />
+                                <span style={{ fontSize: 11, fontWeight: 700, color: isExpired ? '#991b1b' : (nearEnd ? '#991b1b' : '#166534'), textTransform: 'uppercase' }}>
+                                  {isExpired ? 'Đã hết giờ' : (nearEnd ? 'Sắp hết giờ' : 'Thời gian còn')}
                                 </span>
                               </div>
                               <div style={{
                                 fontSize: 16,
                                 fontWeight: 800,
-                                color: nearEnd ? '#dc2626' : '#15803d',
+                                color: isExpired ? '#dc2626' : (nearEnd ? '#dc2626' : '#15803d'),
                                 fontFamily: 'monospace'
                               }}>
                                 {formatCountdown(session.scheduledEndTime)}
@@ -1358,22 +1441,24 @@ export default function PlayingSessionPage() {
                               >
                                 + Dịch vụ / POS
                               </Button>
-                              <Button
-                                type="primary"
-                                size="small"
-                                icon={<FieldTimeOutlined />}
-                                style={{ flex: 1, background: '#2563eb', borderColor: '#2563eb', fontWeight: 600, fontSize: 12 }}
-                                onClick={() => openExtendModal(session)}
-                              >
-                                + Gia hạn
-                              </Button>
+                              {!isExpired && (
+                                <Button
+                                  type="primary"
+                                  size="small"
+                                  icon={<FieldTimeOutlined />}
+                                  style={{ flex: 1, background: '#2563eb', borderColor: '#2563eb', fontWeight: 600, fontSize: 12 }}
+                                  onClick={() => openExtendModal(session)}
+                                >
+                                  + Gia hạn
+                                </Button>
+                              )}
                             </div>
                             <div style={{ display: 'flex', gap: 6 }}>
                               <Button
                                 size="small"
                                 icon={<SwapOutlined />}
                                 onClick={() => openSwitchCourtModal(session)}
-                                style={{ flex: 1, fontSize: 12 }}
+                                style={{ flex: isExpired ? 'none' : 1, width: isExpired ? '80px' : 'auto', fontSize: 12 }}
                               >
                                 Đổi sân
                               </Button>
@@ -1383,9 +1468,9 @@ export default function PlayingSessionPage() {
                                 danger
                                 icon={<CheckOutlined />}
                                 onClick={() => openCheckOutModal(session)}
-                                style={{ flex: 1, fontSize: 12, fontWeight: 600 }}
+                                style={{ flex: 1, fontSize: 12, fontWeight: 700 }}
                               >
-                                Trả sân
+                                Trả sân {isExpired && '& Tính tiền'}
                               </Button>
                             </div>
                           </div>
@@ -1419,7 +1504,8 @@ export default function PlayingSessionPage() {
                   </Col>
                 );
               })}
-            </Row>
+              </Row>
+            )}
           </div>
         </Tabs.TabPane>
 
@@ -1670,15 +1756,18 @@ export default function PlayingSessionPage() {
                                   const courtCells = matrixData.matrix[court._id] || [];
                                   const cell = courtCells[slotIndex] || { status: 'AVAILABLE' };
 
-                                  const bookingKey = cell.booking?._id
-                                    ? `${cell.booking._id}_${cell.booking.itemId || court._id}`
-                                    : (cell.session ? `session_${cell.session._id}` : null);
+                                  const getCellMergeKey = (c) => {
+                                    if (!c) return null;
+                                    if (c.session?._id) return `session_${c.session._id}`;
+                                    if (c.booking?._id) return `booking_${c.booking._id}_${c.booking.itemId || court._id}`;
+                                    return null;
+                                  };
+
+                                  const bookingKey = getCellMergeKey(cell);
 
                                   if (bookingKey) {
                                     const prevCell = slotIndex > 0 ? courtCells[slotIndex - 1] : null;
-                                    const prevKey = prevCell?.booking?._id
-                                      ? `${prevCell.booking._id}_${prevCell.booking.itemId || court._id}`
-                                      : (prevCell?.session ? `session_${prevCell.session._id}` : null);
+                                    const prevKey = getCellMergeKey(prevCell);
                                     if (prevKey === bookingKey) {
                                       return null;
                                     }
@@ -1686,9 +1775,7 @@ export default function PlayingSessionPage() {
                                     let spanCount = 1;
                                     for (let nextIdx = slotIndex + 1; nextIdx < matrixData.timeSlots.length; nextIdx++) {
                                       const nextCell = courtCells[nextIdx];
-                                      const nextKey = nextCell?.booking?._id
-                                        ? `${nextCell.booking._id}_${nextCell.booking.itemId || court._id}`
-                                        : (nextCell?.session ? `session_${nextCell.session._id}` : null);
+                                      const nextKey = getCellMergeKey(nextCell);
                                       if (nextKey === bookingKey) {
                                         spanCount++;
                                       } else {
@@ -1828,9 +1915,11 @@ export default function PlayingSessionPage() {
                 <Select placeholder="Chọn khách hàng hoặc mã đơn..." onChange={() => setAcceptEarlyCheckInState(false)}>
                   {confirmedBookings.map((b) => {
                     const bState = getBookingCheckInState(b);
+                    const bStart = bState.startTime || b.startTime || (b.items && b.items[0]?.startTime) || '--';
+                    const bEnd = bState.endTime || b.endTime || (b.items && b.items[0]?.endTime) || '--';
                     return (
                       <Option key={b._id} value={b._id} disabled={!bState.canCheckIn}>
-                        {b.bookingCode} - {b.customerId?.fullName || b.customerDisplayName || 'Khách đặt'} ({b.startTime} - {b.endTime} tại {b.courtId?.name || b.courtId?.courtName}) {!bState.canCheckIn ? `— [${bState.reason}]` : bState.isEarly ? `— [Đến sớm ${bState.earlyMinutes}p]` : ''}
+                        {b.bookingCode} - {b.customerId?.fullName || b.customerDisplayName || 'Khách đặt'} ({bStart} - {bEnd} tại {b.courtId?.name || b.courtId?.courtName}) {!bState.canCheckIn ? `— [${bState.reason}]` : bState.isEarly ? `— [Đến sớm ${bState.earlyMinutes}p]` : ''}
                       </Option>
                     );
                   })}
@@ -1838,7 +1927,9 @@ export default function PlayingSessionPage() {
               </Form.Item>
 
               {(() => {
-                const selB = confirmedBookings.find(b => b._id === selectedBookingId);
+                const currentBookingVal = selectedBookingId || checkInForm.getFieldValue('bookingId');
+                const selB = confirmedBookings.find(b => String(b._id) === String(currentBookingVal))
+                  || (matrixData.bookings || []).find(b => String(b._id) === String(currentBookingVal));
                 const bState = selB ? getBookingCheckInState(selB) : null;
                 if (!bState || !bState.isEarly) return null;
                 const courtType = normalizeCourtType(selB?.courtId?.courtType);
@@ -1857,6 +1948,8 @@ export default function PlayingSessionPage() {
                 if (isWeekend) rateTag = <Tag color="red">Cuối tuần</Tag>;
                 else if (isPeak) rateTag = <Tag color="orange">Giờ vàng tối</Tag>;
                 const earlyFee = Math.round((hourlyRate / 60) * bState.earlyMinutes);
+                const bStartDisplay = bState.startTime || selB.startTime || (selB.items && selB.items[0]?.startTime) || '--';
+                const bEndDisplay = bState.endTime || selB.endTime || (selB.items && selB.items[0]?.endTime) || '--';
                 return (
                   <Alert
                     type="warning"
@@ -1864,7 +1957,7 @@ export default function PlayingSessionPage() {
                     message={`Khách đến sớm hơn ${bState.earlyMinutes} phút`}
                     description={
                       <div>
-                        <div>Ca đặt dự kiến: <b>{selB.startTime} - {selB.endTime}</b>. Giờ hiện tại: <b>{currentTime.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</b>.</div>
+                        <div>Ca đặt dự kiến: <b>{bStartDisplay} - {bEndDisplay}</b>. Giờ hiện tại: <b>{currentTime.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</b>.</div>
                         <div style={{ marginTop: 4, display: 'flex', alignItems: 'center', gap: 6 }}>
                           <span>Áp dụng khung giá:</span> {rateTag} <span>({hourlyRate.toLocaleString('vi-VN')} đ/h)</span>
                         </div>
@@ -2125,9 +2218,10 @@ export default function PlayingSessionPage() {
             headroomMin = Math.max(0, nbStartMin - sessionEndMin);
           }
 
-          const canExtend30 = headroomMin >= 30;
-          const canExtend60 = headroomMin >= 60;
-          const cannotExtendAny = !canExtend30;
+          const isSessionExpired = selectedSessionForExtend.scheduledEndTime ? new Date(selectedSessionForExtend.scheduledEndTime).getTime() <= currentTime.getTime() : false;
+          const canExtend30 = !isSessionExpired && headroomMin >= 30;
+          const canExtend60 = !isSessionExpired && headroomMin >= 60;
+          const cannotExtendAny = isSessionExpired || !canExtend30;
 
           return (
             <div>
@@ -2149,11 +2243,13 @@ export default function PlayingSessionPage() {
 
               {cannotExtendAny ? (
                 <Alert
-                  message="Không thể gia hạn thêm cho ca này"
+                  message={isSessionExpired ? "Ca chơi đã hết giờ trong quá khứ" : "Không thể gia hạn thêm cho ca này"}
                   description={
-                    nextBooking
-                      ? `Sân đã có ca tiếp theo của khách "${nextBooking.customerName || 'đặt trước'}" bắt đầu lúc ${nextBooking.startTime}. Theo quy định, không được phép gia hạn qua giờ của ca sau!`
-                      : 'Không đủ thời lượng tối thiểu 30 phút để gia hạn.'
+                    isSessionExpired
+                      ? "Ca chơi này đã kết thúc thời gian thi đấu đăng ký. Hệ thống không cho phép gia hạn thêm cho ca đã hết giờ! Vui lòng bấm 'Trả sân' để thanh toán và kết thúc ca."
+                      : (nextBooking
+                          ? `Sân đã có ca tiếp theo của khách "${nextBooking.customerName || 'đặt trước'}" bắt đầu lúc ${nextBooking.startTime}. Theo quy định, không được phép gia hạn qua giờ của ca sau!`
+                          : 'Không đủ thời lượng tối thiểu 30 phút để gia hạn.')
                   }
                   type="error"
                   showIcon
@@ -2291,7 +2387,7 @@ export default function PlayingSessionPage() {
           <div>
             <div style={{ background: '#f9fafb', padding: 14, borderRadius: 8, marginBottom: 16 }}>
               <p style={{ margin: '4px 0' }}><b>Mã ca:</b> {selectedSessionForCheckOut.sessionCode}</p>
-              <p style={{ margin: '4px 0' }}><b>Sân:</b> {selectedSessionForCheckOut.courtId?.name}</p>
+              <p style={{ margin: '4px 0' }}><b>Sân:</b> {selectedSessionForCheckOut.courtName || selectedSessionForCheckOut.courtId?.name || (courtsData.find(c => c._id?.toString() === (selectedSessionForCheckOut.courtId?._id || selectedSessionForCheckOut.courtId)?.toString())?.name) || 'Sân thi đấu'}</p>
               <p style={{ margin: '4px 0' }}><b>Tiền giờ cơ sở:</b> {(selectedSessionForCheckOut.baseCourtFee || 0).toLocaleString('vi-VN')} đ</p>
               {selectedSessionForCheckOut.earlyCheckInFee > 0 && (
                 <p style={{ margin: '4px 0', color: '#f59e0b' }}>
@@ -2621,14 +2717,6 @@ export default function PlayingSessionPage() {
               const bCheckInState = getBookingCheckInState(selectedSlotCell.cell.booking, selectedSlotCell.slot);
               return (
                 <>
-                  {bCheckInState.isPast && (
-                    <Alert
-                      message="Ca đấu này đã kết thúc trong quá khứ. Không thể nhận sân."
-                      type="error"
-                      showIcon
-                      style={{ marginBottom: 16 }}
-                    />
-                  )}
                   {bCheckInState.isFuture && (
                     <Alert
                       message="Chưa đến thời gian nhận sân cho ca đấu này. Hệ thống chỉ cho phép nhận sân trước giờ bắt đầu tối đa 15 phút."
