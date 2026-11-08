@@ -11,6 +11,8 @@ import {
   Tag,
   Divider,
   Spin,
+  Modal,
+  Descriptions,
   message,
 } from "antd";
 import {
@@ -18,6 +20,8 @@ import {
   MailOutlined,
   PhoneOutlined,
   SaveOutlined,
+  EditOutlined,
+  CheckCircleOutlined,
 } from "@ant-design/icons";
 import { userService } from "../../services/userService";
 import { useAuth } from "../../context/AuthContext";
@@ -31,8 +35,9 @@ export default function ProfilePage() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [profileData, setProfileData] = useState(null);
+  const [isEditModalOpen, setIsEditModalOpen] = useState(false);
 
-  // 1. Tải thông tin cá nhân mới nhất từ Backend
+  // 1. Tải thông tin cá nhân mới nhất từ Backend (UC-5.1 & UC-5.3)
   useEffect(() => {
     fetchProfile();
   }, []);
@@ -51,25 +56,26 @@ export default function ProfilePage() {
       }
     } catch (err) {
       message.error(
-        err.response?.data?.message || "Không thể tải thông tin hồ sơ."
+        err.response?.data?.message || "Không thể tải thông tin hồ sơ của bạn. Vui lòng thử lại sau."
       );
     } finally {
       setLoading(false);
     }
   };
 
-  // 2. Cập nhật thông tin (Họ tên & Số điện thoại)
+  // 2. Cập nhật thông tin: Họ tên, Email và Số điện thoại (UC-05)
   const onFinishUpdate = async (values) => {
     setSaving(true);
     try {
       const res = await userService.updateProfile({
         fullName: values.fullName,
+        email: values.email,
         phone: values.phone,
       });
-
       if (res.success && res.data) {
-        message.success("Cập nhật thông tin cá nhân thành công!");
+        message.success("Thông tin hồ sơ của bạn đã được cập nhật thành công.");
         setProfileData(res.data);
+        setIsEditModalOpen(false);
 
         // Cập nhật thông tin mới vào AuthContext & localStorage để Header đổi tên theo
         const updatedUser = { ...user, ...res.data };
@@ -78,7 +84,7 @@ export default function ProfilePage() {
       }
     } catch (err) {
       message.error(
-        err.response?.data?.message || err.message || "Cập nhật thất bại."
+        err.response?.data?.message || err.message || "Không thể cập nhật hồ sơ vào lúc này. Vui lòng thử lại sau."
       );
     } finally {
       setSaving(false);
@@ -118,118 +124,165 @@ export default function ProfilePage() {
   }
 
   return (
-    <div style={{ width: "100%", paddingBottom: 24 }}>
+    <div style={{ maxWidth: 650, margin: "0 auto", paddingBottom: 24 }}>
       {/* Tiêu đề trang */}
-      <div style={{ marginBottom: 16 }}>
-        <Title level={3} style={{ margin: "0 0 2px", color: "#0f172a" }}>
+      <div style={{ textAlign: "center", marginBottom: 20 }}>
+        <Title level={3} style={{ margin: "0 0 4px", color: "#0f172a" }}>
           Hồ Sơ Cá Nhân
         </Title>
         <Text type="secondary" style={{ fontSize: 13 }}>
-          Quản lý và cập nhật thông tin tài khoản cá nhân của bạn
+          Thông tin tài khoản và định danh người dùng
         </Text>
       </div>
 
-      {/* Khung chính Full Width & Thu gọn giãn cách */}
+      {/* Thẻ hiển thị hồ sơ cá nhân nhỏ gọn, thanh lịch */}
       <Card
+        bordered={false}
         style={{
-          width: "100%",
-          borderRadius: 14,
-          boxShadow: "0 2px 12px rgba(0,0,0,0.04)",
-          border: "1px solid #f0f0f0",
+          borderRadius: 16,
+          boxShadow: "0 4px 20px rgba(0, 0, 0, 0.05)",
+          overflow: "hidden"
         }}
-        bodyStyle={{ padding: "20px 28px" }}
+        styles={{ body: { padding: "32px 28px" } }}
       >
-        {/* Phần Avatar & Tên tóm tắt */}
-        <div style={{ textAlign: "center", marginBottom: 6 }}>
+        {/* Avatar & Header Profile */}
+        <div style={{ textAlign: "center", marginBottom: 20 }}>
           <Avatar
-            size={80}
+            size={88}
             icon={<UserOutlined />}
             style={{
               backgroundColor:
                 profileData?.role === ROLES.ADMIN ? "#EF4444" : "#009B60",
-              fontSize: 38,
-              marginBottom: 10,
-              border: "3px solid #e6f7ef",
-              boxShadow: "0 3px 10px rgba(0, 155, 96, 0.15)",
+              fontSize: 42,
+              marginBottom: 12,
+              border: "4px solid #f1f5f9",
+              boxShadow: "0 4px 14px rgba(0, 0, 0, 0.1)",
             }}
           />
-          <Title level={4} style={{ margin: "0 0 6px", fontSize: 18 }}>
+          <Title level={4} style={{ margin: "0 0 8px", fontSize: 20 }}>
             {profileData?.fullName || "Người dùng"}
           </Title>
-          <div style={{ display: "flex", justifyContent: "center", gap: 8, flexWrap: "wrap" }}>
+          <div style={{ display: "flex", justifyContent: "center", gap: 8, alignItems: "center" }}>
             {getRoleTag(profileData?.role)}
-            <Tag color="green" style={{ borderRadius: 10, padding: "2px 8px" }}>
-              ● Đang hoạt động
+            <Tag color="green" icon={<CheckCircleOutlined />} style={{ borderRadius: 10, padding: "2px 8px" }}>
+              Đang hoạt động
             </Tag>
           </div>
         </div>
 
-        <Divider style={{ margin: "16px 0" }} />
+        <Divider style={{ margin: "20px 0" }} />
 
-        {/* Form nhập liệu tinh gọn */}
+        {/* Bảng chi tiết thông tin */}
+        <Descriptions
+          column={1}
+          bordered
+          size="middle"
+          style={{ background: "#fafafa", borderRadius: 8, overflow: "hidden" }}
+        >
+          <Descriptions.Item label={<strong>Họ và tên</strong>}>
+            <Text strong>{profileData?.fullName || "—"}</Text>
+          </Descriptions.Item>
+
+          <Descriptions.Item label={<strong>Địa chỉ Email</strong>}>
+            <Text>{profileData?.email || "—"}</Text>
+          </Descriptions.Item>
+
+          <Descriptions.Item label={<strong>Số điện thoại</strong>}>
+            <Text>{profileData?.phone || "—"}</Text>
+          </Descriptions.Item>
+        </Descriptions>
+
+        {/* Nút mở Modal Chỉnh Sửa */}
+        <div style={{ textAlign: "center", marginTop: 24 }}>
+          <Button
+            type="primary"
+            icon={<EditOutlined />}
+            onClick={() => {
+              form.setFieldsValue({
+                fullName: profileData?.fullName,
+                email: profileData?.email,
+                phone: profileData?.phone,
+              });
+              setIsEditModalOpen(true);
+            }}
+            style={{
+              background: "#009B60",
+              borderColor: "#009B60",
+              borderRadius: 8,
+              fontWeight: 600,
+              height: 40,
+              padding: "0 32px",
+              boxShadow: "0 3px 10px rgba(0, 155, 96, 0.2)",
+            }}
+          >
+            Chỉnh Sửa Hồ Sơ
+          </Button>
+        </div>
+      </Card>
+
+      {/* Modal cập nhật hồ sơ cá nhân */}
+      <Modal
+        title="Chỉnh sửa thông tin hồ sơ"
+        open={isEditModalOpen}
+        onCancel={() => setIsEditModalOpen(false)}
+        footer={null}
+        destroyOnClose
+        centered
+        width={500}
+      >
         <Form
           form={form}
           layout="vertical"
           onFinish={onFinishUpdate}
-          size="middle"
-          requiredMark={false}
+          style={{ marginTop: 16 }}
         >
-          <Row gutter={[20, 0]}>
-            {/* Họ và tên */}
-            <Col xs={24} md={12}>
-              <Form.Item
-                name="fullName"
-                label={<strong>Họ và tên</strong>}
-                rules={[{ required: true, message: "Vui lòng nhập họ và tên!" }]}
-                style={{ marginBottom: 14 }}
-              >
-                <Input
-                  prefix={<UserOutlined style={{ color: "#94a3b8" }} />}
-                  placeholder="Nhập họ và tên"
-                  style={{ borderRadius: 6, height: 40 }}
-                />
-              </Form.Item>
-            </Col>
+          <Form.Item
+            name="fullName"
+            label="Họ và tên"
+            rules={[{ required: true, message: "Vui lòng nhập họ và tên!" }]}
+          >
+            <Input
+              prefix={<UserOutlined style={{ color: "#94a3b8" }} />}
+              placeholder="Nhập họ và tên đầy đủ"
+              style={{ height: 40, borderRadius: 6 }}
+            />
+          </Form.Item>
 
-            {/* Số điện thoại */}
-            <Col xs={24} md={12}>
-              <Form.Item
-                name="phone"
-                label={<strong>Số điện thoại liên hệ</strong>}
-                rules={[
-                  {
-                    pattern: /(0[3|5|7|8|9])+([0-9]{8})\b/,
-                    message: "Số điện thoại phải gồm 10 chữ số hợp lệ!",
-                  },
-                ]}
-                style={{ marginBottom: 14 }}
-              >
-                <Input
-                  prefix={<PhoneOutlined style={{ color: "#94a3b8" }} />}
-                  placeholder="VD: 0912345678"
-                  style={{ borderRadius: 6, height: 40 }}
-                />
-              </Form.Item>
-            </Col>
+          <Form.Item
+            name="email"
+            label="Địa chỉ Email liên hệ"
+            rules={[
+              { required: true, message: "Vui lòng nhập Email!" },
+              { type: "email", message: "Định dạng Email không hợp lệ!" }
+            ]}
+            extra="Dùng để nhận mã OTP và các thông báo hệ thống."
+          >
+            <Input
+              prefix={<MailOutlined style={{ color: "#94a3b8" }} />}
+              placeholder="VD: user@gmail.com"
+              style={{ height: 40, borderRadius: 6 }}
+            />
+          </Form.Item>
 
-            {/* Email (Chỉ đọc) */}
-            <Col xs={24}>
-              <Form.Item
-                name="email"
-                label={<strong>Địa chỉ Email (Định danh tài khoản)</strong>}
-                style={{ marginBottom: 14 }}
-              >
-                <Input
-                  disabled
-                  prefix={<MailOutlined style={{ color: "#94a3b8" }} />}
-                  style={{ borderRadius: 6, background: "#f8fafc", height: 40 }}
-                />
-              </Form.Item>
-            </Col>
-          </Row>
+          <Form.Item
+            name="phone"
+            label="Số điện thoại"
+            rules={[
+              { required: true, message: "Vui lòng nhập số điện thoại!" },
+              { pattern: /(0[3|5|7|8|9])+([0-9]{8})\b/, message: "Số điện thoại phải gồm 10 chữ số hợp lệ!" }
+            ]}
+          >
+            <Input
+              prefix={<PhoneOutlined style={{ color: "#94a3b8" }} />}
+              placeholder="VD: 0912345678"
+              style={{ height: 40, borderRadius: 6 }}
+            />
+          </Form.Item>
 
-          {/* Nút lưu thay đổi */}
-          <div style={{ textAlign: "center", marginTop: 12 }}>
+          <Form.Item style={{ marginBottom: 0, textAlign: "right", marginTop: 24 }}>
+            <Button onClick={() => setIsEditModalOpen(false)} style={{ marginRight: 8 }}>
+              Hủy
+            </Button>
             <Button
               type="primary"
               htmlType="submit"
@@ -240,17 +293,13 @@ export default function ProfilePage() {
                 borderColor: "#009B60",
                 borderRadius: 6,
                 fontWeight: 600,
-                height: 42,
-                fontSize: 15,
-                padding: "0 36px",
-                boxShadow: "0 3px 10px rgba(0, 155, 96, 0.2)",
               }}
             >
               Lưu Thay Đổi
             </Button>
-          </div>
+          </Form.Item>
         </Form>
-      </Card>
+      </Modal>
     </div>
   );
 }

@@ -1,3 +1,4 @@
+// eslint-disable-next-line no-unused-vars
 import React from 'react';
 import { Layout, Menu } from 'antd';
 import {
@@ -12,7 +13,9 @@ import {
   PlayCircleOutlined,
   ShoppingCartOutlined,
   TagOutlined,
-  FileTextOutlined
+  FileTextOutlined,
+  FolderOutlined,
+  BellOutlined
 } from '@ant-design/icons';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
@@ -30,13 +33,18 @@ export default function AppSidebar({ collapsed }) {
       return [
         {
           key: '/customer/book',
-          icon: <ThunderboltOutlined style={{ color: '#009B60' }} />,
+          icon: <ThunderboltOutlined />,
           label: 'Đặt sân online'
         },
         {
           key: '/customer/my-bookings',
           icon: <UnorderedListOutlined />,
           label: 'Lịch đặt của tôi'
+        },
+        {
+          key: '/customer/notifications',
+          icon: <BellOutlined style={{ color: '#009B60' }} />,
+          label: 'Thông báo của tôi'
         },
         {
           key: '/customer/profile',
@@ -53,31 +61,39 @@ export default function AppSidebar({ collapsed }) {
     if (isAdmin || isStaff) {
       items.push({
         key: '/admin/dashboard',
-        icon: <AppstoreOutlined style={{ color: '#009B60' }} />,
+        icon: <AppstoreOutlined />,
         label: 'Tổng quan (Dashboard)'
       });
     }
 
-    // Live Court Board Monitor
-    if (isAdmin || hasPermission(STAFF_PERMISSIONS.CHECKIN_CHECKOUT)) {
+    if (isAdmin || isStaff || hasPermission(STAFF_PERMISSIONS.CHECKIN_CHECKOUT)) {
       items.push({
-        key: '/admin/monitor',
-        icon: <PlayCircleOutlined style={{ color: '#1890ff' }} />,
+        key: isStaff ? '/staff/monitor' : '/admin/monitor',
+        icon: <PlayCircleOutlined />,
         label: 'Bảng ca đấu trực tiếp'
       });
     }
 
     // POS & Inventory
-    if (isAdmin || hasPermission(STAFF_PERMISSIONS.POS_SALES)) {
+    if (isAdmin || isStaff || hasPermission(STAFF_PERMISSIONS.POS_SALES)) {
       items.push({
         key: '/admin/pos',
         icon: <ShoppingCartOutlined />,
-        label: 'Bán hàng POS & Kho'
+        label: 'Bán hàng POS'
+      });
+    }
+
+    // Product Management (UC-14)
+    if (isAdmin || isStaff) {
+      items.push({
+        key: '/admin/products',
+        icon: <TagOutlined />,
+        label: 'Quản lý sản phẩm'
       });
     }
 
     // Bookings
-    if (isAdmin || hasPermission(STAFF_PERMISSIONS.MANAGE_BOOKINGS)) {
+    if (isAdmin || isStaff || hasPermission(STAFF_PERMISSIONS.MANAGE_BOOKINGS)) {
       items.push({
         key: '/admin/bookings',
         icon: <CalendarOutlined />,
@@ -94,8 +110,8 @@ export default function AppSidebar({ collapsed }) {
       });
     }
 
-    // Vouchers
-    if (isAdmin || hasPermission(STAFF_PERMISSIONS.VIEW_VOUCHERS)) {
+    // Vouchers (UC-15)
+    if (isAdmin || isStaff) {
       items.push({
         key: '/admin/vouchers',
         icon: <TagOutlined />,
@@ -103,8 +119,29 @@ export default function AppSidebar({ collapsed }) {
       });
     }
 
-    // Courts
-    if (isAdmin || hasPermission(STAFF_PERMISSIONS.VIEW_COURTS)) {
+    // Notifications (UC-15 Notification Management)
+    if (isAdmin || isStaff) {
+      items.push({
+        key: '/admin/notifications',
+        icon: <BellOutlined style={{ color: '#009B60' }} />,
+        label: 'Quản lý thông báo'
+      });
+    }
+
+    // Danh mục chung (Bao gồm Bảng giá và Danh mục sân)
+    const generalCategoryChildren = [];
+
+    // Bảng giá sân (Admin & Staff)
+    if (isAdmin || isStaff) {
+      generalCategoryChildren.push({
+        key: '/admin/prices',
+        icon: <DollarOutlined />,
+        label: 'Bảng giá sân'
+      });
+    }
+
+    // Courts (Staff & Admin)
+    if (isAdmin || isStaff) {
       items.push({
         key: '/admin/courts',
         icon: <AppstoreOutlined />,
@@ -112,17 +149,26 @@ export default function AppSidebar({ collapsed }) {
       });
     }
 
-    // Price tables (Admin only)
-    if (isAdmin) {
+    // Courts
+    if (isAdmin || hasPermission(STAFF_PERMISSIONS.VIEW_COURTS)) {
+      generalCategoryChildren.push({
+        key: '/admin/courts',
+        icon: <AppstoreOutlined />,
+        label: 'Danh mục sân'
+      });
+    }
+
+    if (generalCategoryChildren.length > 0) {
       items.push({
-        key: '/admin/prices',
-        icon: <DollarOutlined />,
-        label: 'Quản lý bảng giá'
+        key: 'general-category',
+        icon: <FolderOutlined />,
+        label: 'Danh mục chung',
+        children: generalCategoryChildren
       });
     }
 
     // Customer Management
-    if (isAdmin || hasPermission(STAFF_PERMISSIONS.VIEW_CUSTOMERS)) {
+    if (isAdmin || isStaff || hasPermission(STAFF_PERMISSIONS.VIEW_CUSTOMERS)) {
       items.push({
         key: '/admin/customers',
         icon: <TeamOutlined />,
@@ -159,9 +205,14 @@ export default function AppSidebar({ collapsed }) {
       <Menu
         mode="inline"
         selectedKeys={[location.pathname]}
+        defaultOpenKeys={['general-category']}
         style={{ borderRight: 0, padding: '12px 0' }}
         items={menuItems}
-        onClick={({ key }) => navigate(key)}
+        onClick={({ key }) => {
+          if (key && key.startsWith('/')) {
+            navigate(key);
+          }
+        }}
       />
     </Sider>
   );

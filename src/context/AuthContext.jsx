@@ -1,9 +1,11 @@
-import React, { createContext, useContext, useState } from 'react';
+import React, { createContext, useContext, useState, useEffect } from 'react';
 import { ROLES } from '../utils/constants';
+import api from '../services/api';
 
 const AuthContext = createContext(null);
 
 export function AuthProvider({ children }) {
+  //lấy thông tin khi chạy lại chương trình
   const [user, setUser] = useState(() => {
     const saved = localStorage.getItem('bcms_user');
     try {
@@ -12,9 +14,40 @@ export function AuthProvider({ children }) {
       return null;
     }
   });
-
   const [token, setToken] = useState(() => localStorage.getItem('bcms_token') || null);
-  const [loading, setLoading] = useState(false);
+  
+  const [loading, setLoading] = useState(true);
+
+  //xác thực phiên khi ngừi dùng f5
+  useEffect(() => {
+    const verifySession = async () => {
+      const storedToken = localStorage.getItem('bcms_token');
+      if (!storedToken) {
+        setLoading(false);
+        return;
+      }
+      try {
+        const res = await api.get('/users/profile');
+        if (res.data?.success && res.data?.data) {
+          setUser(res.data.data);
+          localStorage.setItem('bcms_user', JSON.stringify(res.data.data));
+        }
+      } catch (err) {
+        // Nếu token hết hạn hoặc tài khoản bị xóa/khóa, dọn dẹp state
+        const status = err.response?.status;
+        if (status === 401 || status === 403) {
+          localStorage.removeItem('bcms_token');
+          localStorage.removeItem('bcms_user');
+          setToken(null);
+          setUser(null);
+        }
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    verifySession();
+  }, []);
 
   const handleLoginSuccess = (authData) => {
     const { user: userData, token: newToken } = authData;
@@ -63,7 +96,6 @@ export function AuthProvider({ children }) {
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }
-
 export function useAuth() {
   const context = useContext(AuthContext);
   if (!context) {

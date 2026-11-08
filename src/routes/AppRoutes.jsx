@@ -1,4 +1,3 @@
-import React from "react";
 import { Routes, Route } from "react-router-dom";
 import AuthLayout from "../components/layouts/AuthLayout";
 import MainLayout from "../components/layouts/MainLayout";
@@ -11,9 +10,21 @@ import RegisterPage from "../pages/auth/RegisterPage";
 
 // Dashboard & Protected Pages
 import AdminDashboardPage from "../pages/dashboard/AdminDashboardPage";
+import ProductManagementPage from "../pages/product/ProductManagementPage";
+import VoucherManagementPage from "../pages/voucher/VoucherManagementPage";
+import AdminBookingListPage from "../pages/admin/AdminBookingListPage";
 import CustomerBookingPage from "../pages/customer/CustomerBookingPage";
+import CustomerMyBookingsPage from "../pages/customer/CustomerMyBookingsPage";
 import ResetPasswordPage from "../pages/auth/ResetPasswordPage";
 import ProfilePage from "../pages/profile/ProfilePage";
+import PricingManagementPage from "../pages/admin/PricingManagementPage";
+import StaffManagementPage from "../pages/admin/StaffManagementPage";
+import CourtManagementPage from "../pages/admin/CourtManagementPage";
+import PlayingSessionPage from "../pages/admin/PlayingSessionPage";
+import PosPaymentPage from "../pages/pos/PosPaymentPage";
+import PaymentHistoryPage from "../pages/invoice/PaymentHistoryPage";
+import CustomerManagementPage from "../pages/admin/CustomerManagementPage";
+import NotificationManagementPage from "../pages/notification/NotificationManagementPage";
 import { ROLES } from "../utils/constants";
 import { Result, Button } from "antd";
 
@@ -44,6 +55,26 @@ export default function AppRoutes() {
           }
         />
         <Route
+          path="/customer/my-bookings"
+          element={
+            <ProtectedRoute
+              allowedRoles={[ROLES.CUSTOMER, ROLES.ADMIN, ROLES.STAFF]}
+            >
+              <CustomerMyBookingsPage />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/customer/notifications"
+          element={
+            <ProtectedRoute
+              allowedRoles={[ROLES.CUSTOMER, ROLES.ADMIN, ROLES.STAFF]}
+            >
+              <NotificationManagementPage />
+            </ProtectedRoute>
+          }
+        />
+        <Route
           path="/customer/profile"
           element={
             <ProtectedRoute
@@ -67,6 +98,111 @@ export default function AppRoutes() {
           element={
             <ProtectedRoute allowedRoles={[ROLES.ADMIN, ROLES.STAFF]}>
               <AdminDashboardPage />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/admin/monitor"
+          element={
+            <ProtectedRoute allowedRoles={[ROLES.ADMIN, ROLES.STAFF]}>
+              <PlayingSessionPage />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/staff/monitor"
+          element={
+            <ProtectedRoute allowedRoles={[ROLES.ADMIN, ROLES.STAFF]}>
+              <PlayingSessionPage />
+            </ProtectedRoute>
+          }
+        />
+        {/* Point of Sale Payment */}
+        <Route
+          path="/admin/pos"
+          element={
+            <ProtectedRoute allowedRoles={[ROLES.ADMIN, ROLES.STAFF]}>
+              <PosPaymentPage />
+            </ProtectedRoute>
+          }
+        />
+        {/* Payment History & Invoice Management */}
+        <Route
+          path="/admin/invoices"
+          element={
+            <ProtectedRoute allowedRoles={[ROLES.ADMIN, ROLES.STAFF]}>
+              <PaymentHistoryPage />
+            </ProtectedRoute>
+          }
+        />
+        {/* Pricing Management (Admin & Staff - UC-16) */}
+        <Route
+          path="/admin/prices"
+          element={
+            <ProtectedRoute allowedRoles={[ROLES.ADMIN, ROLES.STAFF]}>
+              <PricingManagementPage />
+            </ProtectedRoute>
+          }
+        />
+        {/* UC-14 Product Management */}
+        <Route
+          path="/admin/products"
+          element={
+            <ProtectedRoute allowedRoles={[ROLES.ADMIN, ROLES.STAFF]}>
+              <ProductManagementPage />
+            </ProtectedRoute>
+          }
+        />
+        {/* UC-15 Voucher Management */}
+        <Route
+          path="/admin/vouchers"
+          element={
+            <ProtectedRoute allowedRoles={[ROLES.ADMIN, ROLES.STAFF]}>
+              <VoucherManagementPage />
+            </ProtectedRoute>
+          }
+        />
+        {/* UC-15 Notification Management (Staff & Admin) */}
+        <Route
+          path="/admin/notifications"
+          element={
+            <ProtectedRoute allowedRoles={[ROLES.ADMIN, ROLES.STAFF]}>
+              <NotificationManagementPage />
+            </ProtectedRoute>
+          }
+        />
+        {/* Admin & Staff Booking Management */}
+        <Route
+          path="/admin/bookings"
+          element={
+            <ProtectedRoute allowedRoles={[ROLES.ADMIN, ROLES.STAFF]}>
+              <AdminBookingListPage />
+            </ProtectedRoute>
+          }
+        />
+        {/* Admin Staff Management (Admin only) */}
+        <Route
+          path="/admin/staffs"
+          element={
+            <ProtectedRoute allowedRoles={[ROLES.ADMIN]}>
+              <StaffManagementPage />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/admin/customers"
+          element={
+            <ProtectedRoute allowedRoles={[ROLES.ADMIN, ROLES.STAFF]}>
+              <CustomerManagementPage />
+            </ProtectedRoute>
+          }
+        />
+        {/* Court Management (Staff & Admin) */}
+        <Route
+          path="/admin/courts"
+          element={
+            <ProtectedRoute allowedRoles={[ROLES.ADMIN, ROLES.STAFF]}>
+              <CourtManagementPage />
             </ProtectedRoute>
           }
         />
