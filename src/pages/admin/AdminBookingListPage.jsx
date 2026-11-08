@@ -64,7 +64,7 @@ const STATUS_CONFIG = {
   },
   PENDING_APPROVAL: {
     color: 'gold',
-    label: 'Chờ Admin/Staff duyệt',
+    label: 'Chờ duyệt đơn',
     icon: <ClockCircleOutlined />
   },
   CONFIRMED: {
@@ -1055,13 +1055,13 @@ export default function AdminBookingListPage() {
     {
       title: 'Lịch Đặt Chơi',
       key: 'schedule',
-      width: 210,
+      width: 340,
       render: (_, record) => {
         const items = record.items || [];
         const isRecordOverdue = isBookingOrSlotOverdue(record.bookingDate, record.startTime, record.endTime, record.status);
 
         return (
-          <Space direction="vertical" size={2}>
+          <Space direction="vertical" size={3} style={{ width: '100%' }}>
             <Space size={6} wrap>
               <CalendarOutlined style={{ color: isRecordOverdue ? '#ef4444' : '#059669' }} />
               <Text strong style={{ color: isRecordOverdue ? '#dc2626' : undefined }}>
@@ -1074,7 +1074,7 @@ export default function AdminBookingListPage() {
               )}
             </Space>
             {items.length > 1 ? (
-              <Space direction="vertical" size={2}>
+              <Space direction="vertical" size={3} style={{ width: '100%' }}>
                 {items.map((it, idx) => {
                   const cName = it.courtName || it.courtId?.courtName || `Sân ${idx + 1}`;
                   const itDate = it.bookingDate || record.bookingDate;
@@ -1088,11 +1088,13 @@ export default function AdminBookingListPage() {
                       style={{
                         borderRadius: 4,
                         margin: 0,
-                        fontSize: 11,
+                        fontSize: 12,
+                        padding: '2px 8px',
+                        whiteSpace: 'nowrap',
                         border: isItemOverdue ? '1px solid #fca5a5' : undefined
                       }}
                     >
-                      <ClockCircleOutlined style={{ marginRight: 3 }} />
+                      <ClockCircleOutlined style={{ marginRight: 4 }} />
                       {cName}: {dayjs(itDate).format('DD/MM')} {it.startTime} - {it.endTime}
                       {isItemCancelled ? ' (Đã hủy)' : isItemOverdue ? ' (Quá giờ)' : ''}
                     </Tag>
@@ -1105,6 +1107,9 @@ export default function AdminBookingListPage() {
                 style={{
                   borderRadius: 4,
                   margin: 0,
+                  fontSize: 12,
+                  padding: '2px 8px',
+                  whiteSpace: 'nowrap',
                   border: isRecordOverdue ? '1px solid #fca5a5' : undefined
                 }}
               >
@@ -1122,7 +1127,7 @@ export default function AdminBookingListPage() {
       title: 'Trạng Thái Đơn',
       dataIndex: 'status',
       key: 'status',
-      width: 150,
+      width: 160,
       render: (status) => {
         const conf = STATUS_CONFIG[status] || { color: 'default', label: status, icon: null };
         return (
@@ -1130,10 +1135,11 @@ export default function AdminBookingListPage() {
             color={conf.color}
             icon={conf.icon}
             style={{
-              padding: '4px 10px',
+              padding: '4px 8px',
               borderRadius: 6,
-              fontSize: 13,
-              fontWeight: 500
+              fontSize: 12.5,
+              fontWeight: 500,
+              whiteSpace: 'nowrap'
             }}
           >
             {conf.label}
@@ -1163,17 +1169,18 @@ export default function AdminBookingListPage() {
       title: 'Thanh Toán',
       dataIndex: 'paymentStatus',
       key: 'paymentStatus',
-      width: 140,
+      width: 150,
       render: (paymentStatus) => {
         const isPaid = paymentStatus === 'PAID';
         return (
           <Tag
             color={isPaid ? 'green' : 'red'}
             style={{
-              padding: '4px 10px',
+              padding: '4px 8px',
               borderRadius: 6,
-              fontSize: 13,
-              fontWeight: 500
+              fontSize: 12.5,
+              fontWeight: 500,
+              whiteSpace: 'nowrap'
             }}
           >
             {isPaid ? 'Đã thanh toán' : 'Chưa thanh toán'}
@@ -1185,6 +1192,7 @@ export default function AdminBookingListPage() {
       title: 'Xử Lý Đơn',
       key: 'actions',
       width: 200,
+      align: 'center',
       fixed: 'right',
       render: (_, record) => {
         return (
@@ -1631,7 +1639,7 @@ export default function AdminBookingListPage() {
             showTotal: (total, range) => `${range[0]}-${range[1]} trên tổng số ${total} đơn đặt sân`
           }}
           onChange={handleTableChange}
-          scroll={{ x: 900 }}
+          scroll={{ x: 1560 }}
           locale={{ emptyText: 'Chưa có đơn đặt sân nào phù hợp với bộ lọc' }}
         />
       </Card>

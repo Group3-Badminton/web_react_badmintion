@@ -92,11 +92,12 @@ const getCourtTypeName = (type) => {
   return 'Sân Tiêu Chuẩn';
 };
 
-const renderCourtTypeTag = (type) => {
+const renderCourtTypeTag = (type, customStyle = {}) => {
   const norm = normalizeCourtType(type);
-  if (norm === 'VIP') return <Tag color="gold">Sân VIP</Tag>;
-  if (norm === 'PREMIUM') return <Tag color="purple">Sân Thi Đấu</Tag>;
-  return <Tag color="green">Sân Tiêu Chuẩn</Tag>;
+  const tagStyle = { margin: 0, ...customStyle };
+  if (norm === 'VIP') return <Tag color="gold" style={tagStyle}>Sân VIP</Tag>;
+  if (norm === 'PREMIUM') return <Tag color="purple" style={tagStyle}>Sân Thi Đấu</Tag>;
+  return <Tag color="green" style={tagStyle}>Sân Tiêu Chuẩn</Tag>;
 };
 
 const START_OF_DAY_MIN = 360;
@@ -819,17 +820,6 @@ export default function PlayingSessionPage() {
     }
   };
 
-  const handleCompleteCleaning = async (courtId) => {
-    try {
-      await sessionService.completeCleaning(courtId);
-      message.success('Sân đã sẵn sàng đón khách tiếp theo!');
-      fetchLiveBoard();
-      fetchMatrix(selectedDate);
-    } catch (err) {
-      message.error('Thao tác không thành công');
-    }
-  };
-
   const formatCountdown = (endTime) => {
     if (!endTime) return '--:--:--';
     const diff = new Date(endTime).getTime() - currentTime.getTime();
@@ -1348,6 +1338,11 @@ export default function PlayingSessionPage() {
                         background: nearEnd ? '#fff5f5' : '#ffffff',
                         transition: 'all 0.25s ease'
                       }}
+                      headStyle={{
+                        padding: '10px 14px',
+                        minHeight: 'auto',
+                        borderBottom: `1px solid ${nearEnd ? '#fca5a5' : '#f1f5f9'}`
+                      }}
                       bodyStyle={{
                         flex: 1,
                         display: 'flex',
@@ -1356,12 +1351,18 @@ export default function PlayingSessionPage() {
                         padding: 14
                       }}
                       title={
-                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                          <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                            <span style={{ fontSize: 15, fontWeight: 700, color: '#1e293b' }}>{court.name}</span>
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: 6, width: '100%' }}>
+                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8 }}>
+                            <span style={{ fontSize: 15, fontWeight: 700, color: '#1e293b', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                              {court.name}
+                            </span>
+                            <Tag color={badgeColor} style={{ margin: 0, fontWeight: 600, flexShrink: 0 }}>
+                              {statusText}
+                            </Tag>
+                          </div>
+                          <div style={{ display: 'flex', alignItems: 'center' }}>
                             {renderCourtTypeTag(court.courtType)}
                           </div>
-                          <Tag color={badgeColor} style={{ margin: 0, fontWeight: 600 }}>{statusText}</Tag>
                         </div>
                       }
                     >
@@ -1675,7 +1676,7 @@ export default function PlayingSessionPage() {
                                   {renderCourtTypeTag(court.courtType)}
                                 </div>
                                 <div style={{ fontSize: 10, fontWeight: 500, opacity: 0.85, marginTop: 2 }}>
-                                  {court.operationalStatus === 'IN_USE' ? '● Đang có khách' : court.operationalStatus === 'CLEANING' ? '● Dọn dẹp' : '● Sẵn sàng'}
+                                  {court.operationalStatus === 'IN_USE' ? '● Đang có khách' : court.operationalStatus === 'MAINTENANCE' ? '● Bảo trì' : '● Sẵn sàng'}
                                 </div>
                               </div>
                             </th>
@@ -1832,6 +1833,9 @@ export default function PlayingSessionPage() {
         cancelText="Hủy"
         okButtonProps={{ disabled: checkInType === 'walkin' && walkInEndTime.diff(walkInStartTime, 'minute') < 60 }}
         width={600}
+        centered
+        styles={{ body: { maxHeight: 'calc(85vh - 120px)', overflowY: 'auto', overflowX: 'hidden', paddingRight: 4 } }}
+        bodyStyle={{ maxHeight: 'calc(85vh - 120px)', overflowY: 'auto', overflowX: 'hidden', paddingRight: 4 }}
       >
         <div style={{ marginBottom: 16 }}>
           <Radio.Group
@@ -1903,7 +1907,7 @@ export default function PlayingSessionPage() {
           />
         )}
 
-        <Form form={checkInForm} layout="vertical">
+        <Form form={checkInForm} layout="vertical" style={{ overflowX: 'hidden' }}>
           {checkInType === 'booking' ? (
             <>
               <Form.Item
@@ -1983,8 +1987,8 @@ export default function PlayingSessionPage() {
             </>
           ) : (
             <>
-              <Row gutter={16} style={{ marginBottom: 4 }}>
-                <Col span={24}>
+              <Row gutter={[12, 0]} style={{ marginBottom: 4, marginLeft: 0, marginRight: 0 }}>
+                <Col span={24} style={{ paddingLeft: 0, paddingRight: 0 }}>
                   <Form.Item
                     name="courtId"
                     label="Chọn sân thi đấu"
@@ -2006,7 +2010,7 @@ export default function PlayingSessionPage() {
                 </Col>
               </Row>
 
-              <Row gutter={16} style={{ marginBottom: 8 }}>
+              <Row gutter={12} style={{ marginBottom: 8, marginLeft: 0, marginRight: 0 }}>
                 <Col span={12}>
                   <label style={{ display: 'block', marginBottom: 4, fontWeight: 600, fontSize: 13 }}>Giờ bắt đầu (Hiện tại):</label>
                   <TimePicker
@@ -2138,7 +2142,7 @@ export default function PlayingSessionPage() {
                 );
               })()}
 
-              <Row gutter={16}>
+              <Row gutter={12} style={{ marginLeft: 0, marginRight: 0 }}>
                 <Col span={12}>
                   <Form.Item
                     name="walkInCustomerName"
@@ -2176,6 +2180,9 @@ export default function PlayingSessionPage() {
         okText="Xác nhận gia hạn"
         cancelText="Đóng"
         okButtonProps={{ disabled: !extendDuration || extendDuration <= 0 }}
+        centered
+        styles={{ body: { maxHeight: 'calc(85vh - 120px)', overflowY: 'auto', overflowX: 'hidden', paddingRight: 4 } }}
+        bodyStyle={{ maxHeight: 'calc(85vh - 120px)', overflowY: 'auto', overflowX: 'hidden', paddingRight: 4 }}
       >
         {selectedSessionForExtend && (() => {
           const currentCourtId = (selectedSessionForExtend.courtId?._id || selectedSessionForExtend.courtId)?.toString();
@@ -2310,6 +2317,9 @@ export default function PlayingSessionPage() {
         okText="Chuyển sân"
         cancelText="Hủy"
         okButtonProps={{ disabled: availableCourtsForSwitch.filter((c) => !c.hasConflict).length === 0 }}
+        centered
+        styles={{ body: { maxHeight: 'calc(85vh - 120px)', overflowY: 'auto', overflowX: 'hidden', paddingRight: 4 } }}
+        bodyStyle={{ maxHeight: 'calc(85vh - 120px)', overflowY: 'auto', overflowX: 'hidden', paddingRight: 4 }}
       >
         {selectedSessionForSwitch && (
           <div style={{ marginBottom: 16 }}>
@@ -2382,6 +2392,9 @@ export default function PlayingSessionPage() {
         confirmLoading={checkoutSubmitting}
         okText="Xác nhận trả sân"
         cancelText="Đóng"
+        centered
+        styles={{ body: { maxHeight: 'calc(85vh - 120px)', overflowY: 'auto', overflowX: 'hidden', paddingRight: 4 } }}
+        bodyStyle={{ maxHeight: 'calc(85vh - 120px)', overflowY: 'auto', overflowX: 'hidden', paddingRight: 4 }}
       >
         {selectedSessionForCheckOut && (
           <div>
@@ -2430,6 +2443,9 @@ export default function PlayingSessionPage() {
         okText="Xác nhận thanh toán & Chốt ca"
         cancelText="Đóng"
         width={500}
+        centered
+        styles={{ body: { maxHeight: 'calc(85vh - 120px)', overflowY: 'auto', overflowX: 'hidden', paddingRight: 4 } }}
+        bodyStyle={{ maxHeight: 'calc(85vh - 120px)', overflowY: 'auto', overflowX: 'hidden', paddingRight: 4 }}
       >
         {checkoutInvoice && (() => {
           const sub = Number(checkoutInvoice.subtotal) || Number(checkoutInvoice.totalAmount) || 0;
@@ -2617,6 +2633,9 @@ export default function PlayingSessionPage() {
         onCancel={() => setBookingModalVisible(false)}
         footer={null}
         width={560}
+        centered
+        styles={{ body: { maxHeight: 'calc(85vh - 120px)', overflowY: 'auto', overflowX: 'hidden', paddingRight: 4 } }}
+        bodyStyle={{ maxHeight: 'calc(85vh - 120px)', overflowY: 'auto', overflowX: 'hidden', paddingRight: 4 }}
       >
         {selectedSlotCell?.cell?.booking && (
           <div>
@@ -2774,6 +2793,7 @@ export default function PlayingSessionPage() {
         okText="Xác nhận hủy đơn"
         cancelText="Bỏ qua"
         okButtonProps={{ danger: true, loading: cancelLoading }}
+        centered
       >
         <Alert
           message="Lưu ý quan trọng"
