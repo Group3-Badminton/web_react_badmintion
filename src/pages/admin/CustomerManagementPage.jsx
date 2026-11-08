@@ -12,22 +12,20 @@ import {
   Space,
   Table,
   Tag,
+  Tooltip,
   Typography,
   message
 } from 'antd';
 import {
   PlusOutlined,
   EditOutlined,
-  StopOutlined,
-  CheckCircleOutlined,
-  ReloadOutlined,
+  LockOutlined,
+  UnlockOutlined,
   SearchOutlined,
   ClearOutlined,
-  HistoryOutlined,
   UserOutlined,
   PhoneOutlined,
   MailOutlined,
-  HomeOutlined,
   ExclamationCircleOutlined
 } from '@ant-design/icons';
 import dayjs from 'dayjs';
@@ -46,6 +44,11 @@ export default function CustomerManagementPage() {
   // Search & Filter state (UC-6.5)
   const [searchKeyword, setSearchKeyword] = useState('');
   const [statusFilter, setStatusFilter] = useState('ALL');
+  const [pagination, setPagination] = useState({
+    current: 1,
+    pageSize: 10,
+    total: 0
+  });
 
   // Modal Create / Edit state (UC-6.2 & UC-6.3)
   const [modalVisible, setModalVisible] = useState(false);
@@ -53,45 +56,79 @@ export default function CustomerManagementPage() {
   const [editingCustomer, setEditingCustomer] = useState(null);
   const [form] = Form.useForm();
 
-  // History Modal state
-  const [historyModalVisible, setHistoryModalVisible] = useState(false);
-  const [historyCustomer, setHistoryCustomer] = useState(null);
 
-  // 1. Tải danh sách khách hàng (UC-6.1 & UC-6.5)
+
+  // 1. Tải danh sách khách hàng phân trang theo Server (UC-6.1 & UC-6.5)
   const fetchCustomers = useCallback(async (params = {}) => {
     try {
       setLoading(true);
-      const queryParams = { ...params };
-      if (queryParams.status === 'ALL') {
-        delete queryParams.status;
+      const page = params.page !== undefined ? params.page : pagination.current;
+      const limit = params.limit !== undefined ? params.limit : pagination.pageSize;
+      const search = params.search !== undefined ? params.search : searchKeyword;
+      const status = params.status !== undefined ? params.status : statusFilter;
+
+      const queryParams = {
+        page,
+        limit
+      };
+      if (status && status !== 'ALL') {
+        queryParams.status = status;
       }
+      if (search && search.trim()) {
+        queryParams.search = search.trim();
+      }
+
       const result = await customerService.getCustomers(queryParams);
       if (result.success) {
-        setCustomers(result.data || []);
+        if (result.data && result.data.items) {
+          setCustomers(result.data.items);
+          setPagination((prev) => ({
+            ...prev,
+            current: result.data.pagination.page,
+            pageSize: result.data.pagination.limit,
+            total: result.data.pagination.total
+          }));
+        } else if (Array.isArray(result.data)) {
+          setCustomers(result.data);
+          setPagination((prev) => ({
+            ...prev,
+            total: result.data.length
+          }));
+        }
       }
     } catch (error) {
       message.error(error?.response?.data?.message || 'Không thể tải danh sách khách hàng. Vui lòng thử lại sau.');
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [pagination.current, pagination.pageSize, searchKeyword, statusFilter]);
 
   useEffect(() => {
-    fetchCustomers({ search: searchKeyword, status: statusFilter });
-  }, [fetchCustomers]);
+    fetchCustomers({ page: 1, search: searchKeyword, status: statusFilter });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [statusFilter]);
 
-  // Tìm kiếm / Lọc (UC-6.5)
-  const handleSearch = () => {
-    fetchCustomers({ search: searchKeyword, status: statusFilter });
+  // Bắt sự kiện đổi trang hoặc đổi pageSize của Table
+  const handleTableChange = (newPagination) => {
+    fetchCustomers({
+      page: newPagination.current,
+      limit: newPagination.pageSize,
+      search: searchKeyword,
+      status: statusFilter
+    });
   };
 
-  // Xóa bộ lọc (UC-6.5 Alternative Flow A1)
+  // Tìm kiếm / Lọc (UC-6.5) -> quay về trang 1
+  const handleSearch = () => {
+    fetchCustomers({ page: 1, search: searchKeyword, status: statusFilter });
+  };
+
+  // Xóa bộ lọc (UC-6.5 Alternative Flow A1) -> quay về trang 1
   const handleClearFilter = () => {
     setSearchKeyword('');
     setStatusFilter('ALL');
-    fetchCustomers({ search: '', status: 'ALL' });
+    fetchCustomers({ page: 1, search: '', status: 'ALL' });
   };
-
   // Mở modal Thêm mới khách hàng (UC-6.2)
   const handleOpenCreate = () => {
     setModalMode('create');
@@ -107,10 +144,8 @@ export default function CustomerManagementPage() {
     form.setFieldsValue({
       fullName: customer.fullName,
       phone: customer.phone,
-      email: customer.email,
-      address: customer.address
+      email: customer.email
     });
-    setModalVisible(true);
   };
 
   // Lưu thông tin khách hàng (Create hoặc Update)
@@ -180,111 +215,82 @@ export default function CustomerManagementPage() {
     }
   };
 
-  // Xem lịch sử hủy / khóa
-  const showHistory = (customer) => {
-    setHistoryCustomer(customer);
-    setHistoryModalVisible(true);
-  };
 
   const columns = [
     {
       title: 'Khách hàng',
       dataIndex: 'fullName',
       key: 'fullName',
-      render: (name, customer) => (
-        <Space direction="vertical" size={0}>
-          <Text strong>{name}</Text>
-          <Text type="secondary">{customer.email || 'Chưa cập nhật email'}</Text>
-        </Space>
-      )
+      render: (name) => <Text strong>{name}</Text>
+    },
+    {
+      title: 'Email',
+      dataIndex: 'email',
+      key: 'email',
+      render: (email) => email || <Text type="secondary">Chưa cập nhật</Text>
     },
     {
       title: 'Số điện thoại',
       dataIndex: 'phone',
       key: 'phone',
-      render: (phone) => <Text copyable={{ text: phone }}>{phone || '—'}</Text>
-    },
-    {
-      title: 'Địa chỉ',
-      dataIndex: 'address',
-      key: 'address',
-      render: (address) => address || <Text type="secondary">Chưa có</Text>
-    },
-    {
-      title: 'Loại tài khoản',
-      dataIndex: 'isOnlineAccount',
-      key: 'isOnlineAccount',
-      render: (isOnline) => (
-        <Tag color={isOnline ? 'blue' : 'orange'}>
-          {isOnline ? 'Tài khoản Web' : 'Khách tại quầy'}
-        </Tag>
-      )
+      render: (phone) => phone || '—'
     },
     {
       title: 'Trạng thái',
       dataIndex: 'status',
       key: 'status',
       render: (status) => (
-        <Tag color={status === 'ACTIVE' ? 'green' : status === 'LOCKED' ? 'volcano' : 'red'}>
-          {status === 'ACTIVE' ? 'Đang hoạt động' : status === 'LOCKED' ? 'Tạm khóa (Hủy đơn)' : 'Đã vô hiệu hóa'}
+        <Tag color={status === 'ACTIVE' ? 'green' : 'red'}>
+          {status === 'ACTIVE' ? 'Đang hoạt động' : 'Đã vô hiệu hóa'}
         </Tag>
       )
     },
     {
       title: 'Thao tác',
       key: 'actions',
+      align: 'center',
+      width: 110,
       render: (_, customer) => (
-        <Space size="small">
+        <Space size="middle">
           {/* Sửa thông tin (UC-6.3) */}
-          <Button
-            size="small"
-            icon={<EditOutlined />}
-            onClick={() => handleOpenEdit(customer)}
-          >
-            Sửa
-          </Button>
+          <Tooltip title="Chỉnh sửa thông tin">
+            <Button
+              type="text"
+              icon={<EditOutlined style={{ color: '#1677ff', fontSize: 16 }} />}
+              onClick={() => handleOpenEdit(customer)}
+            />
+          </Tooltip>
 
-          {/* Vô hiệu hóa (UC-6.4) */}
+          {/* Vô hiệu hóa / Khóa (UC-6.4) */}
           {customer.status === 'ACTIVE' && (
-            <Button
-              size="small"
-              danger
-              icon={<StopOutlined />}
-              onClick={() => handleDeactivate(customer)}
-            >
-              Vô hiệu hóa
-            </Button>
+            <Tooltip title="Vô hiệu hóa tài khoản">
+              <Button
+                type="text"
+                danger
+                icon={<LockOutlined style={{ fontSize: 16 }} />}
+                onClick={() => handleDeactivate(customer)}
+              />
+            </Tooltip>
           )}
 
-          {/* Kích hoạt lại (Activate) */}
+          {/* Kích hoạt / Mở khóa */}
           {customer.status !== 'ACTIVE' && (
-            <Button
-              size="small"
-              type="primary"
-              ghost
-              icon={<CheckCircleOutlined />}
-              onClick={() => handleActivate(customer)}
-            >
-              Kích hoạt
-            </Button>
+            <Tooltip title="Kích hoạt lại tài khoản">
+              <Button
+                type="text"
+                icon={<UnlockOutlined style={{ color: '#009B60', fontSize: 16 }} />}
+                onClick={() => handleActivate(customer)}
+              />
+            </Tooltip>
           )}
-
-          {/* Xem lịch sử */}
-          <Button
-            size="small"
-            icon={<HistoryOutlined />}
-            onClick={() => showHistory(customer)}
-          >
-            Lịch sử
-          </Button>
         </Space>
       )
     }
   ];
 
   return (
-    <div style={{ maxWidth: 1200, margin: '0 auto', paddingBottom: 24 }}>
-      <Card>
+    <div style={{ width: '100%', paddingBottom: 24 }}>
+      <Card bordered={false} style={{ boxShadow: '0 2px 8px rgba(0,0,0,0.06)', borderRadius: 8 }}>
         <Space direction="vertical" size="large" style={{ width: '100%' }}>
           {/* Header & Nút thêm mới (UC-6.2) */}
           <Row justify="space-between" align="middle" gutter={[16, 16]}>
@@ -293,23 +299,14 @@ export default function CustomerManagementPage() {
               <Text type="secondary">Quản lý hồ sơ khách hàng tại quầy và tài khoản hội viên.</Text>
             </Col>
             <Col xs={24} sm={8} style={{ textAlign: 'right' }}>
-              <Space>
-                <Button
-                  type="primary"
-                  icon={<PlusOutlined />}
-                  onClick={handleOpenCreate}
-                  style={{ background: '#009B60', borderColor: '#009B60' }}
-                >
-                  Tạo khách hàng
-                </Button>
-                <Button
-                  icon={<ReloadOutlined />}
-                  onClick={() => fetchCustomers({ search: searchKeyword, status: statusFilter })}
-                  loading={loading}
-                >
-                  Tải lại
-                </Button>
-              </Space>
+              <Button
+                type="primary"
+                icon={<PlusOutlined />}
+                onClick={handleOpenCreate}
+                style={{ background: '#009B60', borderColor: '#009B60' }}
+              >
+                Tạo khách hàng
+              </Button>
             </Col>
           </Row>
 
@@ -336,7 +333,6 @@ export default function CustomerManagementPage() {
                   <Option value="ALL">Tất cả trạng thái</Option>
                   <Option value="ACTIVE">Đang hoạt động</Option>
                   <Option value="INACTIVE">Đã vô hiệu hóa</Option>
-                  <Option value="LOCKED">Tạm khóa (Hủy đơn)</Option>
                 </Select>
               </Col>
               <Col xs={24} sm={12} md={8}>
@@ -353,13 +349,18 @@ export default function CustomerManagementPage() {
           </Card>
 
           {/* Bảng danh sách khách hàng (UC-6.1) */}
+          {/* Bảng danh sách khách hàng (UC-6.1 - Server-side Pagination) */}
           <Table
             rowKey="_id"
             columns={columns}
             dataSource={customers}
             loading={loading}
+            onChange={handleTableChange}
             pagination={{
-              pageSize: 10,
+              position: ['bottomCenter'],
+              current: pagination.current,
+              pageSize: pagination.pageSize,
+              total: pagination.total,
               showSizeChanger: true,
               showTotal: (total) => `Tổng cộng ${total} khách hàng`
             }}
@@ -415,12 +416,6 @@ export default function CustomerManagementPage() {
             <Input prefix={<MailOutlined />} placeholder="VD: customer@gmail.com (không bắt buộc)" />
           </Form.Item>
 
-          <Form.Item
-            name="address"
-            label="Địa chỉ"
-          >
-            <Input prefix={<HomeOutlined />} placeholder="VD: Cần Thơ (không bắt buộc)" />
-          </Form.Item>
 
           <Form.Item style={{ marginBottom: 0, textAlign: 'right' }}>
             <Space>
@@ -440,49 +435,7 @@ export default function CustomerManagementPage() {
         </Form>
       </Modal>
 
-      {/* Modal Xem lịch sử hủy và khóa tài khoản */}
-      <Modal
-        title={`Lịch sử tài khoản — ${historyCustomer?.fullName || ''}`}
-        open={historyModalVisible}
-        onCancel={() => setHistoryModalVisible(false)}
-        footer={[
-          <Button key="close" onClick={() => setHistoryModalVisible(false)}>
-            Đóng
-          </Button>
-        ]}
-        width={650}
-        centered
-      >
-        {historyCustomer && (
-          <div>
-            <Title level={5} style={{ marginTop: 8 }}>Lịch sử hủy đơn đặt sân</Title>
-            {(!historyCustomer.bookingCancellationHistory || historyCustomer.bookingCancellationHistory.length === 0) ? (
-              <Text type="secondary">Chưa có lịch sử hủy đơn.</Text>
-            ) : (
-              historyCustomer.bookingCancellationHistory.map((item, index) => (
-                <div key={index} style={{ marginBottom: 6, padding: '4px 8px', background: '#f5f5f5', borderRadius: 4 }}>
-                  #{item.bookingCode || item.bookingId} — {dayjs(item.cancelledAt).format('DD/MM/YYYY HH:mm')}
-                  {' — '}{item.previousStatus === 'CONFIRMED' ? 'Đã xác nhận' : 'Chờ duyệt'}
-                  {' — '}{item.scope === 'ITEM' ? 'Hủy một lịch sân' : 'Hủy toàn đơn'}
-                </div>
-              ))
-            )}
 
-            <Title level={5} style={{ marginTop: 20 }}>Lịch sử khóa / mở khóa tài khoản</Title>
-            {(!historyCustomer.accountLockHistory || historyCustomer.accountLockHistory.length === 0) ? (
-              <Text type="secondary">Chưa có lịch sử khóa tài khoản.</Text>
-            ) : (
-              historyCustomer.accountLockHistory.map((item, index) => (
-                <div key={index} style={{ marginBottom: 6, padding: '4px 8px', background: '#f5f5f5', borderRadius: 4 }}>
-                  {item.action === 'LOCKED' ? <Tag color="red">Đã khóa</Tag> : <Tag color="green">Đã mở khóa</Tag>}
-                  {dayjs(item.occurredAt).format('DD/MM/YYYY HH:mm')}
-                  {item.reason ? ` — ${item.reason}` : ''}
-                </div>
-              ))
-            )}
-          </div>
-        )}
-      </Modal>
     </div>
   );
 }
