@@ -519,13 +519,33 @@ export default function PosPaymentPage() {
                 buttonStyle="solid"
                 style={{ width: '100%', display: 'flex' }}
               >
-                <Radio.Button value="RETAIL" style={{ flex: 1, textAlign: 'center', fontWeight: 600 }}>
-                  <ShopOutlined style={{ marginRight: 6 }} />
+                <Radio.Button
+                  value="RETAIL"
+                  style={{
+                    flex: 1,
+                    textAlign: 'center',
+                    fontWeight: 600,
+                    fontSize: 13,
+                    padding: '0 8px',
+                    whiteSpace: 'nowrap'
+                  }}
+                >
+                  <ShopOutlined style={{ marginRight: 5 }} />
                   Khách Lẻ Tại Quầy
                 </Radio.Button>
-                <Radio.Button value="PLAYING_SESSION" style={{ flex: 1, textAlign: 'center', fontWeight: 600 }}>
-                  <AppstoreOutlined style={{ marginRight: 6 }} />
-                  Tính Vào Ca Đang Chơi
+                <Radio.Button
+                  value="PLAYING_SESSION"
+                  style={{
+                    flex: 1,
+                    textAlign: 'center',
+                    fontWeight: 600,
+                    fontSize: 13,
+                    padding: '0 8px',
+                    whiteSpace: 'nowrap'
+                  }}
+                >
+                  <AppstoreOutlined style={{ marginRight: 5 }} />
+                  Tính Vào Ca Chơi
                 </Radio.Button>
               </Radio.Group>
             </div>

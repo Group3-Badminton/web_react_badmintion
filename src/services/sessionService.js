@@ -23,37 +23,31 @@ export const sessionService = {
     return response.data;
   },
 
-  // 4. UC-12.1: Bắt đầu phiên chơi (Check-in)
+  // Bắt đầu phiên chơi (Check-in)
   checkIn: async (payload) => {
     const response = await api.post('/sessions/check-in', payload);
     return response.data;
   },
 
-  // 5. UC-12.2: Gia hạn thời gian chơi (+30m hoặc +60m)
+  // Gia hạn thời gian chơi (+30m hoặc +60m)
   extendSession: async (id, payload) => {
     const response = await api.post(`/sessions/${id}/extend`, payload);
     return response.data;
   },
 
-  // 6. Đổi sân cho phiên đang chơi
+  // Đổi sân cho phiên đang chơi
   switchCourt: async (id, payload) => {
     const response = await api.post(`/sessions/${id}/switch-court`, payload);
     return response.data;
   },
 
-  // 7. UC-12.3: Kết thúc phiên chơi (Check-out)
+  // Kết thúc phiên chơi (Check-out)
   checkOut: async (id, payload = {}) => {
     const response = await api.post(`/sessions/${id}/check-out`, payload);
     return response.data;
   },
 
-  // 8. Hoàn tất dọn dẹp sân (chuyển về AVAILABLE)
-  completeCleaning: async (courtId) => {
-    const response = await api.post(`/sessions/courts/${courtId}/clean-complete`);
-    return response.data;
-  },
-
-  // 9. Thêm đồ thuê / nước uống vào phiên chơi
+  // Thêm đồ thuê / nước uống vào phiên chơi
   addRentalItem: async (id, payload) => {
     const response = await api.post(`/sessions/${id}/rentals`, payload);
     return response.data;
