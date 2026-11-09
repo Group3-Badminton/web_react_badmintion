@@ -22,7 +22,6 @@ import {
 import {
   CalendarOutlined,
   CheckCircleOutlined,
-  TagOutlined,
   DollarOutlined,
   SafetyCertificateOutlined,
   CopyOutlined,
@@ -100,12 +99,7 @@ export default function CustomerBookingPage() {
   // Bước 3: Ghi chú khách hàng
   const [note, setNote] = useState('');
 
-  // Bước 4: Voucher & Thanh toán (CASH duy nhất)
-  const [voucherCodeInput, setVoucherCodeInput] = useState('');
-  const [validatingVoucher, setValidatingVoucher] = useState(false);
-  const [appliedVoucher, setAppliedVoucher] = useState(null);
-
-  // Bước 5: Bảng giá tính toán từ Backend
+  // Bước 4: Bảng giá tính toán từ Backend
   const [loadingPrice, setLoadingPrice] = useState(false);
   const [priceCalculation, setPriceCalculation] = useState({
     courtBreakdowns: [],
@@ -328,23 +322,18 @@ export default function CustomerBookingPage() {
       setLoadingPrice(true);
       const res = await bookingService.calculateBookingPrice({
         courtOrders,
-        bookingDate: selectedDate.format('YYYY-MM-DD'),
-        voucherCode: appliedVoucher ? appliedVoucher.voucherCode : undefined
+        bookingDate: selectedDate.format('YYYY-MM-DD')
       });
 
       if (res.success && res.data) {
         setPriceCalculation(res.data);
-        if (appliedVoucher && !res.data.appliedVoucher) {
-          setAppliedVoucher(null);
-          message.warning(`Mã ${appliedVoucher.voucherCode} không còn áp dụng được do danh sách sân đã thay đổi!`);
-        }
       }
     } catch (err) {
       console.error('Lỗi tính giá chi tiết:', err);
     } finally {
       setLoadingPrice(false);
     }
-  }, [selectedCourts, selectedDate, getCourtSchedule, appliedVoucher, areAllCourtsValid]);
+  }, [selectedCourts, selectedDate, getCourtSchedule, areAllCourtsValid]);
 
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect
@@ -397,41 +386,6 @@ export default function CustomerBookingPage() {
     });
   };
 
-  // Áp dụng Voucher
-  const handleApplyVoucher = async (codeToApply) => {
-    const code = (codeToApply || voucherCodeInput).trim().toUpperCase();
-    if (!code) {
-      message.warning('Vui lòng nhập mã giảm giá!');
-      return;
-    }
-
-    const currentPrice = priceCalculation.totalBasePrice || 0;
-    try {
-      setValidatingVoucher(true);
-      const res = await bookingService.validateVoucher(code, currentPrice, {
-        courtBreakdowns: priceCalculation.courtBreakdowns,
-        courtTypes: selectedCourts.map((c) => c.courtType)
-      });
-      if (res.success && res.data) {
-        setAppliedVoucher(res.data);
-        setVoucherCodeInput(code);
-        message.success(`Đã áp dụng mã ${res.data.voucherCode}! Giảm ${res.data.discount.toLocaleString('vi-VN')}đ`);
-      }
-    } catch (err) {
-      message.error(err?.response?.data?.message || 'Mã giảm giá không hợp lệ hoặc không đủ điều kiện!');
-      setAppliedVoucher(null);
-    } finally {
-      setValidatingVoucher(false);
-    }
-  };
-
-  // Hủy Voucher
-  const handleRemoveVoucher = () => {
-    setAppliedVoucher(null);
-    setVoucherCodeInput('');
-    message.info('Đã hủy áp dụng mã giảm giá.');
-  };
-
   // Xác nhận tạo booking
   const handleConfirmBooking = async () => {
     if (selectedCourts.length === 0) {
@@ -475,7 +429,6 @@ export default function CustomerBookingPage() {
         courtIds: selectedCourts.map((c) => c._id),
         courtId: selectedCourts[0]?._id,
         bookingDate: selectedDate.format('YYYY-MM-DD'),
-        voucherCode: appliedVoucher ? appliedVoucher.voucherCode : undefined,
         paymentMethod: 'CASH', // Hệ thống chỉ hỗ trợ tiền mặt tại quầy
         note: note.trim()
       };
@@ -505,8 +458,6 @@ export default function CustomerBookingPage() {
     }
     setCommonStartTime(defTimes.startTime);
     setCommonEndTime(defTimes.endTime);
-    setAppliedVoucher(null);
-    setVoucherCodeInput('');
     setNote('');
   };
 
@@ -898,113 +849,15 @@ export default function CustomerBookingPage() {
               />
             </div>
           </Card>
-
-          {/* BƯỚC 4: MÃ KHUYẾN MÃI & THANH TOÁN */}
-          <Card
-            className="booking-step-card"
-            title={
-              <div className="booking-step-header">
-                <div className="booking-step-title-group">
-                  <span className="booking-step-number">4</span>
-                  <span className="booking-step-title-text">Mã khuyến mãi & Thanh toán</span>
-                </div>
-              </div>
-            }
-          >
-            {/* Mã khuyến mãi */}
-            <div style={{ marginBottom: 18 }}>
-              <Text strong style={{ display: 'block', marginBottom: 6, fontSize: 13, color: '#334155' }}>
-                <TagOutlined style={{ color: '#009B60', marginRight: 6 }} />
-                Mã giảm giá (Voucher):
-              </Text>
-              <div className="voucher-input-wrapper">
-                <Input
-                  placeholder="Nhập mã voucher (nếu có)"
-                  value={voucherCodeInput}
-                  onChange={(e) => setVoucherCodeInput(e.target.value.toUpperCase())}
-                  style={{ height: 40, borderRadius: 8 }}
-                  disabled={!!appliedVoucher}
-                />
-                {appliedVoucher ? (
-                  <Button danger onClick={handleRemoveVoucher} style={{ height: 40, borderRadius: 8 }}>
-                    Hủy bỏ
-                  </Button>
-                ) : (
-                  <Button
-                    type="primary"
-                    loading={validatingVoucher}
-                    onClick={() => handleApplyVoucher()}
-                    style={{ height: 40, borderRadius: 8, backgroundColor: '#009B60', borderColor: '#009B60', fontWeight: 600 }}
-                  >
-                    Áp Dụng
-                  </Button>
-                )}
-              </div>
-
-              {appliedVoucher ? (
-                <Alert
-                  message={`Áp dụng thành công mã ${appliedVoucher.voucherCode}!`}
-                  description={`${appliedVoucher.voucherName} (Giảm ${appliedVoucher.discount.toLocaleString('vi-VN')} đ)`}
-                  type="success"
-                  showIcon
-                  style={{ borderRadius: 8, marginTop: 10 }}
-                />
-              ) : (
-                <div style={{ marginTop: 6 }}>
-                  <Text type="secondary" style={{ fontSize: 12 }}>
-                    Nhập mã giảm giá của bạn để áp dụng chiết khấu trực tiếp trên tổng đơn đặt sân.
-                  </Text>
-                </div>
-              )}
-            </div>
-
-            <Divider style={{ margin: '16px 0' }} />
-
-            {/* Phương thức thanh toán duy nhất: Tiền mặt tại quầy */}
-            <div>
-              <Text strong style={{ display: 'block', marginBottom: 8, fontSize: 13, color: '#334155' }}>
-                <DollarOutlined style={{ color: '#009B60', marginRight: 6 }} />
-                Phương thức thanh toán:
-              </Text>
-              <div className="payment-method-card">
-                <Space align="center" size={12}>
-                  <div style={{
-                    width: 36,
-                    height: 36,
-                    borderRadius: 8,
-                    background: '#009B60',
-                    color: '#fff',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    fontSize: 18
-                  }}>
-                    <DollarOutlined />
-                  </div>
-                  <div>
-                    <Text strong style={{ fontSize: 14, display: 'block', color: '#0f172a' }}>
-                      Tiền mặt tại quầy khi nhận sân
-                    </Text>
-                    <Text type="secondary" style={{ fontSize: 12 }}>
-                      Thanh toán trực tiếp cho nhân viên lễ tân khi đến nhận sân chơi
-                    </Text>
-                  </div>
-                </Space>
-                <Tag color="green" style={{ margin: 0, fontWeight: 600 }}>
-                  Tại quầy
-                </Tag>
-              </div>
-            </div>
-          </Card>
         </Col>
 
-        {/* CỘT PHẢI: BƯỚC 5 — TÓM TẮT GIÁ & XÁC NHẬN BOOKING */}
+        {/* CỘT PHẢI: BƯỚC 4 — TÓM TẮT GIÁ & XÁC NHẬN BOOKING */}
         <Col xs={24} lg={9} xl={8}>
           <Card
             className="booking-summary-card"
             title={
               <div className="booking-step-title-group">
-                <span className="booking-step-number">5</span>
+                <span className="booking-step-number">4</span>
                 <span className="booking-step-title-text">Tóm tắt & Xác nhận</span>
               </div>
             }
