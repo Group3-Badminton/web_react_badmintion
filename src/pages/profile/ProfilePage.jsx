@@ -251,13 +251,10 @@ export default function ProfilePage() {
           <Form.Item
             name="email"
             label="Địa chỉ Email liên hệ"
-            rules={[
-              { required: true, message: "Vui lòng nhập Email!" },
-              { type: "email", message: "Định dạng Email không hợp lệ!" }
-            ]}
-            extra="Dùng để nhận mã OTP và các thông báo hệ thống."
+            extra="Email định danh tài khoản, không thể thay đổi."
           >
             <Input
+              disabled
               prefix={<MailOutlined style={{ color: "#94a3b8" }} />}
               placeholder="VD: user@gmail.com"
               style={{ height: 40, borderRadius: 6 }}

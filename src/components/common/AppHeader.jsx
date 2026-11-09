@@ -50,8 +50,11 @@ export default function AppHeader({ collapsed, setCollapsed }) {
   const [detailModalOpen, setDetailModalOpen] = useState(false);
 
   // Lấy số lượng thông báo chưa đọc
+  const userId = user?._id || user?.id || user?.userId;
+
+  // Lấy số lượng thông báo chưa đọc
   const fetchUnreadCount = useCallback(async () => {
-    if (!user) return;
+    if (!userId) return;
     try {
       const res = await notificationService.getUnreadCount();
       if (res?.success) {
@@ -60,11 +63,11 @@ export default function AppHeader({ collapsed, setCollapsed }) {
     } catch {
       // Bỏ qua lỗi ngầm khi không có mạng hoặc chưa đăng nhập
     }
-  }, [user]);
+  }, [userId]);
 
-  // Lấy 5 thông báo mới nhất cho Popover
+  // Lấy 5 thông báo mới nhất cho Popover (chỉ tải khi mở chuông hoặc lần đầu)
   const fetchRecentNotifications = useCallback(async () => {
-    if (!user) return;
+    if (!userId) return;
     setLoading(true);
     try {
       const res = await notificationService.getMyNotifications({ page: 1, limit: 5 });
@@ -76,20 +79,19 @@ export default function AppHeader({ collapsed, setCollapsed }) {
     } finally {
       setLoading(false);
     }
-  }, [user]);
+  }, [userId]);
 
-  // Tự động kiểm tra thông báo định kỳ
+  // Tự động kiểm tra số lượng thông báo chưa đọc định kỳ mỗi 60 giây (không spam log)
   useEffect(() => {
-    if (!user) return;
+    if (!userId) return;
     fetchUnreadCount();
-    fetchRecentNotifications();
 
     const interval = setInterval(() => {
       fetchUnreadCount();
-    }, 20000); // Poll mỗi 20 giây
+    }, 60000); // Poll mỗi 60 giây
 
     return () => clearInterval(interval);
-  }, [user, fetchUnreadCount, fetchRecentNotifications]);
+  }, [userId, fetchUnreadCount]);
 
   // Khi mở Popover thì tải lại dữ liệu mới nhất
   const handlePopoverOpenChange = (open) => {

@@ -3,7 +3,6 @@ import { Row, Col, Card, Statistic, Typography, Space, Button, Progress, Tag, Ta
 import {
   DollarOutlined,
   CalendarOutlined,
-  ThunderboltOutlined,
   CheckCircleOutlined,
   ClockCircleOutlined,
   CloseCircleOutlined,
@@ -22,12 +21,10 @@ export default function AdminDashboardPage() {
   // Dữ liệu thống kê thực tế lấy từ Database thông qua API
   const [stats, setStats] = useState({
     totalRevenue: 0,
-    occupancyRate: 0,
     todayBookings: 0,
-    activeCourts: 0,
-    totalCourts: 0,
     pendingCount: 0,
     confirmedCount: 0,
+    checkedInCount: 0,
     completedCount: 0,
     cancelledCount: 0,
     totalAll: 0
@@ -40,15 +37,15 @@ export default function AdminDashboardPage() {
       setLoading(true);
       const todayStr = dayjs().format('YYYY-MM-DD');
 
-      const [allBookingsRes, todayBookingsRes, courtsRes] = await Promise.all([
-        bookingService.getAllBookings({ page: 1, limit: 5 }),
-        bookingService.getAllBookings({ bookingDate: todayStr, limit: 1 }),
-        bookingService.getCourts()
+      const [allBookingsRes, todayBookingsRes] = await Promise.all([
+        bookingService.getAllBookings({ page: 1, limit: 10, sortBy: 'createdAt', sortOrder: 'desc' }),
+        bookingService.getAllBookings({ bookingDate: todayStr, limit: 1 })
       ]);
 
       let revenue = 0;
       let pending = 0;
       let confirmed = 0;
+      let checkedIn = 0;
       let completed = 0;
       let cancelled = 0;
       let totalAll = 0;
@@ -58,55 +55,52 @@ export default function AdminDashboardPage() {
         recentList = allBookingsRes.data.bookings || [];
         if (allBookingsRes.data.stats) {
           const s = allBookingsRes.data.stats;
-          revenue = s.totalRevenue || 0;
-          pending = s.pendingCount || 0;
-          confirmed = s.confirmedCount || 0;
-          completed = s.completedCount || 0;
-          cancelled = s.cancelledCount || 0;
-          totalAll = s.totalAll || 0;
+          revenue = Number(s.totalRevenue) || 0;
+          pending = Number(s.pendingCount) || 0;
+          confirmed = Number(s.confirmedCount) || 0;
+          checkedIn = Number(s.checkedInCount) || 0;
+          completed = Number(s.completedCount) || 0;
+          cancelled = Number(s.cancelledCount) || 0;
+          totalAll = Number(s.totalAll) || 0;
         }
-      }
-
-      let activeC = 0;
-      let totalC = 0;
-      if (courtsRes.success && Array.isArray(courtsRes.data)) {
-        totalC = courtsRes.data.length;
-        activeC = courtsRes.data.filter((c) => c.status === 'ACTIVE').length;
       }
 
       const todayTotal = todayBookingsRes.success && todayBookingsRes.data?.pagination
         ? todayBookingsRes.data.pagination.total
         : 0;
 
-      // Tính tỷ lệ khai thác dựa trên số đơn hôm nay và tổng năng lực phục vụ
-      const maxSlotsEstimate = Math.max(1, totalC * 6);
-      const occupancy = totalC > 0 ? Math.min(100, Math.round((todayTotal / maxSlotsEstimate) * 100)) : 0;
-
       setStats({
         totalRevenue: revenue,
-        occupancyRate: occupancy,
         todayBookings: todayTotal,
-        activeCourts: activeC,
-        totalCourts: totalC,
         pendingCount: pending,
         confirmedCount: confirmed,
+        checkedInCount: checkedIn,
         completedCount: completed,
         cancelledCount: cancelled,
         totalAll
       });
-
       setRecentBookings(
-        recentList.map((b) => ({
-          key: b._id,
-          invoiceNumber: `#${b.bookingCode}`,
-          customer: b.customerId?.fullName || b.customerName || 'Khách vãng lai',
-          total: b.totalAmount || 0,
-          method: b.paymentMethod || 'CASH',
-          paymentStatus: b.paymentStatus || 'UNPAID',
-          time: b.startTime
-            ? `${b.startTime} (${dayjs(b.bookingDate).format('DD/MM')})`
-            : dayjs(b.createdAt).format('HH:mm DD/MM')
-        }))
+        recentList.map((b) => {
+          const firstItem = Array.isArray(b.items) && b.items.length > 0 ? b.items[0] : null;
+          const sTime = firstItem?.startTime || b.startTime;
+          const eTime = firstItem?.endTime || b.endTime;
+          const bDate = firstItem?.bookingDate || b.bookingDate;
+          const timeStr = sTime && eTime
+            ? `${sTime}-${eTime} (${dayjs(bDate).format('DD/MM')})`
+            : sTime
+            ? `${sTime} (${dayjs(bDate).format('DD/MM')})`
+            : dayjs(b.createdAt).format('HH:mm DD/MM');
+
+          return {
+            key: b._id,
+            invoiceNumber: `#${b.bookingCode}`,
+            customer: b.customerId?.fullName || b.customerName || 'Khách vãng lai',
+            total: b.totalAmount || 0,
+            method: b.paymentMethod || 'CASH',
+            paymentStatus: b.paymentStatus || 'UNPAID',
+            time: timeStr
+          };
+        })
       );
     } catch (err) {
       console.error('Lỗi nạp dữ liệu dashboard từ backend:', err);
@@ -196,47 +190,29 @@ export default function AdminDashboardPage() {
         </Button>
       </div>
 
-      {/* KPI Cards */}
+      {/* KPI Cards (3 cột cân đối: xs=24, sm=24, md=8) */}
       <Row gutter={[20, 20]} style={{ marginBottom: 24 }}>
-        <Col xs={24} sm={12} lg={6}>
+        <Col xs={24} md={8}>
           <Card style={{ borderRadius: 12, borderTop: '4px solid #009B60' }}>
             <Statistic
               title="Tổng Doanh Thu Đã Thu"
               value={stats.totalRevenue}
               suffix="đ"
-              valueStyle={{ color: '#009B60', fontWeight: 'bold', fontSize: 22 }}
+              valueStyle={{ color: '#009B60', fontWeight: 'bold', fontSize: 24 }}
               prefix={<DollarOutlined />}
             />
             <div style={{ marginTop: 8, fontSize: 13, color: '#888' }}>
-              Từ các đơn đặt sân đã thanh toán
+              Từ các đơn đặt sân và bán lẻ đã thanh toán
             </div>
           </Card>
         </Col>
 
-        <Col xs={24} sm={12} lg={6}>
-          <Card style={{ borderRadius: 12, borderTop: '4px solid #1890ff' }}>
-            <Statistic
-              title="Tỷ Lệ Khai Thác Sân Hôm Nay"
-              value={stats.occupancyRate}
-              suffix="%"
-              valueStyle={{ color: '#1890ff', fontWeight: 'bold', fontSize: 22 }}
-              prefix={<ThunderboltOutlined />}
-            />
-            <div style={{ marginTop: 8 }}>
-              <Progress percent={stats.occupancyRate} strokeColor="#1890ff" size="small" showInfo={false} />
-              <Text type="secondary" style={{ fontSize: 12 }}>
-                {stats.activeCourts} / {stats.totalCourts} sân đang hoạt động
-              </Text>
-            </div>
-          </Card>
-        </Col>
-
-        <Col xs={24} sm={12} lg={6}>
+        <Col xs={24} md={8}>
           <Card style={{ borderRadius: 12, borderTop: '4px solid #E9B323' }}>
             <Statistic
               title="Lịch Đặt Sân Hôm Nay"
               value={stats.todayBookings}
-              valueStyle={{ color: '#E9B323', fontWeight: 'bold', fontSize: 22 }}
+              valueStyle={{ color: '#E9B323', fontWeight: 'bold', fontSize: 24 }}
               prefix={<CalendarOutlined />}
             />
             <div style={{ marginTop: 8, fontSize: 13, color: '#888' }}>
@@ -245,16 +221,16 @@ export default function AdminDashboardPage() {
           </Card>
         </Col>
 
-        <Col xs={24} sm={12} lg={6}>
+        <Col xs={24} md={8}>
           <Card style={{ borderRadius: 12, borderTop: '4px solid #52c41a' }}>
             <Statistic
               title="Tổng Số Đơn Đặt Sân"
               value={stats.totalAll}
-              valueStyle={{ color: '#52c41a', fontWeight: 'bold', fontSize: 22 }}
+              valueStyle={{ color: '#52c41a', fontWeight: 'bold', fontSize: 24 }}
               prefix={<CheckCircleOutlined />}
             />
             <div style={{ marginTop: 8, fontSize: 13, color: '#888' }}>
-              {stats.pendingCount} chờ duyệt, {stats.confirmedCount} đã xác nhận
+              {stats.pendingCount} chờ duyệt, {(stats.confirmedCount || 0) + (stats.checkedInCount || 0) + (stats.completedCount || 0)} đã xử lý
             </div>
           </Card>
         </Col>
@@ -268,14 +244,14 @@ export default function AdminDashboardPage() {
               <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4 }}>
                 <Text strong><CheckCircleOutlined style={{ color: '#009B60' }} /> Đã xác nhận / Hoàn thành:</Text>
                 <Text strong>
-                  {stats.confirmedCount + stats.completedCount} đơn (
+                  {(stats.confirmedCount || 0) + (stats.checkedInCount || 0) + (stats.completedCount || 0)} đơn (
                   {stats.totalAll > 0
-                    ? Math.round(((stats.confirmedCount + stats.completedCount) / stats.totalAll) * 100)
+                    ? Math.round((((stats.confirmedCount || 0) + (stats.checkedInCount || 0) + (stats.completedCount || 0)) / stats.totalAll) * 100)
                     : 0}%)
                 </Text>
               </div>
               <Progress
-                percent={stats.totalAll > 0 ? Math.round(((stats.confirmedCount + stats.completedCount) / stats.totalAll) * 100) : 0}
+                percent={stats.totalAll > 0 ? Math.round((((stats.confirmedCount || 0) + (stats.checkedInCount || 0) + (stats.completedCount || 0)) / stats.totalAll) * 100) : 0}
                 strokeColor="#009B60"
               />
             </div>

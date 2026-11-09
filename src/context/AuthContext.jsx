@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useEffect } from 'react';
+import React, { createContext, useContext, useState, useEffect, useMemo, useCallback } from 'react';
 import { ROLES } from '../utils/constants';
 import api from '../services/api';
 
@@ -48,37 +48,37 @@ export function AuthProvider({ children }) {
     verifySession();
   }, []);
 
-  const handleLoginSuccess = (authData) => {
+  const handleLoginSuccess = useCallback((authData) => {
     const { user: userData, token: newToken } = authData;
     setToken(newToken);
     setUser(userData);
     localStorage.setItem('bcms_token', newToken);
     localStorage.setItem('bcms_user', JSON.stringify(userData));
-  };
+  }, []);
 
-  const handleLogout = async () => {
+  const handleLogout = useCallback(async () => {
     localStorage.removeItem('bcms_token');
     localStorage.removeItem('bcms_user');
     setToken(null);
     setUser(null);
-  };
+  }, []);
 
   const isAdmin = user?.role === ROLES.ADMIN;
   const isStaff = user?.role === ROLES.STAFF;
   const isCustomer = user?.role === ROLES.CUSTOMER;
 
-  const hasRole = (...roles) => {
+  const hasRole = useCallback((...roles) => {
     if (!user) return false;
     return roles.includes(user.role);
-  };
+  }, [user]);
 
-  const hasPermission = (permission) => {
+  const hasPermission = useCallback((permission) => {
     if (!user) return false;
     if (user.role === ROLES.ADMIN) return true;
     return Array.isArray(user.permissions) && user.permissions.includes(permission);
-  };
+  }, [user]);
 
-  const value = {
+  const value = useMemo(() => ({
     user,
     token,
     loading,
@@ -91,8 +91,7 @@ export function AuthProvider({ children }) {
     loginSuccess: handleLoginSuccess,
     logout: handleLogout,
     setUser
-  };
-
+  }), [user, token, loading, isAdmin, isStaff, isCustomer, hasRole, hasPermission, handleLoginSuccess, handleLogout]);
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }
 export function useAuth() {
