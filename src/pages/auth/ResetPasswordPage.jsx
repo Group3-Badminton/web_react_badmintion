@@ -17,7 +17,7 @@ const EMAILJS_TEMPLATE_ID = "template_8bwu5in";
 const EMAILJS_PUBLIC_KEY = "xWKN2ZcMfxpmGDmHA";
 
 export default function ResetPasswordPage() {
-  const [currentStep, setCurrentStep] = useState(0); // 0: Nhập Email, 1: Nhập OTP, 2: Mật khẩu mới
+  const [currentStep, setCurrentStep] = useState(0);
   const [email, setEmail] = useState("");
   const [otp, setOtp] = useState("");
   const [loading, setLoading] = useState(false);
@@ -35,7 +35,9 @@ export default function ResetPasswordPage() {
         const { otp: generatedOtp, fullName, otpExpiry } = res.data;
         setEmail(values.email);
 
-        const expiryDate = otpExpiry ? new Date(otpExpiry) : new Date(Date.now() + 10 * 60 * 1000);
+        const expiryDate = otpExpiry
+          ? new Date(otpExpiry)
+          : new Date(Date.now() + 10 * 60 * 1000);
         const expiryTime = expiryDate.toLocaleTimeString("vi-VN", {
           hour: "2-digit",
           minute: "2-digit",
@@ -71,7 +73,6 @@ export default function ResetPasswordPage() {
     }
   };
 
-  // BƯỚC 2: Xử lý Xác nhận mã OTP
   const onFinishStep2_Otp = async (values) => {
     setLoading(true);
     setErrorMessage("");
@@ -154,8 +155,6 @@ export default function ResetPasswordPage() {
           style={{ marginBottom: 16, borderRadius: 8, padding: "8px 12px" }}
         />
       )}
-
-      {/* ==================== BƯỚC 1: NHẬP EMAIL ==================== */}
       {currentStep === 0 && (
         <Form
           layout="vertical"
@@ -349,7 +348,7 @@ export default function ResetPasswordPage() {
                 fontWeight: 700,
               }}
             >
-            Đổi Mật Khẩu
+              Đổi Mật Khẩu
             </Button>
           </Form.Item>
         </Form>

@@ -15,7 +15,6 @@ export function AuthProvider({ children }) {
     }
   });
   const [token, setToken] = useState(() => localStorage.getItem('bcms_token') || null);
-  
   const [loading, setLoading] = useState(true);
 
   //xác thực phiên khi ngừi dùng f5
