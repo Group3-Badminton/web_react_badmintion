@@ -25,7 +25,9 @@ import {
   DollarOutlined,
   SafetyCertificateOutlined,
   CopyOutlined,
-  SyncOutlined
+  SyncOutlined,
+  TagOutlined,
+  GiftOutlined
 } from '@ant-design/icons';
 import dayjs from 'dayjs';
 import customParseFormat from 'dayjs/plugin/customParseFormat';
@@ -99,7 +101,7 @@ export default function CustomerBookingPage() {
   // Bước 3: Ghi chú khách hàng
   const [note, setNote] = useState('');
 
-  // Bước 4: Bảng giá tính toán từ Backend
+  // Bước 4: Bảng giá tính toán từ Backend & Mã giảm giá
   const [loadingPrice, setLoadingPrice] = useState(false);
   const [priceCalculation, setPriceCalculation] = useState({
     courtBreakdowns: [],
@@ -108,6 +110,14 @@ export default function CustomerBookingPage() {
     finalTotalAmount: 0,
     appliedVoucher: null
   });
+
+  // State Voucher cho khách hàng
+  const [selectedVoucher, setSelectedVoucher] = useState(null);
+  const [voucherModalOpen, setVoucherModalOpen] = useState(false);
+  const [availableVouchers, setAvailableVouchers] = useState([]);
+  const [loadingVouchers, setLoadingVouchers] = useState(false);
+  const [manualVoucherInput, setManualVoucherInput] = useState('');
+  const [validatingManualVoucher, setValidatingManualVoucher] = useState(false);
 
   // Modal Thành Công
   const [submittingBooking, setSubmittingBooking] = useState(false);
@@ -322,7 +332,8 @@ export default function CustomerBookingPage() {
       setLoadingPrice(true);
       const res = await bookingService.calculateBookingPrice({
         courtOrders,
-        bookingDate: selectedDate.format('YYYY-MM-DD')
+        bookingDate: selectedDate.format('YYYY-MM-DD'),
+        voucherCode: selectedVoucher ? (selectedVoucher.code || selectedVoucher.voucherCode) : undefined
       });
 
       if (res.success && res.data) {
@@ -333,7 +344,71 @@ export default function CustomerBookingPage() {
     } finally {
       setLoadingPrice(false);
     }
-  }, [selectedCourts, selectedDate, getCourtSchedule, areAllCourtsValid]);
+  }, [selectedCourts, selectedDate, getCourtSchedule, areAllCourtsValid, selectedVoucher]);
+
+  // Thao tác mở Modal và chọn voucher
+  const handleOpenVoucherModal = async () => {
+    setVoucherModalOpen(true);
+    setLoadingVouchers(true);
+    try {
+      const res = await bookingService.getAvailableVouchers({
+        orderAmount: priceCalculation.totalBasePrice,
+        courtBreakdowns: priceCalculation.courtBreakdowns,
+        courtTypes: selectedCourts.map((c) => c.courtType || 'STANDARD')
+      });
+      if (res.success && Array.isArray(res.data)) {
+        setAvailableVouchers(res.data);
+      }
+    } catch {
+      message.error('Không thể tải danh sách mã giảm giá!');
+    } finally {
+      setLoadingVouchers(false);
+    }
+  };
+
+  const handleSelectVoucher = (voucher) => {
+    setSelectedVoucher(voucher);
+    setVoucherModalOpen(false);
+    message.success(`Đã chọn mã giảm giá ${voucher.code || voucher.voucherCode}!`);
+  };
+
+  const handleRemoveVoucher = () => {
+    setSelectedVoucher(null);
+    message.info('Đã hủy áp dụng mã giảm giá.');
+  };
+
+  const handleApplyManualVoucher = async () => {
+    if (!manualVoucherInput.trim()) {
+      message.warning('Vui lòng nhập mã giảm giá!');
+      return;
+    }
+    setValidatingManualVoucher(true);
+    try {
+      const res = await bookingService.validateVoucher(
+        manualVoucherInput.trim(),
+        priceCalculation.totalBasePrice,
+        {
+          courtBreakdowns: priceCalculation.courtBreakdowns,
+          courtTypes: selectedCourts.map((c) => c.courtType || 'STANDARD')
+        }
+      );
+      if (res.success && res.data) {
+        setSelectedVoucher({
+          code: res.data.voucherCode,
+          name: res.data.voucherName,
+          discount: res.data.discount,
+          ...res.data
+        });
+        setVoucherModalOpen(false);
+        setManualVoucherInput('');
+        message.success(`Áp dụng mã ${res.data.voucherCode} thành công!`);
+      }
+    } catch (err) {
+      message.error(err?.response?.data?.message || 'Mã giảm giá không hợp lệ!');
+    } finally {
+      setValidatingManualVoucher(false);
+    }
+  };
 
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect
@@ -429,6 +504,7 @@ export default function CustomerBookingPage() {
         courtIds: selectedCourts.map((c) => c._id),
         courtId: selectedCourts[0]?._id,
         bookingDate: selectedDate.format('YYYY-MM-DD'),
+        voucherCode: selectedVoucher ? (selectedVoucher.code || selectedVoucher.voucherCode) : undefined,
         paymentMethod: 'CASH', // Hệ thống chỉ hỗ trợ tiền mặt tại quầy
         note: note.trim()
       };
@@ -458,6 +534,7 @@ export default function CustomerBookingPage() {
     }
     setCommonStartTime(defTimes.startTime);
     setCommonEndTime(defTimes.endTime);
+    setSelectedVoucher(null);
     setNote('');
   };
 
@@ -915,9 +992,58 @@ export default function CustomerBookingPage() {
                 </Text>
               </div>
 
+              {/* Khu vực Chọn & Áp Dụng Mã Giảm Giá (Voucher) cho Khách Hàng */}
+              <div style={{ margin: '10px 0', padding: '10px 12px', background: '#f8fafc', borderRadius: 8, border: '1px dashed #cbd5e1' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <Space size={6}>
+                    <TagOutlined style={{ color: '#009B60' }} />
+                    <Text strong style={{ fontSize: 13, color: '#334155' }}>Mã giảm giá</Text>
+                  </Space>
+                  {selectedVoucher ? (
+                    <Button size="small" type="link" danger onClick={handleRemoveVoucher} style={{ padding: 0 }}>
+                      Gỡ mã
+                    </Button>
+                  ) : (
+                    <Button
+                      size="small"
+                      type="link"
+                      onClick={handleOpenVoucherModal}
+                      style={{ color: '#009B60', padding: 0, fontWeight: 600 }}
+                    >
+                      Chọn voucher
+                    </Button>
+                  )}
+                </div>
+
+                {selectedVoucher ? (
+                  <div style={{ marginTop: 6, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <div style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '75%' }}>
+                      <Tag color="success" style={{ fontWeight: 700, marginRight: 6 }}>
+                        {selectedVoucher.code || selectedVoucher.voucherCode}
+                      </Tag>
+                      <Text type="secondary" style={{ fontSize: 11 }}>
+                        {selectedVoucher.name || selectedVoucher.voucherName}
+                      </Text>
+                    </div>
+                    <Button size="small" type="text" onClick={handleOpenVoucherModal} style={{ fontSize: 11, color: '#009B60' }}>
+                      Đổi mã
+                    </Button>
+                  </div>
+                ) : (
+                  <div
+                    style={{ marginTop: 4, cursor: 'pointer', padding: '2px 0' }}
+                    onClick={handleOpenVoucherModal}
+                  >
+                    <Text type="secondary" style={{ fontSize: 11, color: '#0284c7' }}>
+                      👉 Nhấn để chọn mã giảm giá thỏa điều kiện
+                    </Text>
+                  </div>
+                )}
+              </div>
+
               {priceCalculation.discount > 0 && (
                 <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 6, color: '#16a34a' }}>
-                  <Text style={{ color: '#16a34a', fontSize: 13 }}>Giảm giá khuyến mãi:</Text>
+                  <Text style={{ color: '#16a34a', fontSize: 13 }}>Giảm giá voucher:</Text>
                   <Text strong style={{ color: '#16a34a', fontSize: 13 }}>
                     - {(priceCalculation.discount || 0).toLocaleString('vi-VN')} đ
                   </Text>
@@ -1050,6 +1176,144 @@ export default function CustomerBookingPage() {
                 Đặt Thêm Sân Khác
               </Button>
             </div>
+          </div>
+        )}
+      </Modal>
+
+      {/* MODAL CHỌN VOUCHER CHO KHÁCH HÀNG */}
+      <Modal
+        open={voucherModalOpen}
+        onCancel={() => setVoucherModalOpen(false)}
+        title={
+          <Space>
+            <TagOutlined style={{ color: '#009B60' }} />
+            <span>Danh Sách Mã Giảm Giá Khả Dụng</span>
+          </Space>
+        }
+        footer={[
+          <Button key="close" onClick={() => setVoucherModalOpen(false)}>
+            Đóng
+          </Button>
+        ]}
+        width={560}
+        centered
+        destroyOnClose
+      >
+        <div style={{ marginBottom: 16 }}>
+          <Text strong style={{ fontSize: 13, display: 'block', marginBottom: 6 }}>
+            Nhập mã voucher thủ công (nếu có):
+          </Text>
+          <Space.Compact style={{ width: '100%' }}>
+            <Input
+              placeholder="Nhập mã ưu đãi (VD: SAN20, GIAM50K)..."
+              value={manualVoucherInput}
+              onChange={(e) => setManualVoucherInput(e.target.value.toUpperCase())}
+              prefix={<GiftOutlined style={{ color: '#009B60' }} />}
+            />
+            <Button
+              type="primary"
+              style={{ backgroundColor: '#009B60', borderColor: '#009B60' }}
+              onClick={handleApplyManualVoucher}
+              loading={validatingManualVoucher}
+            >
+              Áp dụng
+            </Button>
+          </Space.Compact>
+        </div>
+
+        <Divider style={{ margin: '12px 0' }} />
+
+        <div style={{ marginBottom: 10 }}>
+          <Text strong style={{ fontSize: 13, color: '#334155' }}>
+            Voucher phù hợp với đơn của bạn:
+          </Text>
+        </div>
+
+        {loadingVouchers ? (
+          <div style={{ textAlign: 'center', padding: '36px 0' }}>
+            <Spin tip="Đang kiểm tra các mã giảm giá thỏa điều kiện..." />
+          </div>
+        ) : availableVouchers.length === 0 ? (
+          <div style={{ textAlign: 'center', padding: '24px 0', color: '#94a3b8' }}>
+            Hiện chưa có mã giảm giá nào đang áp dụng cho khung giờ hoặc sân bạn đã chọn.
+          </div>
+        ) : (
+          <div style={{ maxHeight: '380px', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 10, paddingRight: 4 }}>
+            {availableVouchers.map((v) => {
+              const currentVoucherCode = selectedVoucher?.code || selectedVoucher?.voucherCode;
+              const isCurrent = currentVoucherCode === v.code;
+              return (
+                <div
+                  key={v._id || v.code}
+                  style={{
+                    border: isCurrent ? '1.5px solid #009B60' : v.isEligible ? '1px solid #bbf7d0' : '1px solid #e2e8f0',
+                    borderRadius: 10,
+                    padding: '12px 14px',
+                    background: isCurrent ? '#f0fdf4' : v.isEligible ? '#fafffa' : '#f8fafc',
+                    opacity: v.isEligible ? 1 : 0.65,
+                    display: 'flex',
+                    justifyContent: 'space-between',
+                    alignItems: 'center',
+                    boxShadow: v.isEligible ? '0 1px 2px rgba(0,0,0,0.03)' : 'none'
+                  }}
+                >
+                  <div style={{ flex: 1, marginRight: 12 }}>
+                    <Space size={6} style={{ marginBottom: 4 }}>
+                      <Tag color={v.isEligible ? 'success' : 'default'} style={{ fontWeight: 700, fontSize: 13, margin: 0 }}>
+                        {v.code}
+                      </Tag>
+                      <Text strong style={{ fontSize: 13, color: '#1e293b' }}>
+                        {v.name}
+                      </Text>
+                    </Space>
+                    <div style={{ fontSize: 12, color: '#009B60', fontWeight: 600, marginTop: 2 }}>
+                      Giảm: {v.discountType === 'PERCENTAGE' ? `${v.discountValue}%` : `${(v.discountValue || 0).toLocaleString('vi-VN')} đ`}
+                      {v.maxDiscountAmount > 0 && ` (Tối đa ${(v.maxDiscountAmount || 0).toLocaleString('vi-VN')} đ)`}
+                    </div>
+                    {v.description && (
+                      <div style={{ fontSize: 11, color: '#64748b', marginTop: 2 }}>
+                        {v.description}
+                      </div>
+                    )}
+                    {v.minInvoiceAmount > 0 && (
+                      <div style={{ fontSize: 11, color: '#94a3b8', marginTop: 2 }}>
+                        Đơn tối thiểu: {(v.minInvoiceAmount || 0).toLocaleString('vi-VN')} đ
+                      </div>
+                    )}
+                    {v.applicableCourtTypes && !v.applicableCourtTypes.includes('ALL') && (
+                      <div style={{ fontSize: 11, color: '#6366f1', marginTop: 2 }}>
+                        Áp dụng sân: {v.applicableCourtTypes.join(', ')}
+                      </div>
+                    )}
+                    {!v.isEligible && v.ineligibleReason && (
+                      <div style={{ fontSize: 11, color: '#ef4444', marginTop: 3, fontWeight: 500 }}>
+                        ⚠️ {v.ineligibleReason}
+                      </div>
+                    )}
+                  </div>
+                  <div>
+                    {isCurrent ? (
+                      <Tag color="green" style={{ padding: '4px 10px', fontSize: 12, fontWeight: 600 }}>
+                        Đang chọn
+                      </Tag>
+                    ) : v.isEligible ? (
+                      <Button
+                        type="primary"
+                        size="small"
+                        style={{ backgroundColor: '#009B60', borderColor: '#009B60', fontWeight: 600 }}
+                        onClick={() => handleSelectVoucher(v)}
+                      >
+                        Áp dụng
+                      </Button>
+                    ) : (
+                      <Button size="small" disabled>
+                        Chưa đủ ĐK
+                      </Button>
+                    )}
+                  </div>
+                </div>
+              );
+            })}
           </div>
         )}
       </Modal>

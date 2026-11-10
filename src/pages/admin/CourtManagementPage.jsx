@@ -349,7 +349,8 @@ export default function CourtManagementPage() {
       if (err.response?.status === 404) {
         message.error('The selected court is unavailable.');
       } else {
-        message.error('Unable to deactivate the court. Please try again.');
+        const errorMsg = err.response?.data?.message || 'Unable to deactivate the court. Please try again.';
+        message.error(errorMsg);
       }
     } finally {
       setDeactivating(false);

@@ -222,7 +222,7 @@ export default function PosPaymentPage() {
   };
 
   const subtotal = cartItems.reduce((sum, item) => sum + item.price * item.quantity, 0);
-  const finalTotal = Math.max(0, subtotal - discountAmount);
+  const finalTotal = subtotal; // Đã loại bỏ áp voucher tại POS
 
   const numCashReceived = Number(cashReceived) || 0;
   const changeAmount = paymentMethod === 'CASH' && numCashReceived >= finalTotal ? numCashReceived - finalTotal : 0;
@@ -704,53 +704,10 @@ export default function PosPaymentPage() {
                 ) : (
                   <div>
                     <div style={{ background: '#f8fafc', padding: 12, borderRadius: 8, marginBottom: 14 }}>
-                      <Row gutter={8} style={{ marginBottom: 8 }}>
-                        <Col span={14}>
-                          <Input
-                            size="small"
-                            placeholder="Mã voucher..."
-                            value={voucherCodeInput}
-                            onChange={(e) => setVoucherCodeInput(e.target.value.toUpperCase())}
-                            disabled={Boolean(appliedVoucher)}
-                            prefix={<TagOutlined style={{ color: '#009B60' }} />}
-                          />
-                        </Col>
-                        <Col span={10}>
-                          {appliedVoucher ? (
-                            <Button size="small" danger block onClick={handleRemoveVoucher}>
-                              Hủy mã
-                            </Button>
-                          ) : (
-                            <Button
-                              size="small"
-                              type="primary"
-                              block
-                              loading={validatingVoucher}
-                              onClick={handleApplyVoucher}
-                              style={{ background: '#009B60', borderColor: '#009B60' }}
-                            >
-                              Áp dụng
-                            </Button>
-                          )}
-                        </Col>
-                      </Row>
-
-                      {appliedVoucher && (
-                        <div style={{ fontSize: 11, color: '#059669', marginBottom: 6 }}>
-                          ✓ Đã áp dụng <b>{appliedVoucher.code}</b> ({appliedVoucher.name})
-                        </div>
-                      )}
-
                       <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13, marginBottom: 4 }}>
                         <Text type="secondary">Tạm tính:</Text>
                         <Text strong>{subtotal.toLocaleString('vi-VN')} đ</Text>
                       </div>
-                      {discountAmount > 0 && (
-                        <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13, marginBottom: 4 }}>
-                          <Text style={{ color: '#ea580c' }}>Giảm giá voucher:</Text>
-                          <Text strong style={{ color: '#ea580c' }}>- {discountAmount.toLocaleString('vi-VN')} đ</Text>
-                        </div>
-                      )}
                       <Divider style={{ margin: '8px 0' }} />
                       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                         <Text strong style={{ fontSize: 14 }}>Tổng thanh toán:</Text>
