@@ -49,6 +49,12 @@ export const bookingService = {
     return response.data;
   },
 
+  // 7.1. Lấy danh sách voucher khả dụng / thỏa điều kiện cho khách hàng
+  getAvailableVouchers: async (data = {}) => {
+    const response = await api.post('/bookings/available-vouchers', data);
+    return response.data;
+  },
+
   // 7.5. Tính giá chi tiết cho từng sân và từng khung giờ (tách cao điểm / thấp điểm)
   calculateBookingPrice: async (data) => {
     const response = await api.post('/bookings/calculate-price', data);

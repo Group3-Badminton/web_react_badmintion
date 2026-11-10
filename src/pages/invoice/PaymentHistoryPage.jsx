@@ -154,7 +154,7 @@ export default function PaymentHistoryPage() {
 
   const handleSettleSubmit = async () => {
     if (!invoiceToSettle) return;
-    const finalAmt = Math.max(0, (Number(invoiceToSettle.subtotal) || Number(invoiceToSettle.totalAmount)) - discountAmount);
+    const finalAmt = Number(invoiceToSettle.subtotal) || Number(invoiceToSettle.totalAmount) || 0;
     const numCash = Number(settleCashReceived) || 0;
 
     if (settlePaymentMethod === 'CASH' && numCash < finalAmt) {
@@ -168,7 +168,7 @@ export default function PaymentHistoryPage() {
         paymentMethod: settlePaymentMethod,
         cashReceived: settlePaymentMethod === 'CASH' ? numCash : finalAmt,
         transactionReference: '',
-        voucherCode: appliedVoucher?.code || ''
+        voucherCode: ''
       });
       message.success('Thanh toán hóa đơn ca chơi thành công!');
       setSettleModalVisible(false);
@@ -286,7 +286,7 @@ export default function PaymentHistoryPage() {
   ];
 
   const currentSettleSubtotal = Number(invoiceToSettle?.subtotal) || Number(invoiceToSettle?.totalAmount) || 0;
-  const currentSettleFinal = Math.max(0, currentSettleSubtotal - discountAmount);
+  const currentSettleFinal = currentSettleSubtotal; // Loại bỏ voucher khỏi thanh toán hóa đơn ca chơi tại quầy
   const currentSettleNumCash = Number(settleCashReceived) || 0;
   const currentSettleChange = currentSettleNumCash >= currentSettleFinal ? currentSettleNumCash - currentSettleFinal : 0;
 
@@ -464,7 +464,7 @@ export default function PaymentHistoryPage() {
                 </div>
                 <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4 }}>
                   <span>Sân: {selectedInvoice.sessionDetails.courtName || '--'}</span>
-                  <span>Thời lượng: {selectedInvoice.sessionDetails.scheduledDurationHours || 1} giờ</span>
+                  <span>Thời lượng: {selectedInvoice.sessionDetails.scheduledDurationHours > 0 ? selectedInvoice.sessionDetails.scheduledDurationHours : 1} tiếng</span>
                 </div>
                 <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4 }}>
                   <span>Tiền giờ chơi tiêu chuẩn:</span>
@@ -598,42 +598,7 @@ export default function PaymentHistoryPage() {
               </div>
             </div>
 
-            <div style={{ marginBottom: 12 }}>
-              <Row gutter={8}>
-                <Col span={15}>
-                  <Input
-                    placeholder="Nhập mã voucher (nếu có)..."
-                    value={settleVoucherCode}
-                    onChange={(e) => setSettleVoucherCode(e.target.value.toUpperCase())}
-                    disabled={Boolean(appliedVoucher)}
-                    prefix={<TagOutlined style={{ color: '#009B60' }} />}
-                  />
-                </Col>
-                <Col span={9}>
-                  {appliedVoucher ? (
-                    <Button danger block onClick={handleRemoveSettleVoucher}>
-                      Hủy mã
-                    </Button>
-                  ) : (
-                    <Button
-                      type="primary"
-                      block
-                      loading={validatingVoucher}
-                      onClick={handleApplySettleVoucher}
-                      style={{ background: '#009B60', borderColor: '#009B60' }}
-                    >
-                      Áp dụng
-                    </Button>
-                  )}
-                </Col>
-              </Row>
-              {appliedVoucher && (
-                <div style={{ fontSize: 12, color: '#059669', marginTop: 4 }}>
-                  ✓ Đã giảm: {discountAmount.toLocaleString('vi-VN')} đ
-                </div>
-              )}
-            </div>
-
+            {/* Đã loại bỏ voucher tại thanh toán hóa đơn ca chơi theo yêu cầu nghiệp vụ */}
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 }}>
               <Text strong style={{ fontSize: 15 }}>Tổng cần thu:</Text>
               <Text style={{ fontSize: 22, fontWeight: 800, color: '#009B60' }}>

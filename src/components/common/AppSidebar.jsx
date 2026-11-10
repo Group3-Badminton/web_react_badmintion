@@ -190,7 +190,9 @@ export default function AppSidebar({ collapsed }) {
       theme="light"
       style={{
         borderRight: '1px solid #f0f0f0',
-        minHeight: 'calc(100vh - 64px)'
+        height: '100%',
+        overflowY: 'auto',
+        overflowX: 'hidden'
       }}
     >
       <Menu

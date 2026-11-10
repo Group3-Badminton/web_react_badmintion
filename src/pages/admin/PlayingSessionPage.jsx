@@ -793,7 +793,7 @@ export default function PlayingSessionPage() {
 
   const handleConfirmSessionPayment = async () => {
     if (!checkoutInvoice) return;
-    const finalAmt = Math.max(0, (Number(checkoutInvoice.subtotal) || Number(checkoutInvoice.totalAmount)) - sessionDiscountAmount);
+    const finalAmt = Number(checkoutInvoice.subtotal) || Number(checkoutInvoice.totalAmount) || 0;
     const numCash = Number(sessionCashReceived) || 0;
 
     if (sessionPaymentMethod === 'CASH' && numCash < finalAmt) {
@@ -807,7 +807,7 @@ export default function PlayingSessionPage() {
         paymentMethod: sessionPaymentMethod,
         cashReceived: sessionPaymentMethod === 'CASH' ? numCash : finalAmt,
         transactionReference: sessionPaymentMethod === 'TRANSFER' ? sessionTransactionRef.trim() : '',
-        voucherCode: sessionAppliedVoucher?.code || ''
+        voucherCode: ''
       });
       message.success('Thanh toán hóa đơn ca chơi thành công! Sân đã sẵn sàng đón lượt khách mới.');
       setSettleSessionModalVisible(false);
@@ -2449,7 +2449,7 @@ export default function PlayingSessionPage() {
       >
         {checkoutInvoice && (() => {
           const sub = Number(checkoutInvoice.subtotal) || Number(checkoutInvoice.totalAmount) || 0;
-          const finalAmt = Math.max(0, sub - sessionDiscountAmount);
+          const finalAmt = sub; // Loại bỏ voucher khỏi thanh toán ca chơi tại quầy
           const numCash = Number(sessionCashReceived) || 0;
           const changeAmt = numCash >= finalAmt ? numCash - finalAmt : 0;
           return (
@@ -2514,42 +2514,7 @@ export default function PlayingSessionPage() {
                 </div>
               </div>
 
-              <div style={{ marginBottom: 12 }}>
-                <Row gutter={8}>
-                  <Col span={15}>
-                    <Input
-                      placeholder="Nhập mã voucher (nếu có)..."
-                      value={sessionVoucherCode}
-                      onChange={(e) => setSessionVoucherCode(e.target.value.toUpperCase())}
-                      disabled={Boolean(sessionAppliedVoucher)}
-                      prefix={<TagOutlined style={{ color: '#009B60' }} />}
-                    />
-                  </Col>
-                  <Col span={9}>
-                    {sessionAppliedVoucher ? (
-                      <Button danger block onClick={handleRemoveSessionVoucher}>
-                        Hủy mã
-                      </Button>
-                    ) : (
-                      <Button
-                        type="primary"
-                        block
-                        loading={validatingSessionVoucher}
-                        onClick={handleApplySessionVoucher}
-                        style={{ background: '#009B60', borderColor: '#009B60' }}
-                      >
-                        Áp dụng
-                      </Button>
-                    )}
-                  </Col>
-                </Row>
-                {sessionAppliedVoucher && (
-                  <div style={{ fontSize: 12, color: '#059669', marginTop: 4 }}>
-                    ✓ Đã giảm: {sessionDiscountAmount.toLocaleString('vi-VN')} đ
-                  </div>
-                )}
-              </div>
-
+              {/* Đã loại bỏ voucher tại thanh toán ca chơi */}
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 }}>
                 <Text strong style={{ fontSize: 15 }}>Tổng cần thu:</Text>
                 <Text style={{ fontSize: 20, fontWeight: 800, color: '#009B60' }}>

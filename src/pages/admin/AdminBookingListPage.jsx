@@ -563,9 +563,9 @@ export default function AdminBookingListPage() {
         startTime: firstOrder.startTime.format('HH:mm'),
         endTime: firstOrder.endTime.format('HH:mm'),
         price: createPrice,
-        voucherCode: appliedCreateVoucher ? appliedCreateVoucher.voucherCode : undefined,
-        discount: createDiscount,
-        totalAmount: createTotalAmount,
+        voucherCode: undefined, // Đã loại bỏ áp voucher phía Admin/Staff
+        discount: 0,
+        totalAmount: createPrice,
         paymentMethod: createPaymentMethod || 'CASH',
         paymentStatus: 'UNPAID',
         status: createStatus || 'CONFIRMED',
@@ -1062,11 +1062,11 @@ export default function AdminBookingListPage() {
 
         return (
           <Space direction="vertical" size={3} style={{ width: '100%' }}>
-            <Space size={6} wrap>
-              <CalendarOutlined style={{ color: isRecordOverdue ? '#ef4444' : '#059669' }} />
-              <Text strong style={{ color: isRecordOverdue ? '#dc2626' : undefined }}>
+            <Space size={6} wrap align="center">
+              <Tag color="purple" style={{ margin: 0, borderRadius: 4 }}>
+                <CalendarOutlined style={{ marginRight: 4, color: isRecordOverdue ? '#ef4444' : undefined }} />
                 {dayjs(record.bookingDate).format('DD/MM/YYYY')}
-              </Text>
+              </Tag>
               {isRecordOverdue && (
                 <Tag color="error" style={{ fontSize: 10, padding: '0 4px', lineHeight: '18px', borderRadius: 4, margin: 0, fontWeight: 600 }}>
                   Quá giờ
@@ -1082,41 +1082,50 @@ export default function AdminBookingListPage() {
                   const isItemOverdue = !isItemCancelled && isBookingOrSlotOverdue(itDate, it.startTime, it.endTime, record.status);
 
                   return (
-                    <Tag
-                      key={it._id || idx}
-                      color={isItemCancelled ? 'red' : isItemOverdue ? 'error' : 'geekblue'}
-                      style={{
-                        borderRadius: 4,
-                        margin: 0,
-                        fontSize: 12,
-                        padding: '2px 8px',
-                        whiteSpace: 'nowrap',
-                        border: isItemOverdue ? '1px solid #fca5a5' : undefined
-                      }}
-                    >
-                      <ClockCircleOutlined style={{ marginRight: 4 }} />
-                      {cName}: {dayjs(itDate).format('DD/MM')} {it.startTime} - {it.endTime}
-                      {isItemCancelled ? ' (Đã hủy)' : isItemOverdue ? ' (Quá giờ)' : ''}
-                    </Tag>
+                    <Space key={it._id || idx} size={4} wrap align="center">
+                      <Tag
+                        color={isItemCancelled ? 'red' : isItemOverdue ? 'error' : 'geekblue'}
+                        style={{
+                          borderRadius: 4,
+                          margin: 0,
+                          fontSize: 12,
+                          padding: '2px 8px',
+                          whiteSpace: 'nowrap',
+                          border: isItemOverdue ? '1px solid #fca5a5' : undefined
+                        }}
+                      >
+                        <ClockCircleOutlined style={{ marginRight: 4 }} />
+                        {cName}: {dayjs(itDate).format('DD/MM')} {it.startTime} - {it.endTime}
+                        {isItemCancelled ? ' (Đã hủy)' : isItemOverdue ? ' (Quá giờ)' : ''}
+                      </Tag>
+                      <Text type="secondary" style={{ fontSize: 12 }}>
+                        ({(it.durationHours || 1)} tiếng)
+                      </Text>
+                    </Space>
                   );
                 })}
               </Space>
             ) : (
-              <Tag
-                color={isRecordOverdue ? 'error' : 'geekblue'}
-                style={{
-                  borderRadius: 4,
-                  margin: 0,
-                  fontSize: 12,
-                  padding: '2px 8px',
-                  whiteSpace: 'nowrap',
-                  border: isRecordOverdue ? '1px solid #fca5a5' : undefined
-                }}
-              >
-                <ClockCircleOutlined style={{ marginRight: 4 }} />
-                {record.startTime} - {record.endTime}
-                {isRecordOverdue ? ' (Quá giờ)' : ''}
-              </Tag>
+              <Space size={6} wrap align="center">
+                <Tag
+                  color={isRecordOverdue ? 'error' : 'geekblue'}
+                  style={{
+                    borderRadius: 4,
+                    margin: 0,
+                    fontSize: 12,
+                    padding: '2px 8px',
+                    whiteSpace: 'nowrap',
+                    border: isRecordOverdue ? '1px solid #fca5a5' : undefined
+                  }}
+                >
+                  <ClockCircleOutlined style={{ marginRight: 4 }} />
+                  {record.startTime} - {record.endTime}
+                  {isRecordOverdue ? ' (Quá giờ)' : ''}
+                </Tag>
+                <Text type="secondary" style={{ fontSize: 12 }}>
+                  ({(record.items?.[0]?.durationHours || record.durationHours || 1)} tiếng)
+                </Text>
+              </Space>
             )}
           </Space>
         );
@@ -1237,8 +1246,10 @@ export default function AdminBookingListPage() {
               </Popconfirm>
             )}
 
-            {/* CONFIRMED -> CHECKED_IN */}
-            {record.status === 'CONFIRMED' && (
+            {/* Bỏ nút Nhận sân, Hoàn thành, Thu tiền theo yêu cầu */}
+            {/*
+            // CONFIRMED -> CHECKED_IN
+            record.status === 'CONFIRMED' && (
               <Popconfirm
                 title="Xác nhận khách đã đến nhận sân thi đấu?"
                 onConfirm={() => handleUpdateStatus(record._id, 'CHECKED_IN')}
@@ -1254,10 +1265,12 @@ export default function AdminBookingListPage() {
                   Nhận sân
                 </Button>
               </Popconfirm>
-            )}
+            )
+            */}
 
-            {/* CHECKED_IN -> COMPLETED */}
-            {record.status === 'CHECKED_IN' && (
+            {/*
+            // CHECKED_IN -> COMPLETED
+            record.status === 'CHECKED_IN' && (
               <Popconfirm
                 title="Xác nhận khách đã chơi xong và trả sân?"
                 onConfirm={() => handleUpdateStatus(record._id, 'COMPLETED')}
@@ -1273,10 +1286,12 @@ export default function AdminBookingListPage() {
                   Hoàn thành
                 </Button>
               </Popconfirm>
-            )}
+            )
+            */}
 
-            {/* Thu tiền nếu UNPAID */}
-            {record.paymentStatus === 'UNPAID' && ['CONFIRMED', 'CHECKED_IN', 'COMPLETED'].includes(record.status) && (
+            {/*
+            // Thu tiền nếu UNPAID
+            record.paymentStatus === 'UNPAID' && ['CONFIRMED', 'CHECKED_IN', 'COMPLETED'].includes(record.status) && (
               <Popconfirm
                 title="Xác nhận khách đã thanh toán đơn này?"
                 onConfirm={() => handleUpdateStatus(record._id, undefined, 'PAID')}
@@ -1291,7 +1306,8 @@ export default function AdminBookingListPage() {
                   Thu tiền
                 </Button>
               </Popconfirm>
-            )}
+            )
+            */}
 
             {/* Từ chối hoặc hủy đơn */}
             {['PENDING', 'PENDING_APPROVAL', 'CONFIRMED'].includes(record.status) && (
@@ -1748,6 +1764,8 @@ export default function AdminBookingListPage() {
                 </Popconfirm>
               ),
 
+              // Bỏ nút Nhận sân, Hoàn thành ca chơi, Thu tiền theo yêu cầu
+              /*
               // Nhận sân (Khi CONFIRMED)
               selectedBooking?.status === 'CONFIRMED' && (
                 <Popconfirm
@@ -1803,6 +1821,7 @@ export default function AdminBookingListPage() {
                   </Button>
                 </Popconfirm>
               )
+              */
             ].filter(Boolean)
         }
       >
@@ -2571,7 +2590,7 @@ export default function AdminBookingListPage() {
             style={{ borderRadius: 10, marginBottom: 16 }}
           >
             <Row gutter={[12, 12]}>
-              <Col xs={24} sm={8}>
+              <Col xs={24} sm={12}>
                 <Text strong style={{ display: 'block', marginBottom: 4 }}>
                   Tổng tiền các sân ({createCourtOrders.length} sân)
                 </Text>
@@ -2592,56 +2611,19 @@ export default function AdminBookingListPage() {
                 </div>
               </Col>
 
+              {/* Đã loại bỏ voucher ở Admin/Staff đặt sân */}
+              {/*
               <Col xs={24} sm={8}>
                 <Text strong style={{ display: 'block', marginBottom: 4 }}>
                   Mã giảm giá (Voucher)
                 </Text>
-                {appliedCreateVoucher ? (
-                  <div
-                    style={{
-                      height: 38,
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'space-between',
-                      padding: '0 11px',
-                      borderRadius: 6,
-                      backgroundColor: '#f0fdf4',
-                      border: '1px solid #86efac'
-                    }}
-                  >
-                    <Space>
-                      <Tag color="success">{appliedCreateVoucher.voucherCode || appliedCreateVoucher.code}</Tag>
-                      <Text type="secondary" style={{ fontSize: 12 }}>
-                        -{(createDiscount || 0).toLocaleString('vi-VN')} đ
-                      </Text>
-                    </Space>
-                    <Button size="small" type="link" danger onClick={handleRemoveCreateVoucher}>
-                      Hủy
-                    </Button>
-                  </div>
-                ) : (
-                  <Space.Compact style={{ width: '100%' }}>
-                    <Input
-                      style={{ height: 38 }}
-                      placeholder="Mã voucher..."
-                      value={createVoucherCode}
-                      onChange={(e) => setCreateVoucherCode(e.target.value.toUpperCase())}
-                    />
-                    <Button
-                      type="primary"
-                      onClick={handleApplyCreateVoucher}
-                      loading={validatingCreateVoucher}
-                      style={{ height: 38, backgroundColor: '#059669', borderColor: '#059669' }}
-                    >
-                      Áp dụng
-                    </Button>
-                  </Space.Compact>
-                )}
+                ...
               </Col>
+              */}
 
-              <Col xs={24} sm={8}>
+              <Col xs={24} sm={12}>
                 <Text strong style={{ display: 'block', marginBottom: 4 }}>
-                  Tổng thanh toán cuối cùng
+                  Tổng thanh toán
                 </Text>
                 <div
                   style={{
@@ -2655,13 +2637,8 @@ export default function AdminBookingListPage() {
                   }}
                 >
                   <Text strong style={{ color: '#d4380d', fontSize: 16 }}>
-                    {(createTotalAmount || 0).toLocaleString('vi-VN')} đ
+                    {(createPrice || 0).toLocaleString('vi-VN')} đ
                   </Text>
-                  {createDiscount > 0 && (
-                    <Text type="secondary" style={{ marginLeft: 8, fontSize: 12 }}>
-                      (Giảm {createDiscount.toLocaleString('vi-VN')} đ)
-                    </Text>
-                  )}
                 </div>
               </Col>
 

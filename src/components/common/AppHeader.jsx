@@ -310,7 +310,8 @@ export default function AppHeader({ collapsed, setCollapsed }) {
         position: 'sticky',
         top: 0,
         zIndex: 100,
-        height: 64
+        height: 64,
+        flexShrink: 0
       }}
     >
       <Space>
