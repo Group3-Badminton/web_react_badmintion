@@ -140,17 +140,8 @@ export default function AppSidebar({ collapsed }) {
       });
     }
 
-    // Courts (Staff & Admin)
-    if (isAdmin || isStaff) {
-      items.push({
-        key: '/admin/courts',
-        icon: <AppstoreOutlined />,
-        label: 'Quản lý danh mục sân'
-      });
-    }
-
-    // Courts
-    if (isAdmin || hasPermission(STAFF_PERMISSIONS.VIEW_COURTS)) {
+    // Courts (Admin & Staff - Nằm trong Danh mục chung)
+    if (isAdmin || isStaff || hasPermission(STAFF_PERMISSIONS.VIEW_COURTS)) {
       generalCategoryChildren.push({
         key: '/admin/courts',
         icon: <AppstoreOutlined />,
