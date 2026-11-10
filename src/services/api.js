@@ -46,6 +46,20 @@ api.interceptors.response.use(
       }
     }
 
+    // Chuyển đổi các lỗi hệ thống / MongoDB sang tiếng Việt thân thiện
+    if (error.response?.data?.message) {
+      const msg = error.response.data.message;
+      if (typeof msg === 'string' && (msg.includes('E11000') || msg.includes('duplicate key'))) {
+        if (msg.includes('phone')) {
+          error.response.data.message = 'Số điện thoại này đã tồn tại trong hệ thống. Vui lòng kiểm tra lại!';
+        } else if (msg.includes('email')) {
+          error.response.data.message = 'Email này đã tồn tại trong hệ thống. Vui lòng sử dụng email khác!';
+        } else {
+          error.response.data.message = 'Dữ liệu này đã tồn tại trong hệ thống (bị trùng lặp)!';
+        }
+      }
+    }
+
     return Promise.reject(error);
   }
 );

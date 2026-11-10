@@ -627,13 +627,14 @@ export default function PaymentHistoryPage() {
                 <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 6 }}>Tiền khách đưa:</div>
                 <InputNumber
                   style={{ width: '100%', fontSize: 16, fontWeight: 700, marginBottom: 8 }}
-                  value={settleCashReceived}
-                  onChange={(val) => setSettleCashReceived(val || 0)}
-                  formatter={(value) => `${value}`.replace(/\B(?=(\d{3})+(?!\d))/g, ',')}
-                  parser={(value) => value.replace(/\$\s?|(,*)/g, '')}
+                  value={settleCashReceived === '' ? null : Number(settleCashReceived)}
+                  onChange={(val) => setSettleCashReceived(val === null || val === undefined ? '' : val)}
+                  formatter={(value) => (value !== '' && value !== null && value !== undefined ? `${value}`.replace(/\B(?=(\d{3})+(?!\d))/g, ',') : '')}
+                  parser={(value) => (value ? String(value).replace(/\D/g, '') : '')}
                   placeholder="Nhập số tiền khách đưa..."
                   addonAfter="đ"
                   size="large"
+                  min={0}
                 />
                 <Space size={6} wrap style={{ marginBottom: 10 }}>
                   {[currentSettleFinal, 50000, 100000, 200000, 500000].map((amt, idx) => (

@@ -767,14 +767,15 @@ export default function PosPaymentPage() {
                         </div>
                         <InputNumber
                           style={{ width: '100%', fontSize: 16, fontWeight: 700, marginBottom: 8 }}
-                          value={cashReceived}
-                          onChange={(val) => setCashReceived(val || 0)}
-                          formatter={(value) => `${value}`.replace(/\B(?=(\d{3})+(?!\d))/g, ',')}
-                          parser={(value) => value.replace(/\$\s?|(,*)/g, '')}
+                          value={cashReceived === '' ? null : Number(cashReceived)}
+                          onChange={(val) => setCashReceived(val === null || val === undefined ? '' : val)}
+                          formatter={(value) => (value !== '' && value !== null && value !== undefined ? `${value}`.replace(/\B(?=(\d{3})+(?!\d))/g, ',') : '')}
+                          parser={(value) => (value ? String(value).replace(/\D/g, '') : '')}
                           placeholder="Nhập số tiền khách đưa..."
                           addonAfter="đ"
                           size="large"
                           status={isCashInsufficient ? 'error' : ''}
+                          min={0}
                         />
                         <Space size={6} wrap style={{ marginBottom: 10 }}>
                           {[finalTotal, 50000, 100000, 200000, 500000].map((amt, idx) => (
