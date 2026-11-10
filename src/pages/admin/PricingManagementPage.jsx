@@ -684,7 +684,7 @@ export default function PricingManagementPage() {
                 <InputNumber
                   style={{ width: '100%' }}
                   formatter={(value) => `${value}`.replace(/\B(?=(\d{3})+(?!\d))/g, ',')}
-                  parser={(value) => value.replace(/\$\s?|(,*)/g, '')}
+                  parser={(value) => (value ? String(value).replace(/\D/g, '') : '')}
                   step={10000}
                   addonAfter="đ/h"
                 />
