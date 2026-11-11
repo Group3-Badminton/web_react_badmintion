@@ -34,7 +34,7 @@ import { customerService } from '../../services/customerService';
 const { Title, Text } = Typography;
 const { Option } = Select;
 
-const VIETNAMESE_PHONE_REGEX = /(0[3|5|7|8|9])+([0-9]{8})\b/;
+const VIETNAMESE_PHONE_REGEX = /^0[35789][0-9]{8}$/;
 
 export default function CustomerManagementPage() {
   const [customers, setCustomers] = useState([]);
@@ -108,6 +108,16 @@ export default function CustomerManagementPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [statusFilter]);
 
+  useEffect(() => {
+    if (modalVisible && modalMode === 'edit' && editingCustomer) {
+      form.setFieldsValue({
+        fullName: editingCustomer.fullName,
+        phone: editingCustomer.phone,
+        email: editingCustomer.email || ''
+      });
+    }
+  }, [modalVisible, modalMode, editingCustomer, form]);
+
   // Bắt sự kiện đổi trang hoặc đổi pageSize của Table
   const handleTableChange = (newPagination) => {
     fetchCustomers({
@@ -129,6 +139,13 @@ export default function CustomerManagementPage() {
     setStatusFilter('ALL');
     fetchCustomers({ page: 1, search: '', status: 'ALL' });
   };
+  // Đóng modal và reset state/form dùng chung cho Hủy và onCancel
+  const handleCloseModal = () => {
+    setModalVisible(false);
+    setEditingCustomer(null);
+    form.resetFields();
+  };
+
   // Mở modal Thêm mới khách hàng (UC-6.2)
   const handleOpenCreate = () => {
     setModalMode('create');
@@ -141,11 +158,7 @@ export default function CustomerManagementPage() {
   const handleOpenEdit = (customer) => {
     setModalMode('edit');
     setEditingCustomer(customer);
-    form.setFieldsValue({
-      fullName: customer.fullName,
-      phone: customer.phone,
-      email: customer.email
-    });
+    setModalVisible(true);
   };
 
   // Lưu thông tin khách hàng (Create hoặc Update)
@@ -373,10 +386,7 @@ export default function CustomerManagementPage() {
       <Modal
         title={modalMode === 'create' ? 'Tạo mới hồ sơ khách hàng' : 'Cập nhật thông tin khách hàng'}
         open={modalVisible}
-        onCancel={() => {
-          setModalVisible(false);
-          form.resetFields();
-        }}
+        onCancel={handleCloseModal}
         footer={null}
         destroyOnClose
         centered
@@ -419,7 +429,7 @@ export default function CustomerManagementPage() {
 
           <Form.Item style={{ marginBottom: 0, textAlign: 'right' }}>
             <Space>
-              <Button onClick={() => setModalVisible(false)}>
+              <Button onClick={handleCloseModal}>
                 Hủy
               </Button>
               <Button
