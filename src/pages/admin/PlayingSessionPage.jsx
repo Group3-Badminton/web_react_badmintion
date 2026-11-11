@@ -26,6 +26,7 @@ import {
   Badge,
   Segmented,
   Empty,
+  Spin,
   message
 } from 'antd';
 import {
@@ -156,6 +157,33 @@ export default function PlayingSessionPage() {
   const [walkInEndTime, setWalkInEndTime] = useState(dayjs().add(1, 'hour'));
 
   const selectedBookingId = Form.useWatch('bookingId', checkInForm);
+  const selectedCourtId = Form.useWatch('courtId', checkInForm);
+  const activeCheckInCourtId = selectedCourtId || selectedCourtForCheckIn?._id;
+
+  // State lưu trữ dữ liệu giá tính toán động từ backend cho khách vãng lai
+  const [walkInPricing, setWalkInPricing] = useState({
+    loading: false,
+    fee: 0,
+    hourlyRate: 0,
+    rateName: '',
+    isPeak: false,
+    intervals: []
+  });
+
+  // State lưu trữ dữ liệu phụ phí vào sân sớm tính từ backend
+  const [earlyPricing, setEarlyPricing] = useState({
+    loading: false,
+    fee: 0,
+    hourlyRate: 0,
+    rateName: '',
+    isPeak: false
+  });
+
+  // State lưu trữ giá gia hạn ca chơi tính động từ backend
+  const [extendPricing, setExtendPricing] = useState({
+    30: { fee: 50000, loading: false },
+    60: { fee: 100000, loading: false }
+  });
 
   const getBookingCheckInState = (booking) => {
     if (!booking) return { canCheckIn: false, reason: '' };
@@ -230,6 +258,257 @@ export default function PlayingSessionPage() {
     }, 1000);
     return () => clearInterval(timer);
   }, []);
+
+  // Lấy giá thực tế cho khách vãng lai khi đổi sân hoặc đổi thời gian
+  useEffect(() => {
+    if (!checkInModalVisible || checkInType !== 'walkin' || !activeCheckInCourtId) {
+      return;
+    }
+
+    const sMin = walkInStartTime.hour() * 60 + walkInStartTime.minute();
+    const eMin = walkInEndTime.hour() * 60 + walkInEndTime.minute();
+    const durMin = eMin - sMin;
+
+    if (durMin < 60) {
+      setWalkInPricing({
+        loading: false,
+        fee: 0,
+        hourlyRate: 0,
+        rateName: '',
+        isPeak: false,
+        intervals: []
+      });
+      return;
+    }
+
+    let isCancelled = false;
+    setWalkInPricing(prev => ({ ...prev, loading: true }));
+
+    const timer = setTimeout(async () => {
+      try {
+        const res = await bookingService.calculateBookingPrice({
+          courtOrders: [{
+            courtId: String(activeCheckInCourtId),
+            bookingDate: dayjs().format('YYYY-MM-DD'),
+            startTime: walkInStartTime.format('HH:mm'),
+            endTime: walkInEndTime.format('HH:mm')
+          }]
+        });
+
+        if (isCancelled) return;
+
+        if (res && res.success && res.data) {
+          const breakdown = res.data.courtBreakdowns?.[0];
+          const intervals = breakdown?.intervals || [];
+          const totalAmount = breakdown?.totalAmount ?? (res.data.totalBasePrice || 0);
+
+          let mainRate = 0;
+          let rateNames = [];
+          let anyPeak = false;
+
+          if (intervals.length > 0) {
+            mainRate = intervals[0].hourlyRate;
+            intervals.forEach(it => {
+              if (it.isPeak) anyPeak = true;
+              if (it.priceType) rateNames.push(it.priceType);
+            });
+          }
+
+          const uniqueNames = Array.from(new Set(rateNames));
+          const rateNameDisplay = uniqueNames.length > 0
+            ? uniqueNames.join(' + ')
+            : (anyPeak ? 'Giờ cao điểm' : 'Giờ thường');
+
+          setWalkInPricing({
+            loading: false,
+            fee: totalAmount,
+            hourlyRate: mainRate,
+            rateName: rateNameDisplay,
+            isPeak: anyPeak,
+            intervals
+          });
+        }
+      } catch (err) {
+        if (isCancelled) return;
+        console.warn('Lỗi khi tính giá trực tiếp từ backend, dùng fallback theo sân:', err);
+        const targetCourt = (matrixData.courts || courtsData).find(c => String(c._id) === String(activeCheckInCourtId));
+        const courtType = normalizeCourtType(targetCourt?.courtType);
+        const isWeekend = currentTime.getDay() === 0 || currentTime.getDay() === 6;
+        const curH = currentTime.getHours();
+        const isPeak = !isWeekend && (curH >= 17);
+        let fbRate = targetCourt?.pricePerHour || targetCourt?.basePrice || 80000;
+        if (!targetCourt?.pricePerHour) {
+          if (courtType === 'VIP') fbRate = isWeekend ? 180000 : isPeak ? 160000 : 120000;
+          else if (courtType === 'PREMIUM') fbRate = isWeekend ? 220000 : isPeak ? 200000 : 160000;
+          else fbRate = isWeekend ? 140000 : isPeak ? 120000 : 80000;
+        }
+        setWalkInPricing({
+          loading: false,
+          fee: Math.round((fbRate / 60) * durMin),
+          hourlyRate: fbRate,
+          rateName: isWeekend ? 'Cuối tuần' : isPeak ? 'Giờ vàng tối' : 'Giờ thường',
+          isPeak,
+          intervals: []
+        });
+      }
+    }, 250);
+
+    return () => {
+      isCancelled = true;
+      clearTimeout(timer);
+    };
+  }, [checkInModalVisible, checkInType, activeCheckInCourtId, walkInStartTime, walkInEndTime]);
+
+  // Lấy phụ phí nhận sân sớm thực tế từ backend
+  useEffect(() => {
+    if (!checkInModalVisible || checkInType !== 'booking' || !selectedBookingId) {
+      return;
+    }
+    const selB = confirmedBookings.find(b => String(b._id) === String(selectedBookingId))
+      || (matrixData.bookings || []).find(b => String(b._id) === String(selectedBookingId));
+    const bState = selB ? getBookingCheckInState(selB) : null;
+    if (!bState || !bState.isEarly || !selB?.courtId) {
+      return;
+    }
+
+    const targetCourtId = selB.courtId?._id || selB.courtId;
+    const curH = currentTime.getHours();
+    const curM = currentTime.getMinutes();
+    const earlyStartStr = `${String(curH).padStart(2, '0')}:${String(curM).padStart(2, '0')}`;
+    const bStartStr = bState.startTime;
+
+    let isCancelled = false;
+    setEarlyPricing(prev => ({ ...prev, loading: true }));
+
+    const timer = setTimeout(async () => {
+      try {
+        const res = await bookingService.calculateBookingPrice({
+          courtOrders: [{
+            courtId: String(targetCourtId),
+            bookingDate: dayjs().format('YYYY-MM-DD'),
+            startTime: earlyStartStr,
+            endTime: bStartStr
+          }]
+        });
+
+        if (isCancelled) return;
+
+        if (res && res.success && res.data) {
+          const breakdown = res.data.courtBreakdowns?.[0];
+          const intervals = breakdown?.intervals || [];
+          const totalAmount = breakdown?.totalAmount ?? (res.data.totalBasePrice || 0);
+
+          let mainRate = 0;
+          let rateNames = [];
+          let anyPeak = false;
+
+          if (intervals.length > 0) {
+            mainRate = intervals[0].hourlyRate;
+            intervals.forEach(it => {
+              if (it.isPeak) anyPeak = true;
+              if (it.priceType) rateNames.push(it.priceType);
+            });
+          }
+
+          const uniqueNames = Array.from(new Set(rateNames));
+          const rateNameDisplay = uniqueNames.length > 0
+            ? uniqueNames.join(' + ')
+            : (anyPeak ? 'Giờ cao điểm' : 'Giờ thường');
+
+          setEarlyPricing({
+            loading: false,
+            fee: totalAmount,
+            hourlyRate: mainRate,
+            rateName: rateNameDisplay,
+            isPeak: anyPeak
+          });
+        }
+      } catch (err) {
+        if (isCancelled) return;
+        const courtType = normalizeCourtType(selB?.courtId?.courtType);
+        const isWeekend = currentTime.getDay() === 0 || currentTime.getDay() === 6;
+        const isPeak = !isWeekend && (currentTime.getHours() >= 17);
+        let hourlyRate = 80000;
+        if (courtType === 'VIP') hourlyRate = isWeekend ? 180000 : isPeak ? 160000 : 120000;
+        else if (courtType === 'PREMIUM') hourlyRate = isWeekend ? 220000 : isPeak ? 200000 : 160000;
+        else hourlyRate = isWeekend ? 140000 : isPeak ? 120000 : 80000;
+
+        setEarlyPricing({
+          loading: false,
+          fee: Math.round((hourlyRate / 60) * bState.earlyMinutes),
+          hourlyRate,
+          rateName: isWeekend ? 'Cuối tuần' : isPeak ? 'Giờ vàng tối' : 'Giờ thường',
+          isPeak
+        });
+      }
+    }, 250);
+
+    return () => {
+      isCancelled = true;
+      clearTimeout(timer);
+    };
+  }, [checkInModalVisible, checkInType, selectedBookingId, confirmedBookings]);
+
+  // Lấy giá gia hạn ca chơi thực tế từ backend
+  useEffect(() => {
+    if (!extendModalVisible || !selectedSessionForExtend) return;
+    const currentCourtId = (selectedSessionForExtend.courtId?._id || selectedSessionForExtend.courtId)?.toString();
+    if (!currentCourtId) return;
+
+    let sessionEndMin = 0;
+    let endHoursStr = '00:00';
+    if (selectedSessionForExtend.scheduledEndTime) {
+      const endD = new Date(selectedSessionForExtend.scheduledEndTime);
+      sessionEndMin = endD.getHours() * 60 + endD.getMinutes();
+      endHoursStr = `${String(endD.getHours()).padStart(2, '0')}:${String(endD.getMinutes()).padStart(2, '0')}`;
+    } else if (selectedSessionForExtend.booking?.endTime) {
+      endHoursStr = selectedSessionForExtend.booking.endTime;
+      const [eh, em] = endHoursStr.split(':').map(Number);
+      sessionEndMin = eh * 60 + em;
+    }
+
+    const calcExtend = async (mins) => {
+      const newEndMin = sessionEndMin + mins;
+      const newEndH = Math.min(23, Math.floor(newEndMin / 60));
+      const newEndM = newEndMin % 60;
+      const newEndHoursStr = `${String(newEndH).padStart(2, '0')}:${String(newEndM).padStart(2, '0')}`;
+
+      try {
+        const res = await bookingService.calculateBookingPrice({
+          courtOrders: [{
+            courtId: currentCourtId,
+            bookingDate: dayjs().format('YYYY-MM-DD'),
+            startTime: endHoursStr,
+            endTime: newEndHoursStr
+          }]
+        });
+        if (res && res.success && res.data) {
+          const breakdown = res.data.courtBreakdowns?.[0];
+          return breakdown?.totalAmount ?? (res.data.totalBasePrice || 0);
+        }
+      } catch (err) {}
+      return mins === 30 ? 50000 : 100000;
+    };
+
+    setExtendPricing({
+      30: { fee: 50000, loading: true },
+      60: { fee: 100000, loading: true }
+    });
+
+    let isCancelled = false;
+    Promise.all([calcExtend(30), calcExtend(60)]).then(([fee30, fee60]) => {
+      if (!isCancelled) {
+        setExtendPricing({
+          30: { fee: fee30, loading: false },
+          60: { fee: fee60, loading: false }
+        });
+      }
+    });
+
+    return () => {
+      isCancelled = true;
+    };
+  }, [extendModalVisible, selectedSessionForExtend]);
 
 
 
@@ -1940,18 +2219,24 @@ export default function PlayingSessionPage() {
                 const isWeekend = currentTime.getDay() === 0 || currentTime.getDay() === 6;
                 const curH = currentTime.getHours();
                 const isPeak = !isWeekend && (curH >= 17);
-                let hourlyRate = 80000;
-                let rateTag = <Tag color="green">Giờ thường</Tag>;
-                if (courtType === 'VIP') {
-                  hourlyRate = isWeekend ? 180000 : isPeak ? 160000 : 120000;
-                } else if (courtType === 'PREMIUM') {
-                  hourlyRate = isWeekend ? 220000 : isPeak ? 200000 : 160000;
-                } else {
-                  hourlyRate = isWeekend ? 140000 : isPeak ? 120000 : 80000;
+                let hourlyRate = earlyPricing.hourlyRate;
+                let rateTag = earlyPricing.rateName ? (
+                  <Tag color={earlyPricing.isPeak ? 'orange' : 'green'}>{earlyPricing.rateName}</Tag>
+                ) : <Tag color="green">Giờ thường</Tag>;
+                let earlyFee = earlyPricing.fee;
+
+                if (!hourlyRate || hourlyRate <= 0) {
+                  if (courtType === 'VIP') {
+                    hourlyRate = isWeekend ? 180000 : isPeak ? 160000 : 120000;
+                  } else if (courtType === 'PREMIUM') {
+                    hourlyRate = isWeekend ? 220000 : isPeak ? 200000 : 160000;
+                  } else {
+                    hourlyRate = isWeekend ? 140000 : isPeak ? 120000 : 80000;
+                  }
+                  if (isWeekend) rateTag = <Tag color="red">Cuối tuần</Tag>;
+                  else if (isPeak) rateTag = <Tag color="orange">Giờ vàng tối</Tag>;
+                  earlyFee = Math.round((hourlyRate / 60) * bState.earlyMinutes);
                 }
-                if (isWeekend) rateTag = <Tag color="red">Cuối tuần</Tag>;
-                else if (isPeak) rateTag = <Tag color="orange">Giờ vàng tối</Tag>;
-                const earlyFee = Math.round((hourlyRate / 60) * bState.earlyMinutes);
                 const bStartDisplay = bState.startTime || selB.startTime || (selB.items && selB.items[0]?.startTime) || '--';
                 const bEndDisplay = bState.endTime || selB.endTime || (selB.items && selB.items[0]?.endTime) || '--';
                 return (
@@ -1963,10 +2248,10 @@ export default function PlayingSessionPage() {
                       <div>
                         <div>Ca đặt dự kiến: <b>{bStartDisplay} - {bEndDisplay}</b>. Giờ hiện tại: <b>{currentTime.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</b>.</div>
                         <div style={{ marginTop: 4, display: 'flex', alignItems: 'center', gap: 6 }}>
-                          <span>Áp dụng khung giá:</span> {rateTag} <span>({hourlyRate.toLocaleString('vi-VN')} đ/h)</span>
+                          <span>Áp dụng khung giá:</span> {rateTag} <span>({(hourlyRate || 0).toLocaleString('vi-VN')} đ/h)</span>
                         </div>
                         <div style={{ marginTop: 4 }}>
-                          Phụ phí nhận sân sớm ước tính: <b style={{ color: '#ea580c' }}>{earlyFee.toLocaleString('vi-VN')} đ</b>.
+                          Phụ phí nhận sân sớm ước tính: <b style={{ color: '#ea580c' }}>{earlyPricing.loading ? <Spin size="small" /> : `${(earlyFee || 0).toLocaleString('vi-VN')} đ`}</b>.
                         </div>
                         <div style={{ marginTop: 8 }}>
                           <Checkbox
@@ -2086,21 +2371,32 @@ export default function PlayingSessionPage() {
                 const isWeekend = currentTime.getDay() === 0 || currentTime.getDay() === 6;
                 const startH = walkInStartTime.hour();
                 const isPeak = !isWeekend && (startH >= 17);
-                const chosenCourtId = checkInForm.getFieldValue('courtId') || selectedCourtForCheckIn?._id;
-                const targetCourt = courtsData.find(c => c._id?.toString() === chosenCourtId?.toString());
+                const chosenCourtId = activeCheckInCourtId;
+                const targetCourt = (matrixData.courts || courtsData).find(c => c._id?.toString() === chosenCourtId?.toString());
                 const courtType = normalizeCourtType(targetCourt?.courtType);
-                let hourlyRate = 80000;
-                let rateTag = <Tag color="green">Giờ thường</Tag>;
-                if (courtType === 'VIP') {
-                  hourlyRate = isWeekend ? 180000 : isPeak ? 160000 : 120000;
-                } else if (courtType === 'PREMIUM') {
-                  hourlyRate = isWeekend ? 220000 : isPeak ? 200000 : 160000;
-                } else {
-                  hourlyRate = isWeekend ? 140000 : isPeak ? 120000 : 80000;
+
+                // Ưu tiên giá thực tế tính từ database (Backend API calculateBookingPrice)
+                let hourlyRate = walkInPricing.hourlyRate;
+                let rateTag = walkInPricing.rateName ? (
+                  <Tag color={walkInPricing.isPeak ? 'orange' : 'green'}>{walkInPricing.rateName}</Tag>
+                ) : <Tag color="green">Giờ thường</Tag>;
+                let fee = walkInPricing.fee;
+
+                // Fallback nếu API chưa load xong hoặc gặp lỗi kết nối
+                if (!hourlyRate || hourlyRate <= 0) {
+                  if (targetCourt?.pricePerHour && targetCourt.pricePerHour > 0) {
+                    hourlyRate = targetCourt.pricePerHour;
+                  } else if (courtType === 'VIP') {
+                    hourlyRate = isWeekend ? 180000 : isPeak ? 160000 : 120000;
+                  } else if (courtType === 'PREMIUM') {
+                    hourlyRate = isWeekend ? 220000 : isPeak ? 200000 : 160000;
+                  } else {
+                    hourlyRate = isWeekend ? 140000 : isPeak ? 120000 : 80000;
+                  }
+                  if (isWeekend) rateTag = <Tag color="red">Cuối tuần</Tag>;
+                  else if (isPeak) rateTag = <Tag color="orange">Giờ vàng tối</Tag>;
+                  fee = isValidDur ? Math.round((hourlyRate / 60) * durMin) : 0;
                 }
-                if (isWeekend) rateTag = <Tag color="red">Cuối tuần</Tag>;
-                else if (isPeak) rateTag = <Tag color="orange">Giờ vàng tối</Tag>;
-                const fee = isValidDur ? Math.round((hourlyRate / 60) * durMin) : 0;
                 if (!isValidDur) {
                   return (
                     <Alert
@@ -2125,16 +2421,22 @@ export default function PlayingSessionPage() {
                             {durMin} phút ({(durMin / 60).toFixed(1)}h)
                           </Tag>
                         </div>
-                        <div style={{ fontSize: 12, marginTop: 4, display: 'flex', alignItems: 'center', gap: 6 }}>
+                        <div style={{ fontSize: 12, marginTop: 4, display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
                           <span style={{ color: '#475569' }}>Áp dụng:</span>
                           {rateTag}
-                          <span style={{ color: '#64748b', fontSize: 11 }}>({hourlyRate.toLocaleString('vi-VN')} đ/h)</span>
+                          {walkInPricing.intervals && walkInPricing.intervals.length > 1 ? (
+                            <span style={{ color: '#0284c7', fontSize: 11, fontWeight: 600 }}>
+                              ({walkInPricing.intervals.length} khung giá: {walkInPricing.intervals.map(it => `${it.startTime}-${it.endTime}: ${it.hourlyRate.toLocaleString('vi-VN')} đ/h`).join(' | ')})
+                            </span>
+                          ) : (
+                            <span style={{ color: '#64748b', fontSize: 11 }}>({(hourlyRate || 0).toLocaleString('vi-VN')} đ/h)</span>
+                          )}
                         </div>
                       </Col>
                       <Col span={10} style={{ textAlign: 'right' }}>
                         <div style={{ fontSize: 11, color: '#64748b', textTransform: 'uppercase', fontWeight: 600 }}>Tạm tính tiền sân</div>
                         <div style={{ fontSize: 17, fontWeight: 800, color: '#009B60' }}>
-                          {fee.toLocaleString('vi-VN')} đ
+                          {walkInPricing.loading ? <Spin size="small" /> : `${(fee || 0).toLocaleString('vi-VN')} đ`}
                         </div>
                       </Col>
                     </Row>
@@ -2275,10 +2577,10 @@ export default function PlayingSessionPage() {
                       size="large"
                     >
                       <Radio.Button value={30} disabled={!canExtend30}>
-                        + 30 Phút (+50.000 đ)
+                        + 30 Phút {extendPricing[30].loading ? '' : `(+${(extendPricing[30].fee || 50000).toLocaleString('vi-VN')} đ)`}
                       </Radio.Button>
                       <Radio.Button value={60} disabled={!canExtend60}>
-                        + 60 Phút (+100.000 đ) {!canExtend60 && '(Trùng ca sau)'}
+                        + 60 Phút {extendPricing[60].loading ? '' : `(+${(extendPricing[60].fee || 100000).toLocaleString('vi-VN')} đ)`} {!canExtend60 && '(Trùng ca sau)'}
                       </Radio.Button>
                     </Radio.Group>
                   </div>
